@@ -1,12 +1,19 @@
-import coverImage from "../assets/img/coverimage-test.png"
+import coverImage from "../assets/img/coverimage-test.svg"
 
 function CourseCard({courseTitle, institution, programs, onClick}) {
   return (
     <button onClick={onClick} href="./" className="course-card">
-      <h3>{courseTitle && courseTitle}</h3>
       <img src={coverImage} alt="course thumbnail" />
-      <p>Institución: {institution}</p>
-      <p>Programas:{programs}</p>
+      <h3>{courseTitle && courseTitle}</h3>
+      <div className="badge badge--institution">
+        <span>{institution}</span>
+      </div>
+      <div>
+        <span>Programas: </span>
+        <div className="badge badge--programs">
+          <span>{programs}</span>
+        </div>
+      </div>
       <div className="completion-rate">100%</div>
     </button>
   )
