@@ -19,6 +19,7 @@ a{
   border-radius: 0.2rem;
   min-width: 5rem;
   transition: scale 100ms ease-in-out;
+  position: relative;
 
 }
 
@@ -26,4 +27,18 @@ a{
   box-shadow: 0 0 5px rgba(90, 90, 90, 0.732) ;
   scale: 1.01;
 }
+
+.completion-rate{
+  position:absolute;
+  background-color: rgb(18, 193, 47);
+  border-radius: 50px;
+  top:.5rem; 
+  right: .5rem;
+  width: 2rem; 
+  height: 2rem;
+  display: flex;
+  justify-content: center;
+  justify-items:center;
+}
+
 
