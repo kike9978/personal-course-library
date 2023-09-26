@@ -1,4 +1,5 @@
-import CourseCard from "./courseCard"
+import CourseRow from "./CourseRow"
+// import CourseCard from "./courseCard"
 
 const cursos = []
 
@@ -18,15 +19,6 @@ for (let i = 0; i <= 100; i++) {
 
 export default function CoursesGrid({ courses, filterText }) {
   const courseList = []
-  // const courseListShorten = []
-
-  // courses.forEach((course) => {
-  //   const object = { titulo: "", institution: "" }
-  //   object.titulo = course.split(" - ")[1].trim()
-  //   object.institution = course.split(" - ")[0].trim()
-  //   courseListShorten.push(object)
-  // })
-
 
   courses.forEach((course) => {
     if (window.readJSON(course).title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
@@ -34,7 +26,7 @@ export default function CoursesGrid({ courses, filterText }) {
       return
     }
     courseList.push(
-      <CourseCard
+      <CourseRow
         key={crypto.randomUUID()}
         courseTitle={window.readJSON(course).title}
         institution={window.readJSON(course).institution}
@@ -49,16 +41,16 @@ export default function CoursesGrid({ courses, filterText }) {
       fb = b.props.courseTitle.toLowerCase();
 
     if (fa < fb) {
-      return -1;
+      return -1
     }
     if (fa > fb) {
-      return 1;
+      return 1
     }
-    return 0;
+    return 0
   })
 
   return (
-    <div className="courses-grid">
+    <div className="courses-grid courses-grid--table">
       <p style={{ position: "fixed", top: "70px", left: "200px", zIndex: "2" }}>Cursos: {Object.keys(courseList).length}</p>
       {courseList}
     </div>

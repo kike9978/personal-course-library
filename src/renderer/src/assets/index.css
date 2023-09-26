@@ -22,6 +22,12 @@ a{
   margin-top: 8rem;
 }
 
+.courses-grid.courses-grid--table{
+  grid-template-columns: 1fr;
+  grid-auto-rows: 50px;
+  gap: .2rem;
+}
+
 .course-card {
   display: flex;
   flex-direction: column;
@@ -48,6 +54,47 @@ a{
   rotate: 2deg;
 }
 
+
+.course-card h3{
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.course-card img{
+  --hue-rotation: 50deg;
+  max-height: 120px;
+  object-fit: cover;
+  width: 100%;
+  filter: sepia(.5) hue-rotate(var(--hue-rotation)) ;
+}
+.course-row img{
+  max-height: 20px;
+  --hue-rotation: 50deg;
+  filter: sepia(.5) hue-rotate(var(--hue-rotation)) ;
+}
+.course-row{
+  display: flex;
+  padding: 1rem;
+  background-color: white;
+  border-radius: 0.2rem;
+  transition: scale 100ms ease-in-out, 
+    rotate 100ms cubic-bezier(0.97, 0.01, 0.12, 0.99);
+  position: relative;
+  border: none;
+  justify-content: flex-start;
+  font-size: 0.813rem;
+  gap: .5rem;
+}
+
+.course-row h3 {
+  max-width: 50%;
+  width: 50%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: start;
+}
+
 .completion-rate{
   position:absolute;
   background-color: rgb(21, 156, 43);
@@ -63,18 +110,6 @@ a{
   display: none;
 }
 
-.course-card h3{
-  font-size: 1rem;
-  line-height: 1.2;
-}
-
-.course-card img{
-  --hue-rotation: 50deg;
-  max-height: 120px;
-  object-fit: cover;
-  width: 100%;
-  filter: sepia(.5) hue-rotate(var(--hue-rotation)) ;
-}
 
 img.img-color--1{
   --hue-rotation: 0deg;
@@ -122,19 +157,19 @@ img.img-color--15{
   --hue-rotation: 350deg;
 }
 
-.course-card .badge {
+.badge {
   border-radius: 33px;
   padding-inline: .5rem; 
   border: 1px solid var(--clr-bdr);
   color: var(--clr-txt);
   background-color: var(--clr-bgr);
 }
-.course-card .badge--institution {
+.badge--institution {
   --clr-bdr: rgb(248, 18, 87);
   --clr-txt: rgb(248, 18, 87);
   --clr-bgr: rgb(254, 232, 238);
 }
-.course-card .badge--programs {
+.badge--programs {
   --clr-bdr: rgb(191, 18, 248);
   --clr-txt: rgb(191, 18, 248);
   --clr-bgr: rgb(243, 228, 248);
