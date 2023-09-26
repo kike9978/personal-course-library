@@ -52,7 +52,7 @@ export default function CoursesGrid({ courses, filterText }) {
         courseTitle={course.titulo}
         institution={course.institution}
         programs={"photoshop"}
-        onClick={() => window.openFolder(`${course}`)}
+        onClick={() => window.openFolder(`${course.institution} - ${course.titulo}`)}
       />
     )
   })
