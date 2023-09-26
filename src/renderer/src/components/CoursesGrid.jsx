@@ -27,18 +27,6 @@ export default function CoursesGrid({ courses, filterText }) {
   //   courseListShorten.push(object)
   // })
 
-  // courseListShorten.sort((a, b) => {
-  //   let fa = a.titulo.toLowerCase(),
-  //     fb = b.titulo.toLowerCase();
-
-  //   if (fa < fb) {
-  //     return -1;
-  //   }
-  //   if (fa > fb) {
-  //     return 1;
-  //   }
-  //   return 0;
-  // })
 
   courses.forEach((course) => {
     if (window.readJSON(course).title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
@@ -54,6 +42,19 @@ export default function CoursesGrid({ courses, filterText }) {
         onClick={() => window.openFolder(course)}
       />
     )
+  })
+
+  courseList.sort((a, b) => {
+    let fa = a.props.courseTitle.toLowerCase(),
+      fb = b.props.courseTitle.toLowerCase();
+
+    if (fa < fb) {
+      return -1;
+    }
+    if (fa > fb) {
+      return 1;
+    }
+    return 0;
   })
 
   return (
