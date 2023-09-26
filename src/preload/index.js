@@ -1,13 +1,10 @@
 import { contextBridge } from 'electron'
 const { shell } = require('electron')
 import { electronAPI } from '@electron-toolkit/preload'
-// import courseList from "../scripts/iterateCourseFolder"
-const fs = require("fs");
-const path = require("path");
+import courseList from "../scripts/iterateCourseFolder"
 
 
 // Custom APIs for renderer
-const courseList = fs.readdirSync(path.resolve(__dirname, "/Volumes/MacWin/Cursos/_All Courses/"))
 
 function openFolder(extension) {
   shell.openPath(`/Volumes/MacWin/Cursos/_All Courses/${extension}`)
@@ -19,13 +16,13 @@ function openFolder(extension) {
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld("courseList", courseList)
+    contextBridge.exposeInMainWorld("courseList", courseList())
     contextBridge.exposeInMainWorld("openFolder", openFolder)
   } catch (error) {
     console.error(error)
   }
 } else {
   window.electron = electronAPI
-  window.courseList = courseList
+  window.courseList = courseList()
   window.openFolder = openFolder
 }

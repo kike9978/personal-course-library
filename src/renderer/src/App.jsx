@@ -21,7 +21,7 @@ function SearchBar({ filterText, onFilterTextChange,
         <input
           type="text"
           value={filterText}
-          placeholder="Search..."
+          placeholder="Buscar..."
           onChange={(e) => onFilterTextChange(e.target.value)}
         />
       </form>
