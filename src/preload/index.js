@@ -2,7 +2,7 @@ import { contextBridge } from 'electron'
 const { shell } = require('electron')
 import { electronAPI } from '@electron-toolkit/preload'
 import courseList from "../scripts/iterateCourseFolder"
-
+import { readJSON } from "../scripts/iterateCourseFolder"
 
 // Custom APIs for renderer
 
@@ -18,6 +18,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld("courseList", courseList())
     contextBridge.exposeInMainWorld("openFolder", openFolder)
+    contextBridge.exposeInMainWorld("readJSON", readJSON)
   } catch (error) {
     console.error(error)
   }
@@ -25,4 +26,5 @@ if (process.contextIsolated) {
   window.electron = electronAPI
   window.courseList = courseList()
   window.openFolder = openFolder
+  window.readJSON = readJSON
 }
