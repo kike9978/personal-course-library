@@ -1,5 +1,5 @@
 import CourseRow from "./CourseRow"
-// import CourseCard from "./courseCard"
+import CourseCard from "./courseCard"
 
 const cursos = []
 
@@ -17,15 +17,16 @@ for (let i = 0; i <= 100; i++) {
 //   />
 // ))
 
-export default function CoursesGrid({ courses, filterText }) {
-  const courseList = []
+export default function CoursesGrid({ courses, filterText, isCardLayout }) {
+  const courseListCard = []
+  const courseListList = []
 
   courses.forEach((course) => {
     if (window.readJSON(course).title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
       window.readJSON(course).institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1) {
       return
     }
-    courseList.push(
+    courseListList.push(
       <CourseRow
         key={crypto.randomUUID()}
         courseTitle={window.readJSON(course).title}
@@ -36,9 +37,38 @@ export default function CoursesGrid({ courses, filterText }) {
     )
   })
 
-  courseList.sort((a, b) => {
+
+  courses.forEach((course) => {
+    if (window.readJSON(course).title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
+      window.readJSON(course).institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1) {
+      return
+    }
+    courseListCard.push(
+      <CourseCard
+        key={crypto.randomUUID()}
+        courseTitle={window.readJSON(course).title}
+        institution={window.readJSON(course).institution}
+        programs={"photoshop"}
+        onClick={() => window.openFolder(course)}
+      />
+    )
+  })
+
+  courseListCard.sort((a, b) => {
     let fa = a.props.courseTitle.toLowerCase(),
-      fb = b.props.courseTitle.toLowerCase();
+      fb = b.props.courseTitle.toLowerCase()
+
+    if (fa < fb) {
+      return -1
+    }
+    if (fa > fb) {
+      return 1
+    }
+    return 0
+  })
+  courseListList.sort((a, b) => {
+    let fa = a.props.courseTitle.toLowerCase(),
+      fb = b.props.courseTitle.toLowerCase()
 
     if (fa < fb) {
       return -1
@@ -50,9 +80,9 @@ export default function CoursesGrid({ courses, filterText }) {
   })
 
   return (
-    <div className="courses-grid courses-grid--table">
+    <div className={`courses-grid${!isCardLayout ? " courses-grid--table" : ""}`}>
       <p style={{ position: "fixed", top: "70px", left: "200px", zIndex: "2" }}>Cursos: {Object.keys(courseList).length}</p>
-      {courseList}
+      {isCardLayout ? courseListCard : courseListList}
     </div>
   )
 }
