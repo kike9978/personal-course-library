@@ -184,3 +184,9 @@ img.img-color--15{
   padding: 1rem;
   top: 0;
 }
+
+.navbar-filters{
+  display: flex;
+  gap: 0.5rem;
+
+}

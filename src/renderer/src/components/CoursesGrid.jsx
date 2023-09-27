@@ -17,7 +17,7 @@ for (let i = 0; i <= 100; i++) {
 //   />
 // ))
 
-export default function CoursesGrid({ courses, filterText, isCardLayout }) {
+export default function CoursesGrid({ courses, filterText, isCardLayout, onSortedCourses }) {
   const courseListCard = []
   const courseListList = []
 
@@ -35,6 +35,7 @@ export default function CoursesGrid({ courses, filterText, isCardLayout }) {
         onClick={() => window.openFolder(course)}
       />
     )
+    onSortedCourses(Object.keys(courseListList).length)
   })
 
 
@@ -52,6 +53,7 @@ export default function CoursesGrid({ courses, filterText, isCardLayout }) {
         onClick={() => window.openFolder(course)}
       />
     )
+    onSortedCourses(Object.keys(courseListCard).length)
   })
 
   function sortAlphabetically(list) {
@@ -73,7 +75,6 @@ export default function CoursesGrid({ courses, filterText, isCardLayout }) {
   sortAlphabetically(courseListList)
   return (
     <div className={`courses-grid${!isCardLayout ? " courses-grid--table" : ""}`}>
-      <p style={{ position: "fixed", top: "70px", left: "200px", zIndex: "2" }}>Cursos: {Object.keys(courseList).length}</p>
       {isCardLayout ? courseListCard : courseListList}
     </div>
   )
