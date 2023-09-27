@@ -1,10 +1,33 @@
 const fs = require('fs')
 const path = require('path')
 
+const possiblePrograms = [
+  'Photoshop',
+  'Cinema4D',
+  'illustrator',
+  'After Effects',
+  'Blender',
+  'Maya',
+  'DaVinci Resolve',
+  'ZBrush',
+  'VS Code'
+]
+
+function addProgramsToObject(extension) {
+  const programsList = []
+  possiblePrograms.forEach((program) => {
+    if (extension.toLowerCase().includes(program.toLowerCase())) {
+      programsList.push(program)
+    }
+  })
+  return programsList
+}
+
 courseList().forEach((extension) => {
   const courseProps = {
     title: extension.split(' - ')[1].trim(),
-    programs: [],
+    programs: addProgramsToObject(extension),
+    theme: [],
     institution: extension.split(' - ')[0].trim(),
     instructor: ''
   }
@@ -33,6 +56,5 @@ export default function courseList() {
   const results = fs.readdirSync(path.resolve(__dirname, '/Volumes/MacWin/Cursos/_All Courses/'))
   return results
 }
-
 
 // /Volumes/MacWin/Cursos/_All Courses/21Draw - Digital Illustration for Beginners by Laia Lopez

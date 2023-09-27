@@ -31,7 +31,7 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
         key={crypto.randomUUID()}
         courseTitle={window.readJSON(course).title}
         institution={window.readJSON(course).institution}
-        programs={"photoshop"}
+        programs={window.readJSON(course).programs}
         onClick={() => window.openFolder(course)}
       />
     )
@@ -49,7 +49,7 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
         key={crypto.randomUUID()}
         courseTitle={window.readJSON(course).title}
         institution={window.readJSON(course).institution}
-        programs={"photoshop"}
+        programs={window.readJSON(course).programs}
         onClick={() => window.openFolder(course)}
       />
     )
