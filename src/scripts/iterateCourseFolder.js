@@ -37,7 +37,7 @@ courseList().forEach((extension) => {
     instructor: ''
   }
   const jsonString = JSON.stringify(courseProps)
-  fs.writeFileSync(`${extensions.macos}${extension}/courseProps.json`, jsonString, (err) => {
+  fs.writeFileSync(`'${extensions.windows}${extension}/courseProps.json'`, jsonString, (err) => {
     if (err) {
       console.log('Error writing file', err)
     } else {
@@ -46,13 +46,13 @@ courseList().forEach((extension) => {
   })
 })
 export function readJSON(extension) {
-  const letData = fs.readFileSync(`${extensions.macos}${extension}/courseProps.json`)
+  const letData = fs.readFileSync(`'${extensions.windows}${extension}/courseProps.json'`)
   let props = JSON.parse(letData)
   return props
 }
 
 export default function courseList() {
-  const results = fs.readdirSync(path.resolve(__dirname, `${extensions.macos}`))
+  const results = fs.readdirSync(path.resolve(__dirname, `'${extensions.windows}'`))
   return results
 }
 

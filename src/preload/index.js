@@ -7,7 +7,7 @@ import { readJSON, extensions } from "../scripts/iterateCourseFolder"
 // Custom APIs for renderer
 
 function openFolder(extension) {
-  shell.openPath(`${extensions.macos}${extension}`)
+  shell.openPath(`'${extensions.windows}${extension}'`)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
