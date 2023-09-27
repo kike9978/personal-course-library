@@ -20,6 +20,7 @@ for (let i = 0; i <= 100; i++) {
 export default function CoursesGrid({ courses, filterText, isCardLayout, onSortedCourses }) {
   const courseListCard = []
   const courseListList = []
+  console.log("courses es  ", typeof(courses))
 
   courses.forEach((course) => {
     if (window.readJSON(course).title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&

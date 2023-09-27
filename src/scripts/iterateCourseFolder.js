@@ -1,5 +1,7 @@
+
 const fs = require('fs')
 const path = require('path')
+
 
 export const extensions = {
   windows: 'E:\\Cursos\\_All Courses\\',
@@ -37,7 +39,7 @@ courseList().forEach((extension) => {
     instructor: ''
   }
   const jsonString = JSON.stringify(courseProps)
-  fs.writeFileSync(`'${extensions.windows}${extension}/courseProps.json'`, jsonString, (err) => {
+  fs.writeFileSync(path.resolve(__dirname, `${extensions.windows}${extension}/courseProps.json`), jsonString, (err) => {
     if (err) {
       console.log('Error writing file', err)
     } else {
@@ -46,13 +48,14 @@ courseList().forEach((extension) => {
   })
 })
 export function readJSON(extension) {
-  const letData = fs.readFileSync(`'${extensions.windows}${extension}/courseProps.json'`)
+  const letData = fs.readFileSync(`${extensions.windows}${extension}/courseProps.json`)
   let props = JSON.parse(letData)
   return props
 }
 
 export default function courseList() {
-  const results = fs.readdirSync(path.resolve(__dirname, `'${extensions.windows}'`))
+  const results = fs.readdirSync(path.resolve(`${extensions.windows}`))
+  console.log(results)
   return results
 }
 
