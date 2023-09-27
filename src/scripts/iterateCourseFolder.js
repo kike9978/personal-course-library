@@ -1,6 +1,11 @@
 const fs = require('fs')
 const path = require('path')
 
+const extensions = {
+  windows: "E:\\Cursos\\_All Courses\\",
+  macos:`/Volumes/MacWin/Cursos/_All Courses/`,
+}
+
 const possiblePrograms = [
   'Photoshop',
   'Cinema4D',
@@ -33,7 +38,7 @@ courseList().forEach((extension) => {
   }
   const jsonString = JSON.stringify(courseProps)
   fs.writeFileSync(
-    `/Volumes/MacWin/Cursos/_All Courses/${extension}/courseProps.json`,
+    `${extensions.macos}${extension}/courseProps.json`,
     jsonString,
     (err) => {
       if (err) {
