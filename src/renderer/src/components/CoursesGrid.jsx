@@ -54,31 +54,23 @@ export default function CoursesGrid({ courses, filterText, isCardLayout }) {
     )
   })
 
-  courseListCard.sort((a, b) => {
-    let fa = a.props.courseTitle.toLowerCase(),
-      fb = b.props.courseTitle.toLowerCase()
+  function sortAlphabetically(list) {
+    list.sort((a, b) => {
+      let fa = a.props.courseTitle.toLowerCase(),
+        fb = b.props.courseTitle.toLowerCase()
 
-    if (fa < fb) {
-      return -1
-    }
-    if (fa > fb) {
-      return 1
-    }
-    return 0
-  })
-  courseListList.sort((a, b) => {
-    let fa = a.props.courseTitle.toLowerCase(),
-      fb = b.props.courseTitle.toLowerCase()
+      if (fa < fb) {
+        return -1
+      }
+      if (fa > fb) {
+        return 1
+      }
+      return 0
+    })
+  }
 
-    if (fa < fb) {
-      return -1
-    }
-    if (fa > fb) {
-      return 1
-    }
-    return 0
-  })
-
+  sortAlphabetically(courseListCard)
+  sortAlphabetically(courseListList)
   return (
     <div className={`courses-grid${!isCardLayout ? " courses-grid--table" : ""}`}>
       <p style={{ position: "fixed", top: "70px", left: "200px", zIndex: "2" }}>Cursos: {Object.keys(courseList).length}</p>
