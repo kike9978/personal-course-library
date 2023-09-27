@@ -2,12 +2,12 @@ import { contextBridge } from 'electron'
 const { shell } = require('electron')
 import { electronAPI } from '@electron-toolkit/preload'
 import courseList from "../scripts/iterateCourseFolder"
-import { readJSON } from "../scripts/iterateCourseFolder"
+import { readJSON, extensions } from "../scripts/iterateCourseFolder"
 
 // Custom APIs for renderer
 
 function openFolder(extension) {
-  shell.openPath(`/Volumes/MacWin/Cursos/_All Courses/${extension}`)
+  shell.openPath(`${extensions.macos}${extension}`)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
