@@ -12,7 +12,6 @@ asarUnpack:
   - resources/**
 win:
   executableName: Biblioteca de cursos
-  extension: E:\Cursos\_All Courses\
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
@@ -26,7 +25,6 @@ mac:
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
-  extension: /Volumes/MacWin/Cursos/_All Courses/
 
 dmg:
   artifactName: ${name}-${version}.${ext}
