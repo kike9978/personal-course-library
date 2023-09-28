@@ -6,6 +6,8 @@ export const extensions = {
   macos: `/Volumes/MacWin/Cursos/_All Courses/`
 }
 
+const possibleInstitutionList = []
+
 const possiblePrograms = [
   'Photoshop',
   'Cinema4D',
@@ -18,6 +20,82 @@ const possiblePrograms = [
   'VS Code'
 ]
 
+const institutionList = [
+  "21Draw"
+"Juice",
+"AJ & SMART and JAKE KNAPP",
+"Alive!",
+"Art Challenge",
+"Art-Wod",
+"ArtOfSteveAhn",
+"ArtStation",
+"Artstation",
+"Awwwards",
+"Building a Second Brain",
+"CGCookie",
+"CGMA",
+"Character Creation in Blender",
+"Cineversity",
+"Class101",
+"Creative Shrimp",
+"Domestika",
+"Fireship-io",
+"Foundation Patreon",
+"Greyscalegorilla Plus",
+"Gumroad", "Holdframe + School of Motion",
+"James Douglas (moderndayjames)",
+"Learn Squared",
+"Masterclass",
+"Meds Map",
+"MedsMap",
+"Mograph Mentor",
+"Motion Design School"
+, 
+"New Master Academy"
+, 
+"Phlearn"
+, 
+"Pluralsight"
+,
+"Polygon Runway"
+, 
+"Project City"
+, 
+"Proko"
+, 
+"Rad How To Class"
+, 
+"Rad How to Class"
+, 
+"Ross Draws Bootcamp"
+, 
+"School of Motion"
+, 
+"Schoolism"
+, 
+"Second Brain"
+, 
+"SkillShare"
+, 
+"Skillshare"
+,
+"Stylized Station"
+, 
+"SuperHi"
+, 
+"Test"
+, 
+"The Futur"
+, 
+"The Gnomon Workshop"
+, 
+"Udemy"
+, 
+"Watts Atelier"
+, 
+"Wingfox"
+]
+
 function addProgramsToObject(extension) {
   const programsList = []
   possiblePrograms.forEach((program) => {
@@ -27,6 +105,7 @@ function addProgramsToObject(extension) {
   })
   return programsList
 }
+
 
 courseList().forEach((extension) => {
   const courseProps = {
@@ -44,6 +123,7 @@ courseList().forEach((extension) => {
       console.log('Successfully wrote file')
     }
   })
+  createInsititutionList(extension)
 })
 export function readJSON(extension) {
   const letData = fs.readFileSync(`${extensions.macos}${extension}/courseProps.json`)
