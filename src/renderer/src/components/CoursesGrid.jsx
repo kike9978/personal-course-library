@@ -37,7 +37,6 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
       }
 
       imgUrl = img
-
     })
     courseListList.push(
       <CourseRow

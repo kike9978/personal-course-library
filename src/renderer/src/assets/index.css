@@ -148,3 +148,8 @@ a{
   gap: 0.5rem;
 
 }
+
+.chips-container {
+  display: flex;
+  gap:.3rem
+}
