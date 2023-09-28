@@ -1,5 +1,6 @@
 import CourseRow from "./CourseRow"
 import CourseCard from "./courseCard"
+import { useEffect, useState } from "react"
 
 const cursos = []
 
@@ -18,35 +19,28 @@ for (let i = 0; i <= 100; i++) {
 // ))
 
 export default function CoursesGrid({ courses, filterText, isCardLayout, onSortedCourses }) {
-  const courseList = []
-  console.log("courses es  ", typeof(courses))
+  const [courseList, setCourseList] = useState([])
 
-  courses.forEach((course) => {
-    if (window.readJSON(course).title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
-    window.readJSON(course).institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1) {
-      return
-    }
-    if (!isCardLayout){
-    courseList.push(
-      <CourseRow
-        key={crypto.randomUUID()}
-        courseTitle={window.readJSON(course).title}
-        institution={window.readJSON(course).institution}
-        programs={window.readJSON(course).programs}
-        onClick={() => window.openFolder(course)}
-      />
-    )
-    }
-    courseList.push(
-      <CourseCard
-        courseTitle={window.readJSON(course).title}
-        institution={window.readJSON(course).institution}
-        programs={window.readJSON(course).programs}
-        onClick={() => window.openFolder(course)}
-      />
-    )
-    onSortedCourses(Object.keys(courseList).length)
-  })
+  useEffect(() => {
+    const filteredCourses = courses.filter(course => { 
+      if (window.readJSON(course).title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
+        window.readJSON(course).institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1) {
+          return true
+        }
+        return false
+      })
+      setCourseList(filteredCourses)
+  }, [filterText])
+  // courses.forEach((course) => {
+  //   if (window.readJSON(course).title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
+  //     window.readJSON(course).institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1) {
+  //     return
+  //   }
+  //   course = window.readJSON(course)
+  //   courseList.push(course)
+
+  //   onSortedCourses(Object.keys(courseList).length)
+  // })
 
 
   function sortAlphabetically(list) {
@@ -64,11 +58,20 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
     })
   }
 
-  sortAlphabetically(courseListCard)
-  sortAlphabetically(courseListList)
+  sortAlphabetically(courseList)
   return (
     <div className={`courses-grid${!isCardLayout ? " courses-grid--table" : ""}`}>
-      {courseList}
+      {console.log(courseList)}
+      {courseList.map(course => {
+        // const courseComponent = !isCardLayout ? CourseRow : CourseCard;
+        return <courseComponent
+          key={crypto.randomUUID()}
+          courseTitle={course.title}
+          institution={course.institution}
+          programs={course.programs}
+          onClick={() => window.openFolder(course)} />
+      })
+    }
     </div>
   )
 }
