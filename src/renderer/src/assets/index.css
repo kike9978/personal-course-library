@@ -65,8 +65,13 @@ a{
   max-height: 120px;
   object-fit: cover;
   width: 100%;
-  filter: sepia(.5) hue-rotate(var(--hue-rotation)) ;
 }
+
+.course-card .institution-logo{
+  max-height: 1rem;
+  width: auto;
+}
+
 .course-row img{
   max-height: 20px;
   --hue-rotation: 50deg;
@@ -109,53 +114,6 @@ a{
   justify-content: center;
   align-items:center;
   display: none;
-}
-
-
-img.img-color--1{
-  --hue-rotation: 0deg;
-}
-img.img-color--2{
-  --hue-rotation: 25deg;
-}
-img.img-color--3{
-  --hue-rotation: 50deg;
-}
-img.img-color--4{
-  --hue-rotation: 75deg;
-}
-img.img-color--5{
-  --hue-rotation: 100deg;
-}
-img.img-color--6{
-  --hue-rotation: 125deg;
-}
-img.img-color--7{
-  --hue-rotation: 150deg;
-}
-img.img-color--8{
-  --hue-rotation: 175deg;
-}
-img.img-color--9{
-  --hue-rotation: 200deg;
-}
-img.img-color--10{
-  --hue-rotation: 225deg;
-}
-img.img-color--11{
-  --hue-rotation: 250deg;
-}
-img.img-color--12{
-  --hue-rotation: 275deg;
-}
-img.img-color--13{
-  --hue-rotation: 300deg;
-}
-img.img-color--14{
-  --hue-rotation: 325deg;
-}
-img.img-color--15{
-  --hue-rotation: 350deg;
 }
 
 .badge {

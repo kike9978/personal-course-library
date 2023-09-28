@@ -1,5 +1,6 @@
 import CourseRow from "./CourseRow"
 import CourseCard from "./courseCard"
+import { imageData } from "../utils/imageData"
 
 const cursos = []
 
@@ -23,34 +24,38 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
   console.log("courses es  ", typeof(courses))
 
   courses.forEach((course) => {
-    if (window.readJSON(course).title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
-      window.readJSON(course).institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1) {
+    const courseObject = window.readJSON(course)
+    if (courseObject.title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
+      courseObject.institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1) {
       return
     }
+
+    let imgUrl = ""
+    imageData.forEach((data) => {
+      const { institution, img } = data
+      if (courseObject.institution.toLowerCase() !== institution.toLowerCase()) {
+        return
+      }
+
+      imgUrl = img
+
+    })
     courseListList.push(
       <CourseRow
         key={crypto.randomUUID()}
-        courseTitle={window.readJSON(course).title}
-        institution={window.readJSON(course).institution}
-        programs={window.readJSON(course).programs}
+        courseTitle={courseObject.title}
+        institution={courseObject.institution}
+        programs={courseObject.programs}
         onClick={() => window.openFolder(course)}
       />
     )
     onSortedCourses(Object.keys(courseListList).length)
-  })
-
-
-  courses.forEach((course) => {
-    if (window.readJSON(course).title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
-      window.readJSON(course).institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1) {
-      return
-    }
     courseListCard.push(
       <CourseCard
         key={crypto.randomUUID()}
-        courseTitle={window.readJSON(course).title}
-        institution={window.readJSON(course).institution}
-        programs={window.readJSON(course).programs}
+        courseTitle={courseObject.title}
+        institution={imgUrl}
+        programs={courseObject.programs}
         onClick={() => window.openFolder(course)}
       />
     )

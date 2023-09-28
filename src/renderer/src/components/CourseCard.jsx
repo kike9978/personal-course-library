@@ -5,9 +5,7 @@ function CourseCard({courseTitle, institution, programs, onClick}) {
     <button onClick={onClick} href="./" className="course-card">
       <img src={coverImage} alt="course thumbnail" className={`img-color--${Math.floor(Math.random() * 15) + 1}`}/>
       <h3>{courseTitle && courseTitle}</h3>
-      <div className="badge badge--institution">
-        <span>{institution}</span>
-      </div>
+      <img className="institution-logo" src={institution} alt="Institution logo" />
       <div>
         <span>Programas: </span>
         <div className="badge badge--programs">
