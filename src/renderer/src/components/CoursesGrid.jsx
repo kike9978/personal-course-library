@@ -1,6 +1,13 @@
 import CourseRow from "./CourseRow"
 import CourseCard from "./courseCard"
 
+const imageData = [
+  {
+    institution: "Domestika",
+    img: "/src/assets/img/domestika-logo.png"
+  }
+]
+
 const cursos = []
 
 for (let i = 0; i <= 100; i++) {
@@ -36,19 +43,11 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
       />
     )
     onSortedCourses(Object.keys(courseListList).length)
-  })
-
-
-  courses.forEach((course) => {
-    if (window.readJSON(course).title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
-      window.readJSON(course).institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1) {
-      return
-    }
     courseListCard.push(
       <CourseCard
         key={crypto.randomUUID()}
         courseTitle={window.readJSON(course).title}
-        institution={window.readJSON(course).institution}
+        institution={window.readJSON(course).institution.toLowerCase() === imageData[0].institution.toLocaleLowerCase() ? imageData[0].img : ""}
         programs={window.readJSON(course).programs}
         onClick={() => window.openFolder(course)}
       />
