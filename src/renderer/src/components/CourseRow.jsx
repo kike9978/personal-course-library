@@ -1,6 +1,14 @@
 import coverImage from "../assets/img/coverimage-test.svg"
 
-function CourseRow({ courseTitle, institution, programs, onClick}) {
+function CourseRow({ courseTitle, institution, programs, onClick }) {
+
+  const programChips = programs.map((program) => {
+    return (
+      <div key={crypto.randomUUID} className="badge badge--programs">
+        <span>{program}</span>
+      </div>
+    )
+  })
   return (
     <button onClick={onClick} href="./" className="course-row">
       <img src={coverImage} alt="course thumbnail" className={`img-color--${Math.floor(Math.random() * 15) + 1}`} />
@@ -9,9 +17,7 @@ function CourseRow({ courseTitle, institution, programs, onClick}) {
         <span>{institution}</span>
       </div>
 
-      <div className="badge badge--programs">
-        <span>{programs}</span>
-      </div>
+      {programChips}
       <div className="completion-rate">100%</div>
     </button>
   )

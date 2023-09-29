@@ -31,11 +31,7 @@ export const imageData = [
   },
   {
     institution: 'ArtStation',
-    img: `${url}default-logo.png`
-  },
-  {
-    institution: 'Artstation',
-    img: `${url}default-logo.png`
+    img: `${url}artstation-logo.webp`
   },
   {
     institution: 'Awwwards',
@@ -43,7 +39,7 @@ export const imageData = [
   },
   {
     institution: 'Building a Second Brain',
-    img: `${url}default-logo.png`
+    img: `${url}basb-logo.jpeg`
   },
   {
     institution: 'CGCookie',
@@ -51,7 +47,7 @@ export const imageData = [
   },
   {
     institution: 'CGMA',
-    img: `${url}default-logo.png`
+    img: `${url}cgma-logo.png`
   },
   {
     institution: 'Character Creation in Blender',
@@ -59,7 +55,7 @@ export const imageData = [
   },
   {
     institution: 'Cineversity',
-    img: `${url}default-logo.png`
+    img: `${url}cineversity-logo.jpeg`
   },
   {
     institution: 'Class101',
@@ -67,7 +63,7 @@ export const imageData = [
   },
   {
     institution: 'Creative Shrimp',
-    img: `${url}default-logo.png`
+    img: `${url}creativeshrimp-logo.png`
   },
   {
     institution: 'Domestika',
@@ -75,7 +71,7 @@ export const imageData = [
   },
   {
     institution: 'Fireship-io',
-    img: `${url}default-logo.png`
+    img: `${url}fireship-logo.png`
   },
   {
     institution: 'Foundation Patreon',
@@ -87,11 +83,11 @@ export const imageData = [
   },
   {
     institution: 'Gumroad',
-    img: `${url}default-logo.png`
+    img: `${url}gumroad-logo.png`
   },
   {
     institution: 'Holdframe + School of Motion',
-    img: `${url}default-logo.png`
+    img: `${url}holdframe-logo.png`
   },
   {
     institution: 'James Douglas (moderndayjames)',
@@ -99,23 +95,19 @@ export const imageData = [
   },
   {
     institution: 'Learn Squared',
-    img: `${url}default-logo.png`
+    img: `${url}learnsquared-logo.png`
   },
   {
     institution: 'Masterclass',
-    img: `${url}default-logo.png`
+    img: `${url}masterclass-logo.png`
   },
   {
-    institution: 'Meds Map',
-    img: `${url}default-logo.png`
-  },
-  {
-    institution: 'MedsMap',
-    img: `${url}default-logo.png`
+    institution: "Med's Map",
+    img: `${url}medsmap-logo.webp`
   },
   {
     institution: 'Mograph Mentor',
-    img: `${url}default-logo.png`
+    img: `${url}mo-mentor-logo.png`
   },
   {
     institution: 'Motion Design School',
@@ -123,19 +115,19 @@ export const imageData = [
   },
   {
     institution: 'New Master Academy',
-    img: `${url}default-logo.png`
+    img: `${url}nma-logo.jpeg`
   },
   {
     institution: 'Phlearn',
-    img: `${url}default-logo.png`
+    img: `${url}phlearn-logo.png`
   },
   {
     institution: 'Pluralsight',
-    img: `${url}default-logo.png`
+    img: `${url}pluralsight-logo.png`
   },
   {
     institution: 'Polygon Runway',
-    img: `${url}default-logo.png`
+    img: `${url}polygon-runway-logo.png`
   },
   {
     institution: 'Project City',
@@ -143,7 +135,7 @@ export const imageData = [
   },
   {
     institution: 'Proko',
-    img: `${url}default-logo.png`
+    img: `${url}default-logo.svg`
   },
   {
     institution: 'Rad How To Class',
@@ -179,11 +171,11 @@ export const imageData = [
   },
   {
     institution: 'The Futur',
-    img: `${url}default-logo.png`
+    img: `${url}thefutur-logo.svg`
   },
   {
     institution: 'The Gnomon Workshop',
-    img: `${url}default-logo.png`
+    img: `${url}gnomon-ws-logo.png`
   },
   {
     institution: 'Udemy',
@@ -191,7 +183,7 @@ export const imageData = [
   },
   {
     institution: 'Watts Atelier',
-    img: `${url}default-logo.png`
+    img: `${url}watts-logo.png`
   },
   {
     institution: 'Wingfox',

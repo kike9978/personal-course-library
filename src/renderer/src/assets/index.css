@@ -90,6 +90,15 @@ a{
   font-size: 0.813rem;
   gap: .5rem;
 }
+.course-row:hover{
+  box-shadow: 0 0 10px rgba(150, 152, 152, 0.743) ;
+  scale: 1.09;
+  cursor: pointer;
+  z-index: 3;
+  translate: -300px -30px;
+  rotate: 1deg;
+  transform: translate(300px, 30px);
+}
 
 .course-row h3 {
   max-width: 50%;
@@ -147,4 +156,9 @@ a{
   display: flex;
   gap: 0.5rem;
 
+}
+
+.chips-container {
+  display: flex;
+  gap:.3rem
 }
