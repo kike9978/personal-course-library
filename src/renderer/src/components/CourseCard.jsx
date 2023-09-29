@@ -1,6 +1,6 @@
 import coverImage from "../assets/img/coverimage-test.svg"
 
-function CourseCard({ courseTitle, institution, programs, onClick }) {
+function CourseCard({ courseTitle, institution, programs, isInProcess, onClick, coursePath }) {
 
   const programChips = programs.map((program) => {
     return (
@@ -20,6 +20,14 @@ function CourseCard({ courseTitle, institution, programs, onClick }) {
         <div className="chips-container">{programChips}</div>
       </div>
       <div className="completion-rate">100%</div>
+      <label>
+        <input
+          type="checkbox"
+          checked={isInProcess}
+          onChange={window.updateInProgressState(`${window.extensions.macos}${coursePath}`)}
+        />{" "}
+        En progreso
+      </label>
     </button>
   )
 }

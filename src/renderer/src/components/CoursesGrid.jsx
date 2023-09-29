@@ -42,7 +42,7 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
       <CourseRow
         key={crypto.randomUUID()}
         courseTitle={courseObject.title}
-        institution={courseObject.institution}
+        institution={imgUrl}
         programs={courseObject.programs}
         onClick={() => window.openFolder(course)}
       />
@@ -55,6 +55,8 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
         institution={imgUrl}
         programs={courseObject.programs}
         onClick={() => window.openFolder(course)}
+        isInProcess={courseObject.isInProcess}
+        coursePath={course}
       />
     )
     onSortedCourses(Object.keys(courseListCard).length)

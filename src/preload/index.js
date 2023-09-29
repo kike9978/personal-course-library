@@ -3,6 +3,7 @@ const { shell } = require('electron')
 import { electronAPI } from '@electron-toolkit/preload'
 import courseList from "../scripts/iterateCourseFolder"
 import { readJSON, extensions } from "../scripts/iterateCourseFolder"
+import updateInProgressState from '../scripts/updateJson'
 
 // Custom APIs for renderer
 
@@ -19,6 +20,8 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld("courseList", courseList())
     contextBridge.exposeInMainWorld("openFolder", openFolder)
     contextBridge.exposeInMainWorld("readJSON", readJSON)
+    contextBridge.exposeInMainWorld("updateInProgressState", updateInProgressState)
+    contextBridge.exposeInMainWorld("extensions", extensions)
   } catch (error) {
     console.error(error)
   }
@@ -27,4 +30,6 @@ if (process.contextIsolated) {
   window.courseList = courseList()
   window.openFolder = openFolder
   window.readJSON = readJSON
+  window.updateInProgressState = updateInProgressState
+  window.extensions = extensions
 }
