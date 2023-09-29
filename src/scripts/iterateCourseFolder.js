@@ -89,7 +89,10 @@ courseList().forEach((extension) => {
     programs: addProgramsToObject(extension),
     theme: [],
     institution: extension.split(' - ')[0].trim(),
-    instructor: ''
+    instructor: '',
+    isIncomplete: false,
+    isInProcess: false,
+    rate: 0
   }
   const jsonString = JSON.stringify(courseProps)
   fs.writeFileSync(`${extensions.macos}${extension}/courseProps.json`, jsonString, (err) => {

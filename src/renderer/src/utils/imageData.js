@@ -31,7 +31,7 @@ export const imageData = [
   },
   {
     institution: 'ArtStation',
-    img: `${url}artstation-logo.png`
+    img: `${url}artstation-logo.webp`
   },
   {
     institution: 'Awwwards',
@@ -39,7 +39,7 @@ export const imageData = [
   },
   {
     institution: 'Building a Second Brain',
-    img: `${url}basb-logo.jpg`
+    img: `${url}basb-logo.jpeg`
   },
   {
     institution: 'CGCookie',
@@ -87,7 +87,7 @@ export const imageData = [
   },
   {
     institution: 'Holdframe + School of Motion',
-    img: `${url}holdframe.png`
+    img: `${url}holdframe-logo.png`
   },
   {
     institution: 'James Douglas (moderndayjames)',
@@ -102,7 +102,7 @@ export const imageData = [
     img: `${url}masterclass-logo.png`
   },
   {
-    institution: 'Meds Map',
+    institution: "Med's Map",
     img: `${url}medsmap-logo.webp`
   },
   {
