@@ -11,7 +11,7 @@ function CourseCard({ courseTitle, institution, programs, isInProcess, onClick, 
   })
 
   return (
-    <button onClick={onClick} href="./" className="course-card">
+    <div onClick={onClick} href="./" className="course-card">
       <img src={coverImage} alt="course thumbnail" className={`img-color--${Math.floor(Math.random() * 15) + 1}`} />
       <h3>{courseTitle && courseTitle}</h3>
       <img className="institution-logo" src={institution} alt="Institution logo" />
@@ -24,11 +24,14 @@ function CourseCard({ courseTitle, institution, programs, isInProcess, onClick, 
         <input
           type="checkbox"
           checked={isInProcess}
-          onChange={window.updateInProgressState(`${window.extensions.macos}${coursePath}`)}
+          onChange={(e) => {
+            e.stopPropagation()
+            window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
+          }}
         />{" "}
         En progreso
       </label>
-    </button>
+    </div>
   )
 }
 
