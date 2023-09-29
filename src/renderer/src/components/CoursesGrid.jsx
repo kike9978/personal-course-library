@@ -54,8 +54,7 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
         courseTitle={courseObject.title}
         institution={imgUrl}
         programs={courseObject.programs}
-        onClick={(e) => {
-          e.preventDefault()
+        onClick={() => {
           window.openFolder(course)
         }}
         isInProcess={courseObject.isInProcess}
