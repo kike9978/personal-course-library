@@ -55,6 +55,7 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
         institution={imgUrl}
         programs={courseObject.programs}
         onClick={() => window.openFolder(course)}
+        coursePath={course}
       />
     )
     onSortedCourses(Object.keys(courseListCard).length)

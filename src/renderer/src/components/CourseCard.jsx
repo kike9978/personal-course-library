@@ -1,7 +1,11 @@
-import coverImage from "../assets/img/coverimage-test.svg"
+import defaultCoverImage from "../assets/img/coverimage-test.svg"
 
-function CourseCard({ courseTitle, institution, programs, onClick }) {
 
+function CourseCard({ courseTitle, institution, programs, onClick, coursePath }) {
+  console.log(coursePath)
+  const coverImage = window.isCoverImg(coursePath)
+    ? window.readCoverImg(coursePath)
+    : defaultCoverImage
   const programChips = programs.map((program) => {
     return (
       <div key={crypto.randomUUID} className="badge badge--programs">
