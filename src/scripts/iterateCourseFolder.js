@@ -8,45 +8,6 @@ export const extensions = {
   macos: `/Volumes/MacWin/Cursos/_All Courses/`
 }
 
-const possiblePrograms = [
-  'Photoshop',
-  'Cinema4D',
-  'illustrator',
-  'After Effects',
-  'Blender',
-  'Maya',
-  'DaVinci Resolve',
-  'ZBrush',
-  'VS Code'
-]
-
-function addProgramsToObject(extension) {
-  const programsList = []
-  possiblePrograms.forEach((program) => {
-    if (extension.toLowerCase().includes(program.toLowerCase())) {
-      programsList.push(program)
-    }
-  })
-  return programsList
-}
-
-courseList().forEach((extension) => {
-  const courseProps = {
-    title: extension.split(' - ')[1].trim(),
-    programs: addProgramsToObject(extension),
-    theme: [],
-    institution: extension.split(' - ')[0].trim(),
-    instructor: ''
-  }
-  const jsonString = JSON.stringify(courseProps)
-  fs.writeFileSync(path.resolve(__dirname, `${extensions.windows}${extension}/courseProps.json`), jsonString, (err) => {
-    if (err) {
-      console.log('Error writing file', err)
-    } else {
-      console.log('Successfully wrote file')
-    }
-  })
-})
 export function readJSON(extension) {
   const letData = fs.readFileSync(`${extensions.windows}${extension}/courseProps.json`)
   let props = JSON.parse(letData)
