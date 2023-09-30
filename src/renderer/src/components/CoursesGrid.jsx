@@ -19,8 +19,8 @@ for (let i = 0; i <= 100; i++) {
 // ))
 
 export default function CoursesGrid({ courses, filterText, isCardLayout, onSortedCourses }) {
-  const courseList = []
-  console.log("courses es  ", typeof(courses))
+  const courseListCard = []
+  const courseListList = []
 
   courses.forEach((course) => {
     const courseObject = window.readJSON(course)
@@ -57,9 +57,8 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
         onClick={() => window.openFolder(course)}
       />
     )
-    onSortedCourses(Object.keys(courseList).length)
+    onSortedCourses(Object.keys(courseListCard).length)
   })
-
 
   function sortAlphabetically(list) {
     list.sort((a, b) => {
@@ -80,7 +79,7 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
   sortAlphabetically(courseListList)
   return (
     <div className={`courses-grid${!isCardLayout ? " courses-grid--table" : ""}`}>
-      {courseList}
+      {isCardLayout ? courseListCard : courseListList}
     </div>
   )
 }
