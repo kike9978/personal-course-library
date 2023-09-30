@@ -2,10 +2,7 @@ import defaultCoverImage from "../assets/img/coverimage-test.svg"
 
 
 function CourseCard({ courseTitle, institution, programs, onClick, coursePath }) {
-  console.log(coursePath)
-  const coverImage = window.isCoverImg(coursePath)
-    ? window.readCoverImg(coursePath)
-    : defaultCoverImage
+  let coverImage = `/Volumes/MacWin/Cursos/_All Courses/${coursePath}/cover.png`
   const programChips = programs.map((program) => {
     return (
       <div key={crypto.randomUUID} className="badge badge--programs">
