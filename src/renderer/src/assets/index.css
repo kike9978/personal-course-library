@@ -73,9 +73,8 @@ a{
 }
 
 .course-row img{
-  max-height: 20px;
-  --hue-rotation: 50deg;
-  filter: sepia(.5) hue-rotate(var(--hue-rotation)) ;
+  max-width: 2rem;
+  max-height: 1.5rem;
 }
 .course-row{
   display: flex;

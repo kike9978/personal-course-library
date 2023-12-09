@@ -4,6 +4,7 @@ import { useState } from 'react'
 function FilterableCoursesGrid({ courses }) {
   const [filterText, setFilterText] = useState('')
   const [isCardLayout, setIsCardLayout] = useState(true)
+  const [isInProcessOnly, setisInProcessOnly] = useState(false)
   const [courseCount, setCourseCount] = useState(courses.length)
   return (
     <div>
@@ -11,13 +12,16 @@ function FilterableCoursesGrid({ courses }) {
         filterText={filterText}
         onFilterTextChange={setFilterText}
         onCardLayoutChange={setIsCardLayout}
+        onInProcessOnlyChange={setisInProcessOnly}
         isCardLayout={isCardLayout}
+        isInProcessOnly={isInProcessOnly}
         courseCount={courseCount}
       />
       <CoursesGrid
         courses={courses}
         filterText={filterText}
         isCardLayout={isCardLayout}
+        isInProcessOnly={isInProcessOnly}
         onSortedCourses={setCourseCount}
       />
     </div>
@@ -29,6 +33,8 @@ function SearchBar({
   onFilterTextChange,
   onCardLayoutChange,
   isCardLayout,
+  isInProcessOnly,
+  onInProcessOnlyChange,
   courseCount
 }) {
   return (
@@ -51,6 +57,14 @@ function SearchBar({
             onChange={e => onCardLayoutChange(e.target.checked)}
           />{" "}
           Mostrar vista de cards
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={isInProcessOnly}
+            onChange={e => onInProcessOnlyChange(e.target.checked)}
+          />{" "}
+          Filtrar cursos en progreso
         </label>
       </div>
     </div>
