@@ -6,7 +6,7 @@ function CourseCard({ courseTitle, institution, programs, coursePath }) {
 
   const handleCheckboxClick = (e) => {
     e.preventDefault();
-    window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
+    window.updateInProcessState(`${window.extensions.windows}${coursePath}/courseProps.json`)
     console.log(window.readJSON(coursePath).isInProcess)
     console.log("Me picaste")
     setIsInProcess(window.readJSON(coursePath).isInProcess)
