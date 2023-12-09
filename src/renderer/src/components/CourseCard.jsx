@@ -1,17 +1,21 @@
-import coverImage from "../assets/img/coverimage-test.svg"
+import { useState } from 'react';
+import coverImage from '../assets/img/coverimage-test.svg'
 
-function CourseCard({ courseTitle, institution, programs, isInProcess, coursePath }) {
+function CourseCard({ courseTitle, institution, programs, coursePath }) {
+  const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
 
   const handleCheckboxClick = (e) => {
     e.preventDefault();
-    console.log("picaste el checkbox")
-    // window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
+    window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
+    console.log(window.readJSON(coursePath).isInProcess)
+    console.log("Me picaste")
+    setIsInProcess(window.readJSON(coursePath).isInProcess)
+    console.log(window.readJSON(coursePath).isInProcess)
   }
 
-  const handelCardClick = (e) =>{
-    if (!e.target.closest(".in-progress")){
+  const handleCardClick = (e) => {
+    if (!e.target.closest(".in-progress")) {
       window.openFolder(coursePath)
-      console.log("picaste la card")
     }
   }
 
@@ -24,7 +28,7 @@ function CourseCard({ courseTitle, institution, programs, isInProcess, coursePat
   })
 
   return (
-    <button onClick={handelCardClick} href="./" className="course-card">
+    <button onClick={handleCardClick} href="./" className="course-card">
       <img src={coverImage} alt="course thumbnail" className={`img-color--${Math.floor(Math.random() * 15) + 1}`} />
       <h3>{courseTitle && courseTitle}</h3>
       <img className="institution-logo" src={institution} alt="Institution logo" />
@@ -39,9 +43,7 @@ function CourseCard({ courseTitle, institution, programs, isInProcess, coursePat
           checked={isInProcess}
           onChange={(e) => {
             handleCheckboxClick(e)
-            console.log(e)
           }}
-          onClick={(e)=> e.preventDefault()}
         />{" "}
         En progreso
       </label>
