@@ -1,10 +1,18 @@
 import coverImage from "../assets/img/coverimage-test.svg"
 
-function CourseCard({ courseTitle, institution, programs, isInProcess, onClick, coursePath }) {
+function CourseCard({ courseTitle, institution, programs, isInProcess, coursePath }) {
 
   const handleCheckboxClick = (e) => {
-    e.cancelBubble = true
-    window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
+    e.preventDefault();
+    console.log("picaste el checkbox")
+    // window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
+  }
+
+  const handelCardClick = (e) =>{
+    if (!e.target.closest(".in-progress")){
+      window.openFolder(coursePath)
+      console.log("picaste la card")
+    }
   }
 
   const programChips = programs.map((program) => {
@@ -16,7 +24,7 @@ function CourseCard({ courseTitle, institution, programs, isInProcess, onClick, 
   })
 
   return (
-    <button onClick={onClick} href="./" className="course-card">
+    <button onClick={handelCardClick} href="./" className="course-card">
       <img src={coverImage} alt="course thumbnail" className={`img-color--${Math.floor(Math.random() * 15) + 1}`} />
       <h3>{courseTitle && courseTitle}</h3>
       <img className="institution-logo" src={institution} alt="Institution logo" />
@@ -25,7 +33,7 @@ function CourseCard({ courseTitle, institution, programs, isInProcess, onClick, 
         <div className="chips-container">{programChips}</div>
       </div>
       <div className="completion-rate">100%</div>
-      <label>
+      <label className="in-progress">
         <input
           type="checkbox"
           checked={isInProcess}
@@ -33,6 +41,7 @@ function CourseCard({ courseTitle, institution, programs, isInProcess, onClick, 
             handleCheckboxClick(e)
             console.log(e)
           }}
+          onClick={(e)=> e.preventDefault()}
         />{" "}
         En progreso
       </label>
