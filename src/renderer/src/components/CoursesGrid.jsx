@@ -18,7 +18,7 @@ for (let i = 0; i <= 100; i++) {
 //   />
 // ))
 
-export default function CoursesGrid({ courses, filterText, isCardLayout, isInProgressOnly, onSortedCourses }) {
+export default function CoursesGrid({ courses, filterText, isCardLayout, isInProcessOnly, onSortedCourses }) {
   const courseListCard = []
   const courseListList = []
 
@@ -29,7 +29,7 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, isInPro
       return
     }
 
-    if (isInProgressOnly && !courseObject.isInProcess) {
+    if (isInProcessOnly && !courseObject.isInProcess) {
       console.log("Me filtraste compi")
       return
     }

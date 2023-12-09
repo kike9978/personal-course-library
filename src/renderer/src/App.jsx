@@ -4,7 +4,7 @@ import { useState } from 'react'
 function FilterableCoursesGrid({ courses }) {
   const [filterText, setFilterText] = useState('')
   const [isCardLayout, setIsCardLayout] = useState(true)
-  const [isInProgressOnly, setisInProgressOnly] = useState(false)
+  const [isInProcessOnly, setisInProcessOnly] = useState(false)
   const [courseCount, setCourseCount] = useState(courses.length)
   return (
     <div>
@@ -12,16 +12,16 @@ function FilterableCoursesGrid({ courses }) {
         filterText={filterText}
         onFilterTextChange={setFilterText}
         onCardLayoutChange={setIsCardLayout}
-        onInProgressOnlyChange={setisInProgressOnly}
+        onInProcessOnlyChange={setisInProcessOnly}
         isCardLayout={isCardLayout}
-        isInProgressOnly={isInProgressOnly}
+        isInProcessOnly={isInProcessOnly}
         courseCount={courseCount}
       />
       <CoursesGrid
         courses={courses}
         filterText={filterText}
         isCardLayout={isCardLayout}
-        isInProgressOnly={isInProgressOnly}
+        isInProcessOnly={isInProcessOnly}
         onSortedCourses={setCourseCount}
       />
     </div>
@@ -33,8 +33,8 @@ function SearchBar({
   onFilterTextChange,
   onCardLayoutChange,
   isCardLayout,
-  isInProgressOnly,
-  onInProgressOnlyChange,
+  isInProcessOnly,
+  onInProcessOnlyChange,
   courseCount
 }) {
   return (
@@ -61,8 +61,8 @@ function SearchBar({
         <label>
           <input
             type="checkbox"
-            checked={isInProgressOnly}
-            onChange={e => onInProgressOnlyChange(e.target.checked)}
+            checked={isInProcessOnly}
+            onChange={e => onInProcessOnlyChange(e.target.checked)}
           />{" "}
           Filtrar cursos en progreso
         </label>
