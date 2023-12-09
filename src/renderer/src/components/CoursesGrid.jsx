@@ -21,7 +21,9 @@ for (let i = 0; i <= 100; i++) {
 // ))
 
 export default function CoursesGrid({ courses, filterText, isCardLayout, isInProcessOnly, onSortedCourses }) {
-  const [modalCourseTitle, setModalCourseTitle] = useState("hola")
+  const [modalCourseTitle, setModalCourseTitle] = useState("")
+  const [modalProgramsList, setModalProgramsList] = useState([])
+  const [currentCoursePath, setCurrentCoursePath] = useState("")
   const courseListCard = []
   const courseListList = []
 
@@ -66,7 +68,11 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, isInPro
         }}
         isInProcess={courseObject.isInProcess}
         coursePath={course}
-        onOpenModalClick={(e) => setModalCourseTitle(courseObject.title)}
+        onOpenModalClick={() => {
+          setModalCourseTitle(courseObject.title)
+          setModalProgramsList(courseObject.programs)
+          setCurrentCoursePath(`${window.extensions.macos}${course}/courseProps.json`)
+        }}
       />
     )
     onSortedCourses(Object.keys(courseListCard).length)
@@ -96,8 +102,11 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, isInPro
         {isCardLayout ? courseListCard : courseListList}
       </div>
       <CourseEditModal
+        path={currentCoursePath}
         courseTitle={modalCourseTitle}
         onCourseTitleChange={setModalCourseTitle}
+        programsList={modalProgramsList}
+        onProgramsListChange={setModalProgramsList}
       />
     </>
   )

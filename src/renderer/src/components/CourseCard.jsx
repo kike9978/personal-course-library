@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import coverImage from '../assets/img/coverimage-test.svg'
-import CourseEditModal from './CourseEditModal';
 
 function CourseCard({ courseTitle, institution, programs, coursePath, onOpenModalClick }) {
   const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
@@ -8,9 +7,7 @@ function CourseCard({ courseTitle, institution, programs, coursePath, onOpenModa
   const handleCheckboxClick = (e) => {
     e.preventDefault();
     window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
-    console.log(window.readJSON(coursePath).isInProcess)
     setIsInProcess(window.readJSON(coursePath).isInProcess)
-    console.log(window.readJSON(coursePath).isInProcess)
   }
 
   const handleCardClick = (e) => {
@@ -36,7 +33,7 @@ function CourseCard({ courseTitle, institution, programs, coursePath, onOpenModa
 
   return (
     <>
-      <button onClick={handleCardClick} href="./" className="course-card">
+      <div onClick={handleCardClick} href="./" className="course-card">
         <img src={coverImage} alt="course thumbnail" className={`img-color--${Math.floor(Math.random() * 15) + 1}`} />
         <h3>{courseTitle && courseTitle}</h3>
         <img className="institution-logo" src={institution} alt="Institution logo" />
@@ -58,7 +55,7 @@ function CourseCard({ courseTitle, institution, programs, coursePath, onOpenModa
         <button onClick={(e) => handleOpenModalClick(e)}>
           Editar Curso
         </button>
-      </button>
+      </div>
 
 
       {/* <CourseEditModal /> */}

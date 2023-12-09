@@ -162,7 +162,7 @@ a{
   gap:.3rem
 }
 
-.dialog{
+.dialog:modal{
   display: flex;
   flex-direction: column;
 }

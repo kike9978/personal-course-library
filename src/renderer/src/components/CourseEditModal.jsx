@@ -1,13 +1,13 @@
 
-function CourseEditModal({courseTitle, onCourseTitleChange}) {
+function CourseEditModal({ path, courseTitle, onCourseTitleChange, programsList, onProgramsListChange }) {
+
 
   return (
     <dialog className="dialog">
       <h3>Editar propiedades de curso</h3>
       <label>
         Nombre de curso:
-        <input
-          type="text"
+        <textarea
           value={courseTitle}
           onChange={(e) => {
             onCourseTitleChange(e.target.value)
@@ -17,7 +17,21 @@ function CourseEditModal({courseTitle, onCourseTitleChange}) {
       </label>
       <label>
         Programas:
-        <input type="text" value="hola" />
+        <input
+          type="text"
+          value={programsList}
+          onChange={(e) => {
+            onProgramsListChange(e.target.value)
+          }}
+          className="program-list-input"
+        />
+        <button onClick={() => {
+          window.updateCourseProgramsList(path, document.querySelector(".program-list-input").value.split(","))
+          console.log("me picaste la cola")
+          console.log(path)
+          console.log(document.querySelector(".program-list-input").value.split(","))
+        }}
+        >Actualizar programs</button>
       </label>
       <label>
         Instructor:
@@ -30,7 +44,7 @@ function CourseEditModal({courseTitle, onCourseTitleChange}) {
       <button onClick={() => {
         document.querySelector(".dialog").close()
       }}>x</button>
-    </dialog>
+    </dialog >
   )
 }
 
