@@ -1,4 +1,6 @@
-const url = 'src/assets/img/institutions/'
+//We need to make url exception for windows
+const url = 'src\\assets\\img\\institutions\\'
+
 
 export const imageData = [
   {
