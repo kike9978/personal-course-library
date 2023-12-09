@@ -1,6 +1,7 @@
 import CourseRow from "./CourseRow"
 import CourseCard from "./courseCard"
 import { imageData } from "../utils/imageData"
+import { dialog } from "electron"
 
 const cursos = []
 
@@ -87,8 +88,12 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, isInPro
   sortAlphabetically(courseListCard)
   sortAlphabetically(courseListList)
   return (
+    <>
+    {/* <button style={{position:"fixed", zIndex: "2", top: "15rem"}} onClick={() => document.querySelector(dialog).showModal()}>abrir modal</button> */}
     <div className={`courses-grid${!isCardLayout ? " courses-grid--table" : ""}`}>
       {isCardLayout ? courseListCard : courseListList}
     </div>
+    {/* <dialog></dialog> */}
+    </>
   )
 }
