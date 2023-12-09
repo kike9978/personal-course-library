@@ -7,7 +7,7 @@
 /*
   2. Remove default margin
 */
-* {
+*:not(dialog) {
   margin: 0;
 }
 /*

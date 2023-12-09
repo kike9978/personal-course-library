@@ -2,7 +2,7 @@ import { useState } from 'react';
 import coverImage from '../assets/img/coverimage-test.svg'
 import CourseEditModal from './CourseEditModal';
 
-function CourseCard({ courseTitle, institution, programs, coursePath }) {
+function CourseCard({ courseTitle, institution, programs, coursePath, onOpenModalClick }) {
   const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
 
   const handleCheckboxClick = (e) => {
@@ -17,6 +17,13 @@ function CourseCard({ courseTitle, institution, programs, coursePath }) {
     if (!e.target.closest(".in-progress")) {
       window.openFolder(coursePath)
     }
+  }
+
+  const handleOpenModalClick = (e) => {
+    e.stopPropagation()
+    onOpenModalClick()
+    document.querySelector(".dialog").showModal()
+
   }
 
   const programChips = programs.map((program) => {
@@ -48,14 +55,12 @@ function CourseCard({ courseTitle, institution, programs, coursePath }) {
           />{" "}
           En progreso
         </label>
-        <button onClick={(e) => {
-          e.stopPropagation()
-        }}>
+        <button onClick={(e) => handleOpenModalClick(e)}>
           Editar Curso
         </button>
       </button>
 
-      
+
       {/* <CourseEditModal /> */}
     </>
   )

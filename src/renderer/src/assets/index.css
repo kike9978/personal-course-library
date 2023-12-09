@@ -161,3 +161,8 @@ a{
   display: flex;
   gap:.3rem
 }
+
+.dialog{
+  display: flex;
+  flex-direction: column;
+}
