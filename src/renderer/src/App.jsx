@@ -60,7 +60,6 @@ function SearchBar({
 function App() {
   return (
     <div className="container">
-      console.log(window.courseList)
       <FilterableCoursesGrid courses={window.courseList} />
     </div>
   )
