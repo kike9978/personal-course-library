@@ -18,7 +18,7 @@ for (let i = 0; i <= 100; i++) {
 //   />
 // ))
 
-export default function CoursesGrid({ courses, filterText, isCardLayout, onSortedCourses }) {
+export default function CoursesGrid({ courses, filterText, isCardLayout, isInProgressOnly, onSortedCourses }) {
   const courseListCard = []
   const courseListList = []
 
@@ -26,6 +26,11 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, onSorte
     const courseObject = window.readJSON(course)
     if (courseObject.title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
       courseObject.institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1) {
+      return
+    }
+
+    if (isInProgressOnly && !courseObject.isInProcess) {
+      console.log("Me filtraste compi")
       return
     }
 

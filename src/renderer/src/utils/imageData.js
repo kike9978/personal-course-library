@@ -135,7 +135,7 @@ export const imageData = [
   },
   {
     institution: 'Proko',
-    img: `${url}default-logo.svg`
+    img: `${url}default-logo.png`
   },
   {
     institution: 'Rad How To Class',
