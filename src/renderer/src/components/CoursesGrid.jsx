@@ -1,7 +1,8 @@
 import CourseRow from "./CourseRow"
 import CourseCard from "./courseCard"
 import { imageData } from "../utils/imageData"
-import { dialog } from "electron"
+import CourseEditModal from "./CourseEditModal"
+// import CourseEditModal from "./CourseEditModal"
 
 const cursos = []
 
@@ -89,11 +90,33 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, isInPro
   sortAlphabetically(courseListList)
   return (
     <>
-    {/* <button style={{position:"fixed", zIndex: "2", top: "15rem"}} onClick={() => document.querySelector(dialog).showModal()}>abrir modal</button> */}
-    <div className={`courses-grid${!isCardLayout ? " courses-grid--table" : ""}`}>
-      {isCardLayout ? courseListCard : courseListList}
-    </div>
-    {/* <dialog></dialog> */}
+      <button style={{ position: "fixed", zIndex: "2", top: "15rem" }} onClick={() => document.querySelector(".dialog").showModal()}>abrir modal</button>
+      <div className={`courses-grid${!isCardLayout ? " courses-grid--table" : ""}`}>
+        {isCardLayout ? courseListCard : courseListList}
+      </div>
+      {/* <dialog className=".dialog">
+        <h3>Editar propiedades de curso</h3>
+        <label>
+          Nombre de curso:
+          <input type="text" value="hola" />
+        </label>
+        <label>
+          Programas:
+          <input type="text" value="hola" />
+        </label>
+        <label>
+          Instructor:
+          <input type="text" value="hola" />
+        </label>
+        <label>
+          Academia:
+          <input type="text" value="hola" />
+        </label>
+        <button onClick={e => {
+          document.querySelector(".dialog").close()
+        }}>x</button>
+      </dialog> */}
+      <CourseEditModal />
     </>
   )
 }
