@@ -38,20 +38,20 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, isInPro
       return
     }
 
-    let imgUrl = ""
+    let institutionImgUrl = ""
     imageData.forEach((data) => {
       const { institution, img } = data
       if (courseObject.institution.toLowerCase() !== institution.toLowerCase()) {
         return
       }
 
-      imgUrl = img
+      institutionImgUrl = img
     })
     courseListList.push(
       <CourseRow
         key={crypto.randomUUID()}
         courseTitle={courseObject.title}
-        institution={imgUrl}
+        institution={institutionImgUrl}
         programs={courseObject.programs}
         onClick={() => window.openFolder(course)}
       />
@@ -61,7 +61,8 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, isInPro
       <CourseCard
         key={crypto.randomUUID()}
         courseTitle={courseObject.title}
-        institution={imgUrl}
+        institution={courseObject.institution}
+        institutionImgUrl={institutionImgUrl}
         programs={courseObject.programs}
         onClick={() => {
           window.openFolder(course)

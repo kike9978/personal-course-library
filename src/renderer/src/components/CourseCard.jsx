@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import coverImage from '../assets/img/coverimage-test.svg'
 
-function CourseCard({ courseTitle, institution, programs, coursePath, onOpenModalClick }) {
+function CourseCard({ courseTitle,institution, institutionImgUrl, programs, coursePath, onOpenModalClick }) {
   const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
 
   const handleCheckboxClick = (e) => {
@@ -36,11 +36,8 @@ function CourseCard({ courseTitle, institution, programs, coursePath, onOpenModa
       <div onClick={handleCardClick} href="./" className="course-card">
         <img src={coverImage} alt="course thumbnail" className={`img-color--${Math.floor(Math.random() * 15) + 1}`} />
         <h3>{courseTitle && courseTitle}</h3>
-        <img className="institution-logo" src={institution} alt="Institution logo" />
-        <div>
-          <span>Programas: </span>
+        <img className="institution-logo" src={institutionImgUrl} alt="institution logo" title={institution}/>
           <div className="chips-container">{programChips}</div>
-        </div>
         <div className="completion-rate">100%</div>
         <label className="in-progress">
           <input
