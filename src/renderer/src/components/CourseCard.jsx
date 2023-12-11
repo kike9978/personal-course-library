@@ -36,7 +36,7 @@ function CourseCard({ courseTitle,institution, institutionImgUrl, programs, cour
       <div onClick={handleCardClick} href="./" className="course-card">
         <img src={coverImage} alt="course thumbnail" className={`img-color--${Math.floor(Math.random() * 15) + 1}`} />
         <h3>{courseTitle && courseTitle}</h3>
-        <img className="institution-logo" src={institutionImgUrl} alt="institution logo" title={institution}/>
+        <img className="institution-logo" src={institutionImgUrl} alt={`${institution} logo`} title={institution}/>
           <div className="chips-container">{programChips}</div>
         <div className="completion-rate">100%</div>
         <label className="in-progress">
