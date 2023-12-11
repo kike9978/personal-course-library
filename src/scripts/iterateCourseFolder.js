@@ -1,3 +1,5 @@
+import { createRequire } from 'module'
+const require = createRequire(import.meta.url)
 const fs = require('fs')
 const path = require('path')
 
@@ -12,8 +14,8 @@ export function readJSON(extension) {
   return props
 }
 
-export default function courseList() {
-  const results = fs.readdirSync(path.resolve(__dirname, `${extensions.macos}`))
+export function courseList() {
+  const results = fs.readdirSync(path.resolve(`${extensions.macos}`))
   return results
 }
 

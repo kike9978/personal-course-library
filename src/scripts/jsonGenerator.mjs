@@ -1,4 +1,7 @@
-import {courseList, extensions} from "./iterateCourseFolder"
+import { courseList, extensions } from './iterateCourseFolder.js'
+import { createRequire } from 'module'
+const require = createRequire(import.meta.url)
+const fs = require('fs')
 
 const possiblePrograms = [
   'Photoshop',
@@ -77,8 +80,12 @@ function addProgramsToObject(extension) {
   return programsList
 }
 
-
 courseList().forEach((extension) => {
+  if (fs.existsSync(`${extensions.macos}${extension}/courseProps.json`)) {
+    return
+  }
+  console.log(extension)
+
   const courseProps = {
     title: extension.split(' - ')[1].trim(),
     programs: addProgramsToObject(extension),
@@ -87,6 +94,7 @@ courseList().forEach((extension) => {
     instructor: '',
     isIncomplete: false,
     isInProcess: false,
+    isNew: true,
     rate: 0
   }
   const jsonString = JSON.stringify(courseProps)
