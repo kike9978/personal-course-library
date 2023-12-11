@@ -8,6 +8,7 @@ function FilterableCoursesGrid({ courses }) {
   const [courseCount, setCourseCount] = useState(courses.length)
   return (
     <div>
+      <img src={window.coverImageDataURL} alt="" />
       <SearchBar
         filterText={filterText}
         onFilterTextChange={setFilterText}

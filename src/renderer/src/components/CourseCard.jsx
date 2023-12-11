@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import coverImage from '../assets/img/coverimage-test.svg'
-import editIcon from '../assets/img/icons/edit-icon.svg'
 
 function CourseCard({ courseTitle, institution, institutionImgUrl, programs, coursePath, onOpenModalClick }) {
   const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)

@@ -1,9 +1,16 @@
-import { contextBridge } from 'electron'
+import { contextBridge, nativeImage } from 'electron'
 const { shell } = require('electron')
 import { electronAPI } from '@electron-toolkit/preload'
 import courseList from "../scripts/iterateCourseFolder"
 import { readJSON, extensions } from "../scripts/iterateCourseFolder"
 import {updateInProcessState, updateCourseProgramsList} from '../scripts/updateJson'
+
+const imgPath = "/Users/kike/Desktop/Perfil.jpeg"
+
+const coverImage = nativeImage.createFromPath(imgPath);
+
+console.log(coverImage)
+const coverImageDataURL = coverImage.toDataURL();
 
 // Custom APIs for renderer
 
@@ -23,6 +30,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld("updateInProcessState", updateInProcessState)
     contextBridge.exposeInMainWorld("updateCourseProgramsList", updateCourseProgramsList)
     contextBridge.exposeInMainWorld("extensions", extensions)
+    contextBridge.exposeInMainWorld("coverImageDataURL", coverImageDataURL)
   } catch (error) {
     console.error(error)
   }
@@ -34,4 +42,5 @@ if (process.contextIsolated) {
   window.updateInProcessState = updateInProcessState
   window.updateCourseProgramsList = updateCourseProgramsList
   window.extensions = extensions
+  window.coverImageDataURL = coverImageDataURL
 }
