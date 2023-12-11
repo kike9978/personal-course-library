@@ -31,10 +31,10 @@ a {
 .course-card {
   display: flex;
   flex-direction: column;
-  padding: 1rem;
+  overflow: hidden;
+
   background-color: white;
   border-radius: 0.2rem;
-  min-width: 5rem;
   transition:
     scale 100ms ease-in-out,
     rotate 100ms cubic-bezier(0.97, 0.01, 0.12, 0.99);
@@ -42,8 +42,8 @@ a {
   border: none;
   justify-content: flex-start;
   font-size: 0.813rem;
-  gap: 0.5rem;
 }
+
 .course-card * {
   text-align: start;
 }
@@ -55,13 +55,19 @@ a {
   rotate: 2deg;
 }
 
+.course-info {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .course-card h3 {
   font-size: 1rem;
   line-height: 1.2;
 }
 
 .course-card img {
-  --hue-rotation: 50deg;
   max-height: 120px;
   object-fit: cover;
   width: 100%;
@@ -167,4 +173,30 @@ a {
 .dialog:modal {
   display: flex;
   flex-direction: column;
+}
+
+.edit-course-button {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  cursor: pointer;
+  background-color: rgb(241, 37, 146);
+  border: none;
+  color: white;
+  border-radius: 30px;
+  display: none;
+}
+
+.edit-course-button svg {
+  height: 2rem;
+  fill: white;
+}
+.edit-course-button:hover {
+  background-color: rgb(183, 29, 111);
+  display: block;
+  box-shadow: 0px 0px rgba(0, 0, 0, 0.195);
+}
+
+.course-card img:hover + .edit-course-button {
+  display: block;
 }
