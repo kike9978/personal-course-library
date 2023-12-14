@@ -1,14 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import coverImage from '../assets/img/coverimage-test.svg'
 import editIcon from '../assets/img/icons/edit-icon.svg'
 
 function CourseCard({ courseTitle, institution, institutionImgUrl, programs, coursePath, onOpenModalClick }) {
   const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
 
-  const handleCheckboxClick = (e) => {
+  const fetchData = () => {
+    setIsInProcess(window.readJSON(coursePath).isInProcess);
+  };
+
+  useEffect(() => {
+    fetchData(); // Initial fetch
+
+    // Listen for changes in isInProcess and re-fetch data
+    const interval = setInterval(() => {
+      fetchData();
+    }, 600); // Adjust the interval as needed or find a better way to trigger updates
+
+    return () => clearInterval(interval); // Cleanup interval
+  }, [isInProcess]);
+
+
+  const handleCheckboxClick = async (e) => {
     e.preventDefault();
-    window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
-    setIsInProcess(window.readJSON(coursePath).isInProcess)
+    await window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
   }
 
   const handleCardClick = (e) => {
@@ -53,6 +68,7 @@ function CourseCard({ courseTitle, institution, institutionImgUrl, programs, cou
           />{" "}
           En curso
         </label>
+        <a href="http://" target="_blank" rel="noopener noreferrer">Notas →</a>
       </div>
       
     </div>
