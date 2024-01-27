@@ -1,10 +1,26 @@
-import { contextBridge } from 'electron'
+import { contextBridge, nativeImage } from 'electron'
 const { shell } = require('electron')
+const fs = require('fs')
 import { electronAPI } from '@electron-toolkit/preload'
 import courseList from '../scripts/iterateCourseFolder'
 import { readJSON, extensions } from '../scripts/iterateCourseFolder'
 import { updateInProcessState, updateCourseProgramsList } from '../scripts/updateJson'
 
+const coursesCoverImages = {}
+
+function createCoursesCoverImages() {
+  courseList().forEach((course) => {
+    const filePath = `${extensions.macos}${course}/cover-image.png`
+    if (!fs.existsSync(filePath)) {
+      return
+    }
+    coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(filePath).toDataURL()
+  })
+}
+
+console.table(courseList())
+createCoursesCoverImages()
+console.table(coursesCoverImages)
 // Custom APIs for renderer
 
 function openFolder(extension) {
@@ -23,6 +39,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('updateInProcessState', updateInProcessState)
     contextBridge.exposeInMainWorld('updateCourseProgramsList', updateCourseProgramsList)
     contextBridge.exposeInMainWorld('extensions', extensions)
+    contextBridge.exposeInMainWorld('coursesCoverImages', coursesCoverImages)
   } catch (error) {
     console.error(error)
   }
@@ -34,4 +51,5 @@ if (process.contextIsolated) {
   window.updateInProcessState = updateInProcessState
   window.updateCourseProgramsList = updateCourseProgramsList
   window.extensions = extensions
+  window.coursesCoverImages = coursesCoverImages
 }

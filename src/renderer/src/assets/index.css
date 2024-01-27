@@ -68,6 +68,7 @@ a {
 }
 
 .course-card img {
+  height: 120px;
   max-height: 120px;
   object-fit: cover;
   width: 100%;

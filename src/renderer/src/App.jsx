@@ -1,6 +1,10 @@
 import CoursesGrid from './components/CoursesGrid'
 import { useState } from 'react'
 
+// function getNativeImageData(pathToImage) {
+//   return ipcRenderer.invoke("getNativeImage", pathToImage);
+// }
+
 function FilterableCoursesGrid({ courses }) {
   const [filterText, setFilterText] = useState('')
   const [isCardLayout, setIsCardLayout] = useState(true)
