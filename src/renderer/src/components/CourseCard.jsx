@@ -28,10 +28,10 @@ function CourseCard({
 
   const handleCheckboxClick = async (e) => {
     e.preventDefault()
-    await window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
+    await window.updateInProcessState(`${window.extensions.windows}${coursePath}\\courseProps.json`)
   }
 
-  const handleCardClick = (e) => {
+  const handleCardClick = (e) => { 
     if (!e.target.closest('.in-progress')) {
       window.openFolder(coursePath)
     }

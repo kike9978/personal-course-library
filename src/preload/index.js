@@ -10,7 +10,7 @@ const coursesCoverImages = {}
 
 function createCoursesCoverImages() {
   courseList().forEach((course) => {
-    const filePath = `${extensions.macos}${course}/cover-image.png`
+    const filePath = `${extensions.windows}${course}\\cover-image.png`
     if (!fs.existsSync(filePath)) {
       return
     }
@@ -18,9 +18,7 @@ function createCoursesCoverImages() {
   })
 }
 
-console.table(courseList())
 createCoursesCoverImages()
-console.table(coursesCoverImages)
 // Custom APIs for renderer
 
 function openFolder(extension) {

@@ -68,7 +68,7 @@ export default function CoursesGrid({
         onOpenModalClick={() => {
           setModalCourseTitle(courseObject.title)
           setModalProgramsList(courseObject.programs)
-          setCurrentCoursePath(`${window.extensions.macos}${course}/courseProps.json`)
+          setCurrentCoursePath(`${window.extensions.windows}${course}\\courseProps.json`)
         }}
       />
     )
