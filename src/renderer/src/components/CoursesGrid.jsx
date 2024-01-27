@@ -1,8 +1,8 @@
-import CourseRow from "./CourseRow"
-import CourseCard from "./courseCard"
-import { imageData } from "../utils/imageData"
-import CourseEditModal from "./CourseEditModal"
-import { useState } from "react"
+import CourseRow from './CourseRow'
+import CourseCard from './courseCard'
+import { imageData } from '../utils/imageData'
+import CourseEditModal from './CourseEditModal'
+import { useState } from 'react'
 
 const cursos = []
 
@@ -20,17 +20,25 @@ for (let i = 0; i <= 100; i++) {
 //   />
 // ))
 
-export default function CoursesGrid({ courses, filterText, isCardLayout, isInProcessOnly, onSortedCourses }) {
-  const [modalCourseTitle, setModalCourseTitle] = useState("")
+export default function CoursesGrid({
+  courses,
+  filterText,
+  isCardLayout,
+  isInProcessOnly,
+  onSortedCourses
+}) {
+  const [modalCourseTitle, setModalCourseTitle] = useState('')
   const [modalProgramsList, setModalProgramsList] = useState([])
-  const [currentCoursePath, setCurrentCoursePath] = useState("")
+  const [currentCoursePath, setCurrentCoursePath] = useState('')
   const courseListCard = []
   const courseListList = []
 
   courses.forEach((course) => {
     const courseObject = window.readJSON(course)
-    if (courseObject.title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
-      courseObject.institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1) {
+    if (
+      courseObject.title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
+      courseObject.institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1
+    ) {
       return
     }
 
@@ -38,7 +46,7 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, isInPro
       return
     }
 
-    let institutionImgUrl = ""
+    let institutionImgUrl = ''
     imageData.forEach((data) => {
       const { institution, img } = data
       if (courseObject.institution.toLowerCase() !== institution.toLowerCase()) {
@@ -96,10 +104,10 @@ export default function CoursesGrid({ courses, filterText, isCardLayout, isInPro
 
   sortAlphabetically(courseListCard)
   sortAlphabetically(courseListList)
-  
+
   return (
     <>
-      <div className={`courses-grid${!isCardLayout ? " courses-grid--table" : ""}`}>
+      <div className={`courses-grid${!isCardLayout ? ' courses-grid--table' : ''}`}>
         {isCardLayout ? courseListCard : courseListList}
       </div>
       <CourseEditModal

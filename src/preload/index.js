@@ -1,9 +1,9 @@
 import { contextBridge } from 'electron'
 const { shell } = require('electron')
 import { electronAPI } from '@electron-toolkit/preload'
-import courseList from "../scripts/iterateCourseFolder"
-import { readJSON, extensions } from "../scripts/iterateCourseFolder"
-import {updateInProcessState, updateCourseProgramsList} from '../scripts/updateJson'
+import courseList from '../scripts/iterateCourseFolder'
+import { readJSON, extensions } from '../scripts/iterateCourseFolder'
+import { updateInProcessState, updateCourseProgramsList } from '../scripts/updateJson'
 
 // Custom APIs for renderer
 
@@ -17,12 +17,12 @@ function openFolder(extension) {
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld("courseList", courseList())
-    contextBridge.exposeInMainWorld("openFolder", openFolder)
-    contextBridge.exposeInMainWorld("readJSON", readJSON)
-    contextBridge.exposeInMainWorld("updateInProcessState", updateInProcessState)
-    contextBridge.exposeInMainWorld("updateCourseProgramsList", updateCourseProgramsList)
-    contextBridge.exposeInMainWorld("extensions", extensions)
+    contextBridge.exposeInMainWorld('courseList', courseList())
+    contextBridge.exposeInMainWorld('openFolder', openFolder)
+    contextBridge.exposeInMainWorld('readJSON', readJSON)
+    contextBridge.exposeInMainWorld('updateInProcessState', updateInProcessState)
+    contextBridge.exposeInMainWorld('updateCourseProgramsList', updateCourseProgramsList)
+    contextBridge.exposeInMainWorld('extensions', extensions)
   } catch (error) {
     console.error(error)
   }

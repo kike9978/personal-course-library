@@ -1,7 +1,10 @@
-
-function CourseEditModal({ path, courseTitle, onCourseTitleChange, programsList, onProgramsListChange }) {
-
-
+function CourseEditModal({
+  path,
+  courseTitle,
+  onCourseTitleChange,
+  programsList,
+  onProgramsListChange
+}) {
   return (
     <dialog className="dialog">
       <h3>Editar propiedades de curso</h3>
@@ -12,7 +15,7 @@ function CourseEditModal({ path, courseTitle, onCourseTitleChange, programsList,
           onChange={(e) => {
             onCourseTitleChange(e.target.value)
           }}
-        // onBlur={ }
+          // onBlur={ }
         />
       </label>
       <label>
@@ -25,13 +28,19 @@ function CourseEditModal({ path, courseTitle, onCourseTitleChange, programsList,
           }}
           className="program-list-input"
         />
-        <button onClick={() => {
-          window.updateCourseProgramsList(path, document.querySelector(".program-list-input").value.split(","))
-          console.log("me picaste la cola")
-          console.log(path)
-          console.log(document.querySelector(".program-list-input").value.split(","))
-        }}
-        >Actualizar programs</button>
+        <button
+          onClick={() => {
+            window.updateCourseProgramsList(
+              path,
+              document.querySelector('.program-list-input').value.split(',')
+            )
+            console.log('me picaste la cola')
+            console.log(path)
+            console.log(document.querySelector('.program-list-input').value.split(','))
+          }}
+        >
+          Actualizar programs
+        </button>
       </label>
       <label>
         Instructor:
@@ -41,10 +50,14 @@ function CourseEditModal({ path, courseTitle, onCourseTitleChange, programsList,
         Academia:
         <input type="text" value="hola" />
       </label>
-      <button onClick={() => {
-        document.querySelector(".dialog").close()
-      }}>x</button>
-    </dialog >
+      <button
+        onClick={() => {
+          document.querySelector('.dialog').close()
+        }}
+      >
+        x
+      </button>
+    </dialog>
   )
 }
 
