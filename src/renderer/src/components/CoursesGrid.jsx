@@ -1,6 +1,5 @@
 import CourseRow from './CourseRow'
 import CourseCard from './courseCard'
-import { imageData } from '../utils/imageData'
 import CourseEditModal from './CourseEditModal'
 import { useState } from 'react'
 
@@ -46,20 +45,10 @@ export default function CoursesGrid({
       return
     }
 
-    let institutionImgUrl = ''
-    imageData.forEach((data) => {
-      const { institution, img } = data
-      if (courseObject.institution.toLowerCase() !== institution.toLowerCase()) {
-        return
-      }
-
-      institutionImgUrl = img
-    })
     courseListList.push(
       <CourseRow
         key={crypto.randomUUID()}
         courseTitle={courseObject.title}
-        institution={institutionImgUrl}
         programs={courseObject.programs}
         onClick={() => window.openFolder(course)}
       />
@@ -70,7 +59,6 @@ export default function CoursesGrid({
         key={crypto.randomUUID()}
         courseTitle={courseObject.title}
         institution={courseObject.institution}
-        institutionImgUrl={institutionImgUrl}
         programs={courseObject.programs}
         onClick={() => {
           window.openFolder(course)

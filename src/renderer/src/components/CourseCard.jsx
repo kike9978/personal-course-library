@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react'
 import coverImage from '../assets/img/coverimage-test.svg'
+import { imageData } from '../utils/imageData'
 
 function CourseCard({
   courseTitle,
   institution,
-  institutionImgUrl,
   programs,
   coursePath,
   onOpenModalClick
 }) {
   const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
-
+  const institutionImgUrl = imageData.find(data => data.institution === institution)?.img;
   const fetchData = () => {
     setIsInProcess(window.readJSON(coursePath).isInProcess)
   }
@@ -61,12 +61,23 @@ function CourseCard({
       </button>
       <div className="course-info">
         <h3>{courseTitle && courseTitle}</h3>
+        <p>{institutionImgUrl}</p>
+        {/* {imageData.find(image => image.institution === institution).img ?
+          <p>{imageData.find(image => image.institution === institution).img}</p> :
+          ""
+        } */}
         <img
           className="institution-logo"
           src={institutionImgUrl}
           alt={`${institution} logo`}
           title={institution}
         />
+        {/* <img
+          className="institution-logo"
+          src={imageData.find(image => image.institution === institution).img}
+          alt={`${institution} logo`}
+          title={institution}
+        /> */}
         <div className="chips-container">{programChips}</div>
         <div className="completion-rate">100%</div>
         <label className="in-progress">
