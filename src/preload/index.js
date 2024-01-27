@@ -19,17 +19,14 @@ function createCoursesCoverImages() {
     if (!fs.existsSync(filePath)) {
       return
     }
-    coursesCoverImages[readJSON(course).instituion] = nativeImage
+    coursesCoverImages[readJSON(course).title] = nativeImage
       .createFromPath(filePath)
       .toDataURL()
   })
 }
 
-"2D Character Design Magician"
-
 console.table(courseList())
 createCoursesCoverImages()
-// console.log(courseCoverImage)
 console.table(coursesCoverImages)
 // Custom APIs for renderer
 
