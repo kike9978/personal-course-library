@@ -1,5 +1,9 @@
-import CoursesGrid from "./components/CoursesGrid"
+import CoursesGrid from './components/CoursesGrid'
 import { useState } from 'react'
+
+// function getNativeImageData(pathToImage) {
+//   return ipcRenderer.invoke("getNativeImage", pathToImage);
+// }
 
 function FilterableCoursesGrid({ courses }) {
   const [filterText, setFilterText] = useState('')
@@ -54,16 +58,16 @@ function SearchBar({
           <input
             type="checkbox"
             checked={isCardLayout}
-            onChange={e => onCardLayoutChange(e.target.checked)}
-          />{" "}
+            onChange={(e) => onCardLayoutChange(e.target.checked)}
+          />{' '}
           Mostrar vista de cards
         </label>
         <label>
           <input
             type="checkbox"
             checked={isInProcessOnly}
-            onChange={e => onInProcessOnlyChange(e.target.checked)}
-          />{" "}
+            onChange={(e) => onInProcessOnlyChange(e.target.checked)}
+          />{' '}
           Filtrar cursos en progreso
         </label>
       </div>

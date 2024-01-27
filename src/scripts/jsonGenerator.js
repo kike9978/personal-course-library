@@ -1,4 +1,4 @@
-import {courseList, extensions} from "./iterateCourseFolder"
+import { courseList, extensions } from './iterateCourseFolder'
 
 const possiblePrograms = [
   'Photoshop',
@@ -76,7 +76,6 @@ function addProgramsToObject(extension) {
   })
   return programsList
 }
-
 
 courseList().forEach((extension) => {
   const courseProps = {
