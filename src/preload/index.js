@@ -6,11 +6,6 @@ import courseList from '../scripts/iterateCourseFolder'
 import { readJSON, extensions } from '../scripts/iterateCourseFolder'
 import { updateInProcessState, updateCourseProgramsList } from '../scripts/updateJson'
 
-const imgPath = '/Users/kike/Desktop/Perfil.jpeg'
-
-const coverImage = nativeImage.createFromPath(imgPath)
-const coverImageDataURL = coverImage.toDataURL()
-
 const coursesCoverImages = {}
 
 function createCoursesCoverImages() {
@@ -19,9 +14,7 @@ function createCoursesCoverImages() {
     if (!fs.existsSync(filePath)) {
       return
     }
-    coursesCoverImages[readJSON(course).title] = nativeImage
-      .createFromPath(filePath)
-      .toDataURL()
+    coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(filePath).toDataURL()
   })
 }
 
