@@ -11,11 +11,8 @@ function CourseRow({ courseTitle, institution, programs, onClick, institutionImg
   })
   return (
     <button onClick={onClick} href="./" className="course-row">
-      <img
-        src={coverImage}
-        alt="course thumbnail"
-        className={`img-color--${Math.floor(Math.random() * 15) + 1}`}
-      />
+     
+      <img className="cover" src={window.coursesCoverImages[courseTitle] ? window.coursesCoverImages[courseTitle] : coverImage} alt="course thumbnail" />
       <h3 title={courseTitle}>{courseTitle && courseTitle}</h3>
       <img className="institution-logo" alt={`${institution} logo`} src={institutionImages[institutionImgUrl]} />
       {programChips}

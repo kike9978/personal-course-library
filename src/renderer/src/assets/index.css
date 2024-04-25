@@ -84,6 +84,11 @@ a {
   max-width: 2rem;
   max-height: 1.5rem;
 }
+
+.course-row .cover {
+object-fit: cover;
+height: 100%;
+}
 .course-row {
   display: flex;
   align-items: center;
