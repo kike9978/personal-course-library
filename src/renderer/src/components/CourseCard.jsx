@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import coverImage from '../assets/img/coverimage-test.svg'
-import { imageData } from '../utils/imageData'
-const images = import.meta.glob("/src/assets/img/institutions/*.{jpeg,jpeg,png,gif}")
+const institutionImages = import.meta.glob("/src/assets/img/institutions/*.{jpeg,jpeg,png,gif,webp}", { eager: true, as: 'url' })
+
 
 
 function CourseCard({
@@ -9,10 +9,10 @@ function CourseCard({
   institution,
   programs,
   coursePath,
-  onOpenModalClick
+  onOpenModalClick,
+  institutionImgUrl
 }) {
   const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
-  const institutionImgUrl = imageData.find(data => data.institution === institution)?.img;
   const fetchData = () => {
     setIsInProcess(window.readJSON(coursePath).isInProcess)
   }
@@ -54,8 +54,7 @@ function CourseCard({
   })
 
   return (
-    <div onClick={handleCardClick} href="./" className="course-card">
-    <h3>{images["/src/assets/img/institutions/superhi-logo.png"]}</h3>
+    <article onClick={handleCardClick} className="course-card">
       <img src={window.coursesCoverImages[courseTitle] ? window.coursesCoverImages[courseTitle] : coverImage} alt="course thumbnail" />
       <button className="edit-course-button" onClick={(e) => handleOpenModalClick(e)}>
         <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
@@ -64,14 +63,9 @@ function CourseCard({
       </button>
       <div className="course-info">
         <h3>{courseTitle && courseTitle}</h3>
-        {/* <p>{institutionImgUrl}</p> */}
-        {/* {imageData.find(image => image.institution === institution).img ?
-          <p>{imageData.find(image => image.institution === institution).img}</p> :
-          ""
-        } */}
         <img
           className="institution-logo"
-          src={institutionImgUrl}
+          src={institutionImages[institutionImgUrl]}
           alt={`${institution} logo`}
           title={institution}
         />
@@ -97,7 +91,7 @@ function CourseCard({
           Notas →
         </a>
       </div>
-    </div>
+    </article>
   )
 }
 
