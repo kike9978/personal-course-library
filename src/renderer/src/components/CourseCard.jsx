@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import coverImage from '../assets/img/coverimage-test.svg'
 import { imageData } from '../utils/imageData'
+const images = import.meta.glob("/src/assets/img/institutions/*.{jpeg,jpeg,png,gif}")
+
 
 function CourseCard({
   courseTitle,
@@ -53,6 +55,7 @@ function CourseCard({
 
   return (
     <div onClick={handleCardClick} href="./" className="course-card">
+    <h3>{images["/src/assets/img/institutions/superhi-logo.png"]}</h3>
       <img src={window.coursesCoverImages[courseTitle] ? window.coursesCoverImages[courseTitle] : coverImage} alt="course thumbnail" />
       <button className="edit-course-button" onClick={(e) => handleOpenModalClick(e)}>
         <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
