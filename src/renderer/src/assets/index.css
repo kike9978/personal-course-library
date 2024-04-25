@@ -56,10 +56,15 @@ a {
 }
 
 .course-info {
+ flex-grow: 1;
   padding: 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.course-header{
+  flex-grow: 1;
 }
 
 .course-card h3 {

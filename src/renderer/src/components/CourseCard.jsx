@@ -62,13 +62,15 @@ function CourseCard({
         </svg>
       </button>
       <div className="course-info">
-        <h3>{courseTitle && courseTitle}</h3>
-        <img
-          className="institution-logo"
-          src={institutionImages[institutionImgUrl]}
-          alt={`${institution} logo`}
-          title={institution}
-        />
+        <div className="course-header">
+          <h3>{courseTitle && courseTitle}</h3>
+          <img
+            className="institution-logo"
+            src={institutionImages[institutionImgUrl]}
+            alt={`${institution} logo`}
+            title={institution}
+          />
+        </div>
         {/* <img
           className="institution-logo"
           src={imageData.find(image => image.institution === institution).img}
