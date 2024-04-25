@@ -1,6 +1,8 @@
 import CoursesGrid from './components/CoursesGrid'
 import { useState } from 'react'
 
+
+
 // function getNativeImageData(pathToImage) {
 //   return ipcRenderer.invoke("getNativeImage", pathToImage);
 // }

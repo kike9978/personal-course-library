@@ -2,6 +2,7 @@ import CourseRow from './CourseRow'
 import CourseCard from './courseCard'
 import CourseEditModal from './CourseEditModal'
 import { useState } from 'react'
+import { imageData } from '../utils/imageData'
 
 const cursos = []
 
@@ -51,6 +52,7 @@ export default function CoursesGrid({
         courseTitle={courseObject.title}
         programs={courseObject.programs}
         onClick={() => window.openFolder(course)}
+        institutionImgUrl={imageData[courseObject.institution]}
       />
     )
     onSortedCourses(Object.keys(courseListList).length)
@@ -70,6 +72,7 @@ export default function CoursesGrid({
           setModalProgramsList(courseObject.programs)
           setCurrentCoursePath(`${window.extensions.windows}${course}\\courseProps.json`)
         }}
+        institutionImgUrl={imageData[courseObject.institution]}
       />
     )
     onSortedCourses(Object.keys(courseListCard).length)

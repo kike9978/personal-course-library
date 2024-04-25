@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react'
 import coverImage from '../assets/img/coverimage-test.svg'
-import { imageData } from '../utils/imageData'
+const institutionImages = import.meta.glob("/src/assets/img/institutions/*.{jpeg,jpeg,png,gif,webp}", { eager: true, as: 'url' })
+
+
 
 function CourseCard({
   courseTitle,
   institution,
   programs,
   coursePath,
-  onOpenModalClick
+  onOpenModalClick,
+  institutionImgUrl
 }) {
   const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
-  const institutionImgUrl = imageData.find(data => data.institution === institution)?.img;
   const fetchData = () => {
     setIsInProcess(window.readJSON(coursePath).isInProcess)
   }
@@ -52,7 +54,7 @@ function CourseCard({
   })
 
   return (
-    <div onClick={handleCardClick} href="./" className="course-card">
+    <article onClick={handleCardClick} className="course-card">
       <img src={window.coursesCoverImages[courseTitle] ? window.coursesCoverImages[courseTitle] : coverImage} alt="course thumbnail" />
       <button className="edit-course-button" onClick={(e) => handleOpenModalClick(e)}>
         <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
@@ -60,18 +62,15 @@ function CourseCard({
         </svg>
       </button>
       <div className="course-info">
-        <h3>{courseTitle && courseTitle}</h3>
-        {/* <p>{institutionImgUrl}</p> */}
-        {/* {imageData.find(image => image.institution === institution).img ?
-          <p>{imageData.find(image => image.institution === institution).img}</p> :
-          ""
-        } */}
-        <img
-          className="institution-logo"
-          src={institutionImgUrl}
-          alt={`${institution} logo`}
-          title={institution}
-        />
+        <div className="course-header">
+          <h3>{courseTitle && courseTitle}</h3>
+          <img
+            className="institution-logo"
+            src={institutionImages[institutionImgUrl]}
+            alt={`${institution} logo`}
+            title={institution}
+          />
+        </div>
         {/* <img
           className="institution-logo"
           src={imageData.find(image => image.institution === institution).img}
@@ -94,7 +93,7 @@ function CourseCard({
           Notas →
         </a>
       </div>
-    </div>
+    </article>
   )
 }
 
