@@ -8,12 +8,26 @@ export const extensions = {
   macos: `/Volumes/MacWin/Cursos/_All Courses/`
 }
 
-export function readJSON(extension) {
-  const letData = fs.readFileSync(`${extensions.windows}${extension}/courseProps.json`)
+export function readJSON(folderPath) {
+  const letData = fs.readFileSync(path.join(folderPath, "courseProps.json"))
   let props = JSON.parse(letData)
   return props
 }
 
+export function getCourseInfo(extension) {
+  const folderPath = path.join(extensions.windows, extension)
+  const props = { ...getCourseInfo(folderPath), addedDate: getCourseDate(folderPath) }
+  return props
+}
+
+function getCourseDate(folderPath) {
+  fs.stat(folderPath, (err, stats) => {
+    if (err) {
+      console.error(err.message)
+    }
+    return stats.mtime
+  })
+}
 export default function courseList() {
   const results = fs.readdirSync(path.resolve(`${extensions.windows}`))
   console.log(results)
