@@ -1,24 +1,10 @@
 import CourseRow from './CourseRow'
-import CourseCard from './courseCard'
+import CourseCard from './CourseCard'
 import CourseEditModal from './CourseEditModal'
 import { useState } from 'react'
 import { imageData } from '../utils/imageData'
 
-const cursos = []
 
-for (let i = 0; i <= 100; i++) {
-  cursos.push(Math.floor(Math.random() * 100))
-}
-
-// const cursosList = window.courseList.map((curso) => (
-//   <CourseCard
-//     key={crypto.randomUUID()}
-//     courseTitle={curso}
-//     institution={curso.split(" -")[0]}
-//     programs={"photoshop"}
-//     onClick={() => window.openFolder(`${curso}`)}
-//   />
-// ))
 
 export default function CoursesGrid({
   courses,
