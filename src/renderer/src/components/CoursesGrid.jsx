@@ -34,7 +34,7 @@ export default function CoursesGrid({
   const courseListList = []
 
   courses.forEach((course) => {
-    const courseObject = window.readJSON(course)
+    const courseObject = window.getCourseInfo(course)
     if (
       courseObject.title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
       courseObject.institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1
@@ -73,6 +73,7 @@ export default function CoursesGrid({
           setCurrentCoursePath(`${window.extensions.macos}${course}/courseProps.json`)
         }}
         institutionImgUrl={imageData[courseObject.institution]}
+        addedDate={courseObject.addedDate}
       />
     )
     onSortedCourses(Object.keys(courseListCard).length)

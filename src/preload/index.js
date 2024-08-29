@@ -3,10 +3,9 @@ const { shell } = require('electron')
 const fs = require('fs')
 import { electronAPI } from '@electron-toolkit/preload'
 import courseList from '../scripts/iterateCourseFolder'
-import { readJSON, extensions } from '../scripts/iterateCourseFolder'
+import { getCourseInfo, extensions } from '../scripts/iterateCourseFolder'
 import { updateInProcessState, updateCourseProgramsList } from '../scripts/updateJson'
 
-const coursesCoverImages = {}
 
 function createCoursesCoverImages() {
   courseList().forEach((course) => {
@@ -14,7 +13,7 @@ function createCoursesCoverImages() {
     if (!fs.existsSync(filePath)) {
       return
     }
-    coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(filePath).toDataURL()
+    coursesCoverImages[getCourseInfo(course).title] = nativeImage.createFromPath(filePath).toDataURL()
   })
 }
 
@@ -35,7 +34,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('courseList', courseList())
     contextBridge.exposeInMainWorld('openFolder', openFolder)
-    contextBridge.exposeInMainWorld('readJSON', readJSON)
+    contextBridge.exposeInMainWorld('getCourseInfo', getCourseInfo)
     contextBridge.exposeInMainWorld('updateInProcessState', updateInProcessState)
     contextBridge.exposeInMainWorld('updateCourseProgramsList', updateCourseProgramsList)
     contextBridge.exposeInMainWorld('extensions', extensions)
@@ -47,7 +46,7 @@ if (process.contextIsolated) {
   window.electron = electronAPI
   window.courseList = courseList()
   window.openFolder = openFolder
-  window.readJSON = readJSON
+  window.getCourseInfo = getCourseInfo
   window.updateInProcessState = updateInProcessState
   window.updateCourseProgramsList = updateCourseProgramsList
   window.extensions = extensions

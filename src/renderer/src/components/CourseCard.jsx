@@ -10,11 +10,11 @@ function CourseCard({
   programs,
   coursePath,
   onOpenModalClick,
-  institutionImgUrl
+  institutionImgUrl, addedDate,
 }) {
-  const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
+  const [isInProcess, setIsInProcess] = useState(window.getCourseInfo(coursePath).isInProcess)
   const fetchData = () => {
-    setIsInProcess(window.readJSON(coursePath).isInProcess)
+    setIsInProcess(window.getCourseInfo(coursePath).isInProcess)
   }
 
   useEffect(() => {
@@ -71,12 +71,7 @@ function CourseCard({
             title={institution}
           />
         </div>
-        {/* <img
-          className="institution-logo"
-          src={imageData.find(image => image.institution === institution).img}
-          alt={`${institution} logo`}
-          title={institution}
-        /> */}
+        <p>{addedDate}</p>
         <div className="chips-container">{programChips}</div>
         <div className="completion-rate">100%</div>
         <label className="in-progress">
