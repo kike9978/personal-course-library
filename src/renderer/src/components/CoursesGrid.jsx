@@ -1,24 +1,7 @@
 import CourseRow from './CourseRow'
-import CourseCard from './courseCard'
+import CourseCard from './CourseCard'
 import CourseEditModal from './CourseEditModal'
-import { useState } from 'react'
-import { imageData } from '../utils/imageData'
-
-const cursos = []
-
-for (let i = 0; i <= 100; i++) {
-  cursos.push(Math.floor(Math.random() * 100))
-}
-
-// const cursosList = window.courseList.map((curso) => (
-//   <CourseCard
-//     key={crypto.randomUUID()}
-//     courseTitle={curso}
-//     institution={curso.split(" -")[0]}
-//     programs={"photoshop"}
-//     onClick={() => window.openFolder(`${curso}`)}
-//   />
-// ))
+import { useState, useMemo, useEffect } from 'react'
 
 export default function CoursesGrid({
   courses,
@@ -30,71 +13,87 @@ export default function CoursesGrid({
   const [modalCourseTitle, setModalCourseTitle] = useState('')
   const [modalProgramsList, setModalProgramsList] = useState([])
   const [currentCoursePath, setCurrentCoursePath] = useState('')
-  const courseListCard = []
-  const courseListList = []
 
-  courses.forEach((course) => {
-    const courseObject = window.readJSON(course)
-    if (
-      courseObject.title.toLowerCase().indexOf(filterText.toLowerCase()) === -1 &&
-      courseObject.institution.toLowerCase().indexOf(filterText.toLowerCase()) === -1
-    ) {
-      return
-    }
-
-    if (isInProcessOnly && !courseObject.isInProcess) {
-      return
-    }
-
-    courseListList.push(
-      <CourseRow
-        key={crypto.randomUUID()}
-        courseTitle={courseObject.title}
-        programs={courseObject.programs}
-        onClick={() => window.openFolder(course)}
-        institutionImgUrl={imageData[courseObject.institution]}
-      />
-    )
-    onSortedCourses(Object.keys(courseListList).length)
-    courseListCard.push(
-      <CourseCard
-        key={crypto.randomUUID()}
-        courseTitle={courseObject.title}
-        institution={courseObject.institution}
-        programs={courseObject.programs}
-        onClick={() => {
-          window.openFolder(course)
-        }}
-        isInProcess={courseObject.isInProcess}
-        coursePath={course}
-        onOpenModalClick={() => {
-          setModalCourseTitle(courseObject.title)
-          setModalProgramsList(courseObject.programs)
-          setCurrentCoursePath(`${window.extensions.macos}${course}/courseProps.json`)
-        }}
-        institutionImgUrl={imageData[courseObject.institution]}
-      />
-    )
-    onSortedCourses(Object.keys(courseListCard).length)
-  })
-
-  function sortAlphabetically(list) {
-    list.sort((a, b) => {
-      let fa = a.props.courseTitle.toLowerCase(),
-        fb = b.props.courseTitle.toLowerCase()
-
-      if (fa < fb) {
-        return -1
+  // Memoized filtered and sorted courses data
+  const { courseListCard, courseListList, filteredCount } = useMemo(() => {
+    const filteredCourses = courses.filter(course => {
+      try {
+        const courseObject = window.readJSON(course)
+        const searchLower = filterText.toLowerCase()
+        const matchesText = 
+          courseObject.title.toLowerCase().includes(searchLower) ||
+          courseObject.institution.toLowerCase().includes(searchLower)
+        
+        const processCheck = !isInProcessOnly || courseObject.isInProcess
+        return matchesText && processCheck
+      } catch (error) {
+        return false
       }
-      if (fa > fb) {
-        return 1
-      }
-      return 0
     })
-  }
 
-  sortAlphabetically(courseListCard)
-  sortAlphabetically(courseListList)
+    const sortedCourses = [...filteredCourses].sort((a, b) => {
+      try {
+        const aTitle = window.readJSON(a).title.toLowerCase()
+        const bTitle = window.readJSON(b).title.toLowerCase()
+        return aTitle.localeCompare(bTitle)
+      } catch {
+        return 0
+      }
+    })
+
+    // Generate UI components
+    const [cards, rows] = sortedCourses.reduce(
+      ([cardsAcc, rowsAcc], course) => {
+        try {
+          const courseObject = window.readJSON(course)
+          const commonProps = {
+            key: course,
+            onClick: () => window.openFolder(course),
+          }
+
+          const card = (
+            <CourseCard
+              {...commonProps}
+              courseTitle={courseObject.title}
+              institution={courseObject.institution}
+              programs={courseObject.programs}
+              isInProcess={courseObject.isInProcess}
+              coursePath={course}
+              onOpenModalClick={() => {
+                setModalCourseTitle(courseObject.title)
+                setModalProgramsList(courseObject.programs)
+                setCurrentCoursePath(`${window.extensions.windows}${course}\\courseProps.json`)
+              }}
+            />
+          )
+
+          const row = (
+            <CourseRow
+              {...commonProps}
+              courseTitle={courseObject.title}
+              programs={courseObject.programs}
+            />
+          )
+
+          return [[...cardsAcc, card], [...rowsAcc, row]]
+        } catch {
+          return [cardsAcc, rowsAcc]
+        }
+      },
+      [[], []]
+    )
+
+    return {
+      courseListCard: cards,
+      courseListList: rows,
+      filteredCount: sortedCourses.length
+    }
+  }, [courses, filterText, isInProcessOnly])
+
+  // Update parent after render
+  useEffect(() => {
+    onSortedCourses(filteredCount)
+  }, [filteredCount, onSortedCourses])
 
   return (
     <>
