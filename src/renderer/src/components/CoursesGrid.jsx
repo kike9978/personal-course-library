@@ -1,5 +1,5 @@
 import CourseRow from './CourseRow'
-import CourseCard from './courseCard'
+import CourseCard from './CourseCard'
 import CourseEditModal from './CourseEditModal'
 import { useState } from 'react'
 import { imageData } from '../utils/imageData'
