@@ -215,3 +215,40 @@ height: 100%;
 .course-card img:hover + .edit-course-button {
   display: block;
 }
+
+.error-fallback, .error-message {
+  padding: 2rem;
+  background: #ffe6e6;
+  border: 2px solid #ff4444;
+  border-radius: 4px;
+  margin: 2rem;
+}
+
+.error-message pre {
+  white-space: pre-wrap;
+  background: rgba(0,0,0,0.1);
+  padding: 1rem;
+  border-radius: 4px;
+}
+
+.debug-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 80vw;
+  max-height: 80vh;
+  overflow: auto;
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(0,0,0,0.2);
+  z-index: 1000;
+}
+
+.debug-content pre {
+  background: #f5f5f5;
+  padding: 1rem;
+  border-radius: 4px;
+  overflow-x: auto;
+}

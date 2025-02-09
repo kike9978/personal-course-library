@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -75,5 +75,25 @@ app.on('ready', () => {
     const imageDataURL = image.toDataURL()
 
     return imageDataURL
+  })
+
+  ipcMain.on('error-handler', (event, error) => {
+    dialog.showErrorBox('Application Error', `
+      Message: ${error.message}
+      Stack: ${error.stack}
+    `)
+  })
+
+  ipcMain.on('show-debug-window', () => {
+    const debugWindow = new BrowserWindow({
+      width: 800,
+      height: 600,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false
+      }
+    })
+    
+    debugWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '#debug')
   })
 })

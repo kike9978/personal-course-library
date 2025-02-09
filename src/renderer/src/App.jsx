@@ -1,5 +1,6 @@
 import CoursesGrid from './components/CoursesGrid'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import ErrorBoundary from './components/ErrorBoundary'
 
 
 
@@ -7,11 +8,17 @@ import { useState } from 'react'
 //   return ipcRenderer.invoke("getNativeImage", pathToImage);
 // }
 
-function FilterableCoursesGrid({ courses }) {
+function FilterableCoursesGrid({ courses = [] }) {
   const [filterText, setFilterText] = useState('')
   const [isCardLayout, setIsCardLayout] = useState(true)
   const [isInProcessOnly, setisInProcessOnly] = useState(false)
-  const [courseCount, setCourseCount] = useState(courses.length)
+  const [courseCount, setCourseCount] = useState(courses.length || 0)
+
+  // Add useEffect to handle course list changes
+  useEffect(() => {
+    setCourseCount(courses.length || 0)
+  }, [courses])
+
   return (
     <div>
       <SearchBar
@@ -32,6 +39,11 @@ function FilterableCoursesGrid({ courses }) {
       />
     </div>
   )
+}
+
+// Add prop validation
+FilterableCoursesGrid.defaultProps = {
+  courses: []
 }
 
 function SearchBar({
@@ -79,9 +91,11 @@ function SearchBar({
 
 function App() {
   return (
-    <div className="container">
-      <FilterableCoursesGrid courses={window.courseList} />
-    </div>
+    <ErrorBoundary>
+      <div className="container">
+        <FilterableCoursesGrid courses={window.courseList || []} />
+      </div>
+    </ErrorBoundary>
   )
 }
 
