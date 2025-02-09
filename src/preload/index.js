@@ -2,7 +2,7 @@ import { contextBridge, nativeImage } from 'electron'
 const { shell } = require('electron')
 const fs = require('fs')
 import { electronAPI } from '@electron-toolkit/preload'
-import { courseList, readJSON, basePath } from '../scripts/iterateCourseFolder'
+import iterateCourseFolder, { readJSON, basePath } from '../scripts/iterateCourseFolder'
 import { updateInProcessState, updateCourseProgramsList } from '../scripts/updateJson'
 import path from 'path'
 
