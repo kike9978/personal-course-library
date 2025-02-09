@@ -2,19 +2,18 @@ import { contextBridge, nativeImage } from 'electron'
 const { shell } = require('electron')
 const fs = require('fs')
 import { electronAPI } from '@electron-toolkit/preload'
-import courseList from '../scripts/iterateCourseFolder'
-import { readJSON, extensions } from '../scripts/iterateCourseFolder'
+import { courseList, readJSON, basePath } from '../scripts/iterateCourseFolder'
 import { updateInProcessState, updateCourseProgramsList } from '../scripts/updateJson'
+import path from 'path'
 
 const coursesCoverImages = {}
 
 function createCoursesCoverImages() {
   courseList().forEach((course) => {
-    const filePath = `${extensions.macos}${course}/cover-image.png`
-    if (!fs.existsSync(filePath)) {
-      return
+    const filePath = path.join(basePath, course, 'cover-image.png')
+    if (fs.existsSync(filePath)) {
+      coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(filePath).toDataURL()
     }
-    coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(filePath).toDataURL()
   })
 }
 
@@ -24,7 +23,7 @@ console.table(coursesCoverImages)
 // Custom APIs for renderer
 
 function openFolder(extension) {
-  shell.openPath(`${extensions.macos}${extension}`)
+  shell.openPath(path.join(basePath, extension))
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
@@ -38,7 +37,14 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('readJSON', readJSON)
     contextBridge.exposeInMainWorld('updateInProcessState', updateInProcessState)
     contextBridge.exposeInMainWorld('updateCourseProgramsList', updateCourseProgramsList)
-    contextBridge.exposeInMainWorld('extensions', extensions)
+    contextBridge.exposeInMainWorld('fileSystem', {
+      basePath,
+      courseList,
+      openFolder: (courseDir) => shell.openPath(path.join(basePath, courseDir)),
+      readJSON,
+      updateInProcessState,
+      updateCourseProgramsList
+    })
     contextBridge.exposeInMainWorld('coursesCoverImages', coursesCoverImages)
   } catch (error) {
     console.error(error)
@@ -50,6 +56,13 @@ if (process.contextIsolated) {
   window.readJSON = readJSON
   window.updateInProcessState = updateInProcessState
   window.updateCourseProgramsList = updateCourseProgramsList
-  window.extensions = extensions
+  window.fileSystem = {
+    basePath,
+    courseList,
+    openFolder: (courseDir) => shell.openPath(path.join(basePath, courseDir)),
+    readJSON,
+    updateInProcessState,
+    updateCourseProgramsList
+  }
   window.coursesCoverImages = coursesCoverImages
 }

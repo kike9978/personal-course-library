@@ -1,4 +1,5 @@
-import { courseList, extensions } from './iterateCourseFolder'
+import { basePath, courseList } from './iterateCourseFolder'
+import path from 'path'
 
 const possiblePrograms = [
   'Photoshop',
@@ -89,7 +90,8 @@ courseList().forEach((extension) => {
     rate: 0
   }
   const jsonString = JSON.stringify(courseProps)
-  fs.writeFileSync(`${extensions.macos}${extension}/courseProps.json`, jsonString, (err) => {
+  const outputPath = path.join(basePath, extension, 'courseProps.json')
+  fs.writeFileSync(outputPath, jsonString, (err) => {
     if (err) {
       console.log('Error writing file', err)
     } else {

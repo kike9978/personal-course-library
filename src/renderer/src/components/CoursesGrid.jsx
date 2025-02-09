@@ -2,6 +2,7 @@ import CourseRow from './CourseRow'
 import CourseCard from './CourseCard'
 import CourseEditModal from './CourseEditModal'
 import { useState, useMemo, useEffect } from 'react'
+import path from 'path'
 
 export default function CoursesGrid({
   courses,
@@ -62,7 +63,7 @@ export default function CoursesGrid({
               onOpenModalClick={() => {
                 setModalCourseTitle(courseObject.title)
                 setModalProgramsList(courseObject.programs)
-                setCurrentCoursePath(`${window.extensions.windows}${course}\\courseProps.json`)
+                setCurrentCoursePath(path.join(window.fileSystem.basePath, course, 'courseProps.json'))
               }}
             />
           )
