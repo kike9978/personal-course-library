@@ -10,7 +10,8 @@ function CourseCard({
   programs,
   coursePath,
   onOpenModalClick,
-  institutionImgUrl
+  institutionImgUrl,
+  onClick
 }) {
   const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
@@ -107,7 +108,11 @@ function CourseCard({
   
   const handleCardClick = (e) => {
     if (!e.target.closest('.in-progress') && !e.target.closest('.kebab-menu')) {
-      window.openFolder(coursePath)
+      if (onClick) {
+        onClick();
+      } else {
+        window.openFolder(coursePath);
+      }
     }
   }
 

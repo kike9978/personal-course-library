@@ -4,6 +4,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import DebugModal from './components/DebugModal'
 import Loader from './components/Loader'
 import { Toaster } from 'react-hot-toast'
+import CourseDetail from './components/CourseDetail'
 
 
 
@@ -11,7 +12,7 @@ import { Toaster } from 'react-hot-toast'
 //   return ipcRenderer.invoke("getNativeImage", pathToImage);
 // }
 
-function FilterableCoursesGrid({ courses = [], isLoading, onRefresh }) {
+function FilterableCoursesGrid({ courses = [], isLoading, onRefresh, onCourseSelect }) {
   const [filterText, setFilterText] = useState('')
   const [isCardLayout, setIsCardLayout] = useState(true)
   const [isInProcessOnly, setisInProcessOnly] = useState(false)
@@ -46,6 +47,7 @@ function FilterableCoursesGrid({ courses = [], isLoading, onRefresh }) {
           isCardLayout={isCardLayout}
           isInProcessOnly={isInProcessOnly}
           onSortedCourses={setCourseCount}
+          onCourseSelect={onCourseSelect}
         />
       )}
     </div>
@@ -56,7 +58,8 @@ function FilterableCoursesGrid({ courses = [], isLoading, onRefresh }) {
 FilterableCoursesGrid.defaultProps = {
   courses: [],
   isLoading: false,
-  onRefresh: () => {}
+  onRefresh: () => {},
+  onCourseSelect: () => {}
 }
 
 function SearchBar({
@@ -67,13 +70,23 @@ function SearchBar({
   isInProcessOnly,
   onInProcessOnlyChange,
   courseCount,
-  
+  onRefresh,
   isLoading
 }) {
   return (
     <div className="navbar bg-white shadow-lg p-4">
       <div className="navbar-header flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">Catálogo de cursos</h1>
+        <button 
+          onClick={onRefresh}
+          disabled={isLoading}
+          className="refresh-button"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg>
+          Refresh
+        </button>
       </div>
       <div className="navbar-filters mt-4">
         <form className="flex items-center">
@@ -113,6 +126,8 @@ function App() {
   const [showDebug, setShowDebug] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [courses, setCourses] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [selectedCourseData, setSelectedCourseData] = useState(null);
   
   const refreshCourses = async () => {
     setIsLoading(true);
@@ -132,6 +147,22 @@ function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  const handleCourseSelect = (coursePath) => {
+    try {
+      // Get course data
+      const courseData = window.readJSON(coursePath);
+      setSelectedCourseData(courseData);
+      setSelectedCourse(coursePath);
+    } catch (error) {
+      console.error('Error selecting course:', error);
+    }
+  };
+  
+  const handleBackToGrid = () => {
+    setSelectedCourse(null);
+    setSelectedCourseData(null);
   };
   
   useEffect(() => {
@@ -161,22 +192,105 @@ function App() {
       } else if (e.ctrlKey && e.key === 'r') {
         // Add keyboard shortcut for refresh
         refreshCourses();
+      } else if (e.key === 'Escape' && selectedCourse) {
+        // Add keyboard shortcut to go back to grid
+        handleBackToGrid();
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [selectedCourse]);
+  
+  const runDiagnostics = async () => {
+    try {
+      console.log('Running diagnostics...');
+      
+      // Check available APIs
+      const apis = {
+        fileSystem: !!window.fileSystem,
+        pathUtils: !!window.pathUtils,
+        ipcRenderer: !!window.ipcRenderer,
+        courseList: !!window.courseList,
+        readJSON: !!window.readJSON,
+        updateInProcessState: !!window.updateInProcessState
+      };
+      
+      console.log('Available APIs:', apis);
+      
+      // Check course list
+      const courseListResult = typeof window.courseList === 'function' 
+        ? window.courseList() 
+        : window.courseList;
+      
+      console.log('Course list:', courseListResult);
+      
+      // Check file system base path
+      const basePath = window.fileSystem?.basePath;
+      console.log('Base path:', basePath);
+      
+      // Try to read a course
+      if (Array.isArray(courseListResult) && courseListResult.length > 0 && window.readJSON) {
+        const firstCourse = courseListResult[0];
+        console.log('Reading first course:', firstCourse);
+        
+        try {
+          const courseData = window.readJSON(firstCourse);
+          console.log('Course data:', courseData);
+        } catch (err) {
+          console.error('Error reading course data:', err);
+        }
+        
+        // Try to get full path
+        if (window.ipcRenderer) {
+          try {
+            const fullPathResult = await window.ipcRenderer.invoke('getFullCoursePath', firstCourse);
+            console.log('Full path result:', fullPathResult);
+          } catch (err) {
+            console.error('Error getting full path:', err);
+          }
+        }
+      }
+      
+      // Check directory access
+      if (window.ipcRenderer) {
+        try {
+          const currentDir = process.cwd ? process.cwd() : '.';
+          const dirContents = await window.ipcRenderer.invoke('readDirectory', currentDir);
+          console.log('Current directory contents:', dirContents);
+        } catch (err) {
+          console.error('Error reading current directory:', err);
+        }
+      }
+      
+      console.log('Diagnostics complete');
+      toast.success('Diagnostics complete. Check console for results.');
+    } catch (error) {
+      console.error('Diagnostics error:', error);
+      toast.error('Diagnostics failed. Check console for details.');
+    }
+  };
   
   return (
     <ErrorBoundary>
-      <div className="container">
+      <div className="container h-screen flex flex-col">
         <Toaster position="top-right" />
-        <FilterableCoursesGrid 
-          courses={courses} 
-          isLoading={isLoading} 
-          onRefresh={refreshCourses}
-        />
+        
+        {selectedCourse ? (
+          <CourseDetail 
+            coursePath={selectedCourse}
+            courseData={selectedCourseData}
+            onBack={handleBackToGrid}
+          />
+        ) : (
+          <FilterableCoursesGrid 
+            courses={courses} 
+            isLoading={isLoading} 
+            onRefresh={refreshCourses}
+            onCourseSelect={handleCourseSelect}
+          />
+        )}
+        
         <button 
           style={{
             position: 'fixed',
@@ -195,6 +309,22 @@ function App() {
           }}
         >
           Debug
+        </button>
+        <button 
+          style={{
+            position: 'fixed',
+            bottom: '10px',
+            right: '80px',
+            zIndex: 1000,
+            padding: '8px 16px',
+            background: '#3498db',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px'
+          }}
+          onClick={runDiagnostics}
+        >
+          Diagnostics
         </button>
         {showDebug && <DebugModal onClose={() => setShowDebug(false)} />}
       </div>

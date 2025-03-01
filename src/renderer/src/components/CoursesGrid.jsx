@@ -12,7 +12,8 @@ export default function CoursesGrid({
   filterText,
   isCardLayout,
   isInProcessOnly,
-  onSortedCourses
+  onSortedCourses,
+  onCourseSelect
 }) {
   const [modalCourseTitle, setModalCourseTitle] = useState('')
   const [modalProgramsList, setModalProgramsList] = useState([])
@@ -24,6 +25,8 @@ export default function CoursesGrid({
   const [selectedCoursePath, setSelectedCoursePath] = useState(null)
   const [selectedCourseTitle, setSelectedCourseTitle] = useState('')
   const [selectedCoursePrograms, setSelectedCoursePrograms] = useState([])
+  const [filteredCourses, setFilteredCourses] = useState([])
+  const [selectedCourseForEdit, setSelectedCourseForEdit] = useState(null)
 
   console.log('Courses:', courses)
   console.log('Is Array:', Array.isArray(courses))
@@ -154,6 +157,9 @@ export default function CoursesGrid({
                 coursePath={course}
                 onOpenModalClick={handleOpenModal} // Use handleOpenModal instead of openEditModal
                 institutionImgUrl={`/src/assets/img/institutions/${courseObject.institution.toLowerCase()}.png`}
+                onClick={() => {
+                  handleCourseClick(course);
+                }}
               />
             )
 
@@ -163,7 +169,9 @@ export default function CoursesGrid({
                 courseTitle={courseObject.title}
                 institution={courseObject.institution}
                 programs={courseObject.programs}
-                onClick={() => window.openFolder(course)}
+                onClick={() => {
+                  handleCourseClick(course);
+                }}
                 institutionImgUrl={`/src/assets/img/institutions/${courseObject.institution.toLowerCase()}.png`}
               />
             )
@@ -209,6 +217,12 @@ export default function CoursesGrid({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  const handleCourseClick = (coursePath) => {
+    if (onCourseSelect) {
+      onCourseSelect(coursePath);
+    }
+  };
 
   return (
     <>

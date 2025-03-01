@@ -88,7 +88,16 @@ if (process.contextIsolated) {
           'getNativeImage', 
           'findCoverImage', 
           'refreshCourseList',
-          'write-course-property'
+          'write-course-property',
+          'readDirectory',
+          'readFile',
+          'getFullCoursePath',
+          'getUserDataPath',
+          'createMockCourseDirectory',
+          'createMockCourseInCurrentDir',
+          'getTempDirectory',
+          'createTestFile',
+          'createDirectory'
         ];
         if (validChannels.includes(channel)) {
           return ipcRenderer.invoke(channel, ...args);
@@ -184,6 +193,17 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('debug', {
       getDebugInfo: () => collectDebugInfo(),
       showDebug: () => ipcRenderer.send('show-debug-window')
+    })
+    contextBridge.exposeInMainWorld('pathUtils', {
+      join: (...parts) => {
+        const separator = process.platform === 'win32' ? '\\' : '/';
+        return parts.join(separator);
+      },
+      dirname: (filePath) => {
+        const separator = filePath.includes('\\') ? '\\' : '/';
+        const parts = filePath.split(separator);
+        return parts.slice(0, -1).join(separator);
+      }
     })
   } catch (error) {
     console.error(error)

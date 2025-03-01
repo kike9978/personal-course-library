@@ -290,3 +290,71 @@ height: 100%;
 .refresh-button:hover svg {
   transform: rotate(180deg);
 }
+
+/* File Browser Styles */
+.file-browser {
+  height: calc(100vh - 180px);
+  overflow: hidden;
+}
+
+.breadcrumbs {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.file-list {
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.file-preview {
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.markdown-content, .text-content, .image-content, .generic-content {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.course-detail {
+  height: calc(100vh - 80px);
+  padding: 1rem;
+}
+
+.course-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* Debug Panel Styles */
+.debug-panel {
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.debug-panel pre {
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.debug-panel strong {
+  color: #333;
+}
+
+.debug-panel .grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.debug-panel .grid > div {
+  background: rgba(255, 255, 255, 0.5);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+}
