@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import coverImage from '../assets/img/coverimage-test.svg'
-const institutionImages = import.meta.glob("/src/assets/img/institutions/*.{jpeg,jpeg,png,gif,webp}", { eager: true, as: 'url' })
 
-
+// Import all institution images using a more reliable approach
+const institutionImages = import.meta.glob('/src/assets/img/institutions/*.{png,jpg,jpeg,svg}', { eager: true })
 
 function CourseCard({
   courseTitle,
@@ -13,6 +13,10 @@ function CourseCard({
   institutionImgUrl
 }) {
   const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [institutionImg, setInstitutionImg] = useState(null)
+  const [coverImg, setCoverImg] = useState(window.coursesCoverImages[courseTitle] || coverImage)
+
   const fetchData = () => {
     setIsInProcess(window.readJSON(coursePath).isInProcess)
   }
@@ -20,76 +24,180 @@ function CourseCard({
   useEffect(() => {
     fetchData() // Initial fetch
 
+    // Find the institution image
+    const institutionLower = institution ? institution.toLowerCase() : '';
+    console.log('Looking for institution image for:', institutionLower);
+    
+    // Debug available images
+    console.log('Available institution images:', Object.keys(institutionImages));
+    
+    // Try to find a matching image
+    let foundImage = null;
+    
+    // First try exact match with institution name
+    Object.keys(institutionImages).forEach(path => {
+      const filename = path.split('/').pop().toLowerCase();
+      if (filename.includes(institutionLower)) {
+        console.log('Found matching institution image:', path);
+        foundImage = institutionImages[path].default || institutionImages[path];
+      }
+    });
+    
+    // If not found, try with the provided URL
+    if (!foundImage && institutionImgUrl) {
+      const imgName = institutionImgUrl.split('/').pop().toLowerCase();
+      Object.keys(institutionImages).forEach(path => {
+        if (path.toLowerCase().includes(imgName)) {
+          console.log('Found institution image by URL:', path);
+          foundImage = institutionImages[path].default || institutionImages[path];
+        }
+      });
+    }
+    
+    // If still not found, use default
+    if (!foundImage) {
+      console.log('Using default institution image');
+      // Try to find a default image
+      Object.keys(institutionImages).forEach(path => {
+        if (path.toLowerCase().includes('default')) {
+          foundImage = institutionImages[path].default || institutionImages[path];
+        }
+      });
+    }
+    
+    setInstitutionImg(foundImage);
+    console.log('Set institution image to:', foundImage);
+
+    // Try to find cover image in multiple formats
+    const checkCoverImage = async () => {
+      if (window.coursesCoverImages[courseTitle]) {
+        setCoverImg(window.coursesCoverImages[courseTitle]);
+      } else {
+        try {
+          // Try to find cover image with multiple formats via IPC
+          const coverImageData = await window.ipcRenderer.invoke(
+            'findCoverImage', 
+            window.fileSystem.basePath, 
+            coursePath
+          );
+          
+          if (coverImageData) {
+            setCoverImg(coverImageData);
+          }
+        } catch (error) {
+          console.error('Error finding cover image:', error);
+        }
+      }
+    };
+    
+    checkCoverImage();
+
     // Listen for changes in isInProcess and re-fetch data
     const interval = setInterval(() => {
       fetchData()
-    }, 600) // Adjust the interval as needed or find a better way to trigger updates
+    }, 600) // Adjust the interval as needed
 
     return () => clearInterval(interval) // Cleanup interval
-  }, [isInProcess])
+  }, [isInProcess, institution, institutionImgUrl, courseTitle, coursePath])
 
   const handleCheckboxClick = async (e) => {
     e.preventDefault()
     await window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
   }
-
+  
   const handleCardClick = (e) => {
-    if (!e.target.closest('.in-progress')) {
+    if (!e.target.closest('.in-progress') && !e.target.closest('.kebab-menu')) {
       window.openFolder(coursePath)
     }
   }
 
-  const handleOpenModalClick = (e) => {
-    e.stopPropagation()
-    onOpenModalClick()
-    document.querySelector('.dialog').showModal()
+  const toggleDropdown = (e) => {
+    e.preventDefault()
+    e.stopPropagation() // Stop event propagation to prevent card click
+    console.log("Dropdown button clicked!")
+    setIsDropdownOpen(!isDropdownOpen)
   }
 
-  const programChips = programs.map((program) => {
+  const handleEditClick = (e) => {
+    e.stopPropagation();
+    console.log("Edit button clicked!");
+    
+    if (typeof onOpenModalClick === "function") {
+      try {
+        onOpenModalClick(coursePath);
+        console.log("Modal function called successfully");
+      } catch (err) {
+        console.error("Error calling modal function:", err);
+        alert("Error opening edit modal: " + err.message);
+      }
+    } else {
+      console.error("onOpenModalClick is not a function!", typeof onOpenModalClick);
+      alert("Could not open edit modal: function not available");
+    }
+    
+    setIsDropdownOpen(false);
+  }
+
+  const programChips = programs.map((program, index) => {
     return (
-      <div key={crypto.randomUUID} className="badge badge--programs">
+      <div key={`${program}-${index}`} className="badge badge--programs bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded mr-1 mb-1">
         <span>{program}</span>
       </div>
     )
   })
 
   return (
-    <article onClick={handleCardClick} className="course-card">
-      <img src={window.coursesCoverImages[courseTitle] ? window.coursesCoverImages[courseTitle] : coverImage} alt="course thumbnail" />
-      <button className="edit-course-button" onClick={(e) => handleOpenModalClick(e)}>
-        <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
-          <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z" />
-        </svg>
-      </button>
-      <div className="course-info">
-        <div className="course-header">
-          <h3>{courseTitle && courseTitle}</h3>
-          <img
-            className="institution-logo"
-            src={institutionImages[institutionImgUrl]}
-            alt={`${institution} logo`}
-            title={institution}
-          />
+    <article onClick={handleCardClick} className="course-card p-4 border rounded-lg shadow-md hover:shadow-lg transition">
+      <img src={coverImg} alt="course thumbnail" className="w-full h-32 object-cover rounded-md" />
+      <div className="kebab-menu relative">
+        <button className="kebab-button p-2 rounded-full hover:bg-gray-200" onClick={toggleDropdown}>
+          <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24">
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="12" cy="6" r="2" />
+            <circle cx="12" cy="18" r="2" />
+          </svg>
+        </button>
+        {isDropdownOpen && (
+          <div className="dropdown-menu absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-md shadow-lg z-10">
+            <button 
+              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" 
+              onClick={handleEditClick}
+            >
+              Edit Details
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="course-info mt-2">
+        <div className="course-header flex items-center justify-between">
+          <h3 className="text-lg font-semibold">{courseTitle && courseTitle}</h3>
+          {institutionImg && (
+            <img
+              className="institution-logo h-8 w-8 rounded-full object-contain"
+              src={institutionImg}
+              alt={`${institution} logo`}
+              title={institution}
+              onError={(e) => {
+                console.error('Failed to load institution image:', e);
+                e.target.style.display = 'none';
+              }}
+            />
+          )}
         </div>
-        {/* <img
-          className="institution-logo"
-          src={imageData.find(image => image.institution === institution).img}
-          alt={`${institution} logo`}
-          title={institution}
-        /> */}
-        <div className="chips-container">{programChips}</div>
-        <div className="completion-rate">100%</div>
-        <label className="in-progress">
+        <div className="chips-container flex flex-wrap mt-2">{programChips}</div>
+        <div className="completion-rate text-sm text-gray-500">100%</div>
+        <label className="in-progress flex items-center mt-2">
           <input
             type="checkbox"
             checked={isInProcess}
             onChange={(e) => {
               handleCheckboxClick(e)
             }}
+            className="mr-2"
           />{' '}
           En curso
         </label>
-        <a href="http://" target="_blank" rel="noopener noreferrer">
+        <a href="http://" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
           Notas →
         </a>
       </div>

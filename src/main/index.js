@@ -1,7 +1,57 @@
 import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog } from 'electron'
-import { join } from 'path'
+import { join, path } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import fs from 'fs'
+
+function setupConsoleRedirection() {
+  const originalConsoleLog = console.log;
+  const originalConsoleError = console.error;
+  const originalConsoleWarn = console.warn;
+  const originalConsoleInfo = console.info;
+
+  console.log = (...args) => {
+    originalConsoleLog(...args);
+    logToRenderer('log', ...args);
+  };
+
+  console.error = (...args) => {
+    originalConsoleError(...args);
+    logToRenderer('error', ...args);
+  };
+
+  console.warn = (...args) => {
+    originalConsoleWarn(...args);
+    logToRenderer('warn', ...args);
+  };
+
+  console.info = (...args) => {
+    originalConsoleInfo(...args);
+    logToRenderer('info', ...args);
+  };
+}
+
+function logToRenderer(type, ...args) {
+  const windows = BrowserWindow.getAllWindows();
+  if (windows.length > 0) {
+    const mainWindow = windows[0];
+    try {
+      const safeArgs = args.map(arg => {
+        if (typeof arg === 'object') {
+          try {
+            return JSON.stringify(arg);
+          } catch (e) {
+            return String(arg);
+          }
+        }
+        return arg;
+      });
+      mainWindow.webContents.send('console-message', { type, args: safeArgs });
+    } catch (error) {
+      // Fallback if sending to renderer fails
+    }
+  }
+}
 
 function createWindow() {
   // Create the browser window.
@@ -70,11 +120,75 @@ app.on('window-all-closed', () => {
 // In this file you can include the rest of your app"s specific main process
 // code. You can also put them in separate files and require them here.
 app.on('ready', () => {
-  ipcMain.handle('getNativeImage', (e, pathToImage) => {
-    const image = nativeImage.createFromPath(pathToImage)
-    const imageDataURL = image.toDataURL()
+  setupConsoleRedirection();
 
-    return imageDataURL
+  ipcMain.handle('getNativeImage', (e, pathToImage) => {
+    try {
+      const image = nativeImage.createFromPath(pathToImage)
+      const imageDataURL = image.toDataURL()
+      return imageDataURL
+    } catch (error) {
+      console.error('Error loading image:', error)
+      return null
+    }
+  })
+
+  ipcMain.handle('findCoverImage', (e, basePath, coursePath) => {
+    const formats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
+    
+    for (const format of formats) {
+      const imagePath = path.join(basePath, coursePath, `cover-image.${format}`)
+      try {
+        if (fs.existsSync(imagePath)) {
+          const image = nativeImage.createFromPath(imagePath)
+          return image.toDataURL()
+        }
+      } catch (error) {
+        console.error(`Error checking ${format} image:`, error)
+      }
+    }
+    
+    return null // No image found in any format
+  })
+
+  ipcMain.handle('refreshCourseList', () => {
+    try {
+      // Re-initialize the course list
+      const courses = courseList()
+      
+      // Recreate cover images
+      const coursesCoverImages = {}
+      courses.forEach((course) => {
+        try {
+          // Check for multiple formats
+          const formats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
+          let imageFound = false
+          
+          for (const format of formats) {
+            const filePath = path.join(basePath, course, `cover-image.${format}`)
+            if (fs.existsSync(filePath)) {
+              coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(filePath).toDataURL()
+              imageFound = true
+              break
+            }
+          }
+          
+          if (!imageFound && fs.existsSync(path.join(basePath, course, 'cover-image'))) {
+            // Try without extension
+            coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(
+              path.join(basePath, course, 'cover-image')
+            ).toDataURL()
+          }
+        } catch (error) {
+          console.error(`Error processing cover image for ${course}: ${error.message}`)
+        }
+      })
+      
+      return { courses, coursesCoverImages }
+    } catch (error) {
+      console.error('Error refreshing course list:', error)
+      throw error
+    }
   })
 
   ipcMain.on('error-handler', (event, error) => {
@@ -96,4 +210,22 @@ app.on('ready', () => {
     
     debugWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '#debug')
   })
+
+  // Add a handler for console logs from renderer
+  ipcMain.on('renderer-log', (event, { type, args }) => {
+    switch (type) {
+      case 'log':
+        console.log(...args);
+        break;
+      case 'error':
+        console.error(...args);
+        break;
+      case 'warn':
+        console.warn(...args);
+        break;
+      case 'info':
+        console.info(...args);
+        break;
+    }
+  });
 })

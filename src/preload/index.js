@@ -1,6 +1,5 @@
-import { contextBridge, nativeImage, ipcRenderer } from 'electron'
-const { shell } = require('electron')
-const fs = require('fs')
+import { contextBridge, nativeImage, ipcRenderer, shell } from 'electron'
+import fs from 'fs'
 import { electronAPI } from '@electron-toolkit/preload'
 import { readJSON, basePath, courseList, iterateCourseFolder } from '../scripts/iterateCourseFolder'
 import { updateInProcessState, updateCourseProgramsList } from '../scripts/updateJson'
@@ -14,9 +13,24 @@ function createCoursesCoverImages() {
     const courses = courseList(); // Get the list of courses
     courses.forEach((course) => {
       try {
-        const filePath = path.join(basePath, course, 'cover-image.png')
-        if (fs.existsSync(filePath)) {
-          coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(filePath).toDataURL()
+        // Check for multiple formats
+        const formats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
+        let imageFound = false
+        
+        for (const format of formats) {
+          const filePath = path.join(basePath, course, `cover-image.${format}`)
+          if (fs.existsSync(filePath)) {
+            coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(filePath).toDataURL()
+            imageFound = true
+            break
+          }
+        }
+        
+        if (!imageFound && fs.existsSync(path.join(basePath, course, 'cover-image'))) {
+          // Try without extension
+          coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(
+            path.join(basePath, course, 'cover-image')
+          ).toDataURL()
         }
       } catch (error) {
         console.error(`Error processing cover image for ${course}: ${error.message}`)
@@ -43,7 +57,40 @@ function openFolder(extension) {
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('ipcRenderer', ipcRenderer)
+    contextBridge.exposeInMainWorld('ipcRenderer', {
+      // Explicitly expose all ipcRenderer methods we need
+      on: (channel, func) => {
+        const validChannels = ['console-message', 'error-handler'];
+        if (validChannels.includes(channel)) {
+          ipcRenderer.on(channel, (event, ...args) => func(event, ...args));
+        }
+      },
+      once: (channel, func) => {
+        const validChannels = ['console-message', 'error-handler'];
+        if (validChannels.includes(channel)) {
+          ipcRenderer.once(channel, (event, ...args) => func(event, ...args));
+        }
+      },
+      removeListener: (channel, func) => {
+        const validChannels = ['console-message', 'error-handler'];
+        if (validChannels.includes(channel)) {
+          ipcRenderer.removeListener(channel, func);
+        }
+      },
+      send: (channel, data) => {
+        const validChannels = ['renderer-log', 'error-handler', 'show-debug-window'];
+        if (validChannels.includes(channel)) {
+          ipcRenderer.send(channel, data);
+        }
+      },
+      invoke: (channel, ...args) => {
+        const validChannels = ['getNativeImage', 'findCoverImage', 'refreshCourseList'];
+        if (validChannels.includes(channel)) {
+          return ipcRenderer.invoke(channel, ...args);
+        }
+        return Promise.reject(new Error(`Unauthorized IPC invoke to channel: ${channel}`));
+      }
+    })
     contextBridge.exposeInMainWorld('courseList', courseList())
     contextBridge.exposeInMainWorld('openFolder', openFolder)
     contextBridge.exposeInMainWorld('readJSON', readJSON)
@@ -56,6 +103,7 @@ if (process.contextIsolated) {
       readJSON,
       updateInProcessState,
       updateCourseProgramsList,
+      writeFile,
       handleError: (error) => {
         ipcRenderer.send('error-handler', {
           message: error.message,
@@ -64,7 +112,8 @@ if (process.contextIsolated) {
       },
       verifyPath: async () => {
         // Your verifyPath logic here
-      }
+      },
+      joinPath: (...parts) => path.join(...parts)
     })
     contextBridge.exposeInMainWorld('coursesCoverImages', coursesCoverImages)
     contextBridge.exposeInMainWorld('debug', {
@@ -89,6 +138,7 @@ if (process.contextIsolated) {
     readJSON,
     updateInProcessState,
     updateCourseProgramsList,
+    writeFile,
     handleError: (error) => {
       ipcRenderer.send('error-handler', {
         message: error.message,
@@ -97,7 +147,18 @@ if (process.contextIsolated) {
     },
     verifyPath: async () => {
       // Your verifyPath logic here
-    }
+    },
+    joinPath: (...parts) => path.join(...parts)
   }
   window.coursesCoverImages = coursesCoverImages
+}
+
+function writeFile(filePath, content) {
+  try {
+    fs.writeFileSync(filePath, content, 'utf8');
+    return true;
+  } catch (error) {
+    console.error('Error writing file:', error);
+    return false;
+  }
 }

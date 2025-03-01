@@ -1,14 +1,11 @@
 export default function ErrorDisplay({ error }) {
-  if (!error) return null
-
+  if (!error) return null;
+  
   return (
     <div className="error-message">
-      <h3>⚠️ Application Error</h3>
+      <h3>An error occurred:</h3>
       <p>{error.message}</p>
-      <details>
-        <summary>Technical details</summary>
-        <pre>{error.stack}</pre>
-      </details>
+      <pre>{error.stack}</pre>
     </div>
-  )
+  );
 } 
