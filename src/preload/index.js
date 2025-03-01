@@ -84,7 +84,12 @@ if (process.contextIsolated) {
         }
       },
       invoke: (channel, ...args) => {
-        const validChannels = ['getNativeImage', 'findCoverImage', 'refreshCourseList'];
+        const validChannels = [
+          'getNativeImage', 
+          'findCoverImage', 
+          'refreshCourseList',
+          'write-course-property'
+        ];
         if (validChannels.includes(channel)) {
           return ipcRenderer.invoke(channel, ...args);
         }
@@ -104,6 +109,66 @@ if (process.contextIsolated) {
       updateInProcessState,
       updateCourseProgramsList,
       writeFile,
+      updateCourseProperty: (coursePath, property, value) => {
+        try {
+          console.log(`Updating course property: ${property} for ${coursePath}`);
+          
+          // Check if coursePath exists
+          if (!fs.existsSync(coursePath)) {
+            console.error(`Course path does not exist: ${coursePath}`);
+            return false;
+          }
+          
+          // Construct the proper file path
+          const filePath = path.join(coursePath, 'courseProps.json');
+          console.log(`Full file path: ${filePath}`);
+          
+          // Check if the file exists
+          if (!fs.existsSync(filePath)) {
+            console.error(`File does not exist: ${filePath}`);
+            return false;
+          }
+          
+          // Read the current data
+          let data;
+          try {
+            const fileContent = fs.readFileSync(filePath, 'utf8');
+            console.log(`File content read: ${fileContent.substring(0, 100)}...`);
+            
+            data = JSON.parse(fileContent);
+            console.log(`Successfully parsed JSON from file: ${filePath}`);
+          } catch (readErr) {
+            console.error(`Error reading file ${filePath}:`, readErr);
+            return false;
+          }
+          
+          // Update the property
+          const oldValue = JSON.stringify(data[property]);
+          data[property] = value;
+          console.log(`Updated property ${property} from ${oldValue} to ${JSON.stringify(value)}`);
+          
+          // Write it back
+          try {
+            const jsonString = JSON.stringify(data, null, 2);
+            console.log(`Preparing to write: ${jsonString.substring(0, 100)}...`);
+            
+            fs.writeFileSync(filePath, jsonString, 'utf8');
+            console.log(`Successfully wrote to file: ${filePath}`);
+            
+            // Verify the write was successful
+            const verifyContent = fs.readFileSync(filePath, 'utf8');
+            console.log(`Verification read: ${verifyContent.substring(0, 100)}...`);
+            
+            return true;
+          } catch (writeErr) {
+            console.error(`Error writing to file ${filePath}:`, writeErr);
+            return false;
+          }
+        } catch (error) {
+          console.error(`Error updating course property ${property}:`, error);
+          return false;
+        }
+      },
       handleError: (error) => {
         ipcRenderer.send('error-handler', {
           message: error.message,
@@ -139,6 +204,66 @@ if (process.contextIsolated) {
     updateInProcessState,
     updateCourseProgramsList,
     writeFile,
+    updateCourseProperty: (coursePath, property, value) => {
+      try {
+        console.log(`Updating course property: ${property} for ${coursePath}`);
+        
+        // Check if coursePath exists
+        if (!fs.existsSync(coursePath)) {
+          console.error(`Course path does not exist: ${coursePath}`);
+          return false;
+        }
+        
+        // Construct the proper file path
+        const filePath = path.join(coursePath, 'courseProps.json');
+        console.log(`Full file path: ${filePath}`);
+        
+        // Check if the file exists
+        if (!fs.existsSync(filePath)) {
+          console.error(`File does not exist: ${filePath}`);
+          return false;
+        }
+        
+        // Read the current data
+        let data;
+        try {
+          const fileContent = fs.readFileSync(filePath, 'utf8');
+          console.log(`File content read: ${fileContent.substring(0, 100)}...`);
+          
+          data = JSON.parse(fileContent);
+          console.log(`Successfully parsed JSON from file: ${filePath}`);
+        } catch (readErr) {
+          console.error(`Error reading file ${filePath}:`, readErr);
+          return false;
+        }
+        
+        // Update the property
+        const oldValue = JSON.stringify(data[property]);
+        data[property] = value;
+        console.log(`Updated property ${property} from ${oldValue} to ${JSON.stringify(value)}`);
+        
+        // Write it back
+        try {
+          const jsonString = JSON.stringify(data, null, 2);
+          console.log(`Preparing to write: ${jsonString.substring(0, 100)}...`);
+          
+          fs.writeFileSync(filePath, jsonString, 'utf8');
+          console.log(`Successfully wrote to file: ${filePath}`);
+          
+          // Verify the write was successful
+          const verifyContent = fs.readFileSync(filePath, 'utf8');
+          console.log(`Verification read: ${verifyContent.substring(0, 100)}...`);
+          
+          return true;
+        } catch (writeErr) {
+          console.error(`Error writing to file ${filePath}:`, writeErr);
+          return false;
+        }
+      } catch (error) {
+        console.error(`Error updating course property ${property}:`, error);
+        return false;
+      }
+    },
     handleError: (error) => {
       ipcRenderer.send('error-handler', {
         message: error.message,
@@ -155,10 +280,59 @@ if (process.contextIsolated) {
 
 function writeFile(filePath, content) {
   try {
+    console.log(`Writing to file: ${filePath}`);
+    // Make sure we're using the correct encoding
     fs.writeFileSync(filePath, content, 'utf8');
     return true;
   } catch (error) {
     console.error('Error writing file:', error);
     return false;
   }
+}
+
+const api = {
+  // ... existing API methods
+  
+  writeFile: (filePath, content) => {
+    try {
+      console.log(`API writeFile called for: ${filePath}`);
+      return writeFile(filePath, content);
+    } catch (error) {
+      console.error('Error in API writeFile:', error);
+      return false;
+    }
+  },
+  
+  // Add a more direct method to update course properties
+  updateCourseProperty: (coursePath, property, value) => {
+    try {
+      console.log(`Updating course property: ${property} for ${coursePath}`);
+      
+      // Construct the proper file path
+      const filePath = path.join(coursePath, 'courseProps.json');
+      
+      // Read the current data
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      
+      // Update the property
+      data[property] = value;
+      
+      // Write it back
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+      
+      return true;
+    } catch (error) {
+      console.error(`Error updating course property ${property}:`, error);
+      return false;
+    }
+  }
+}
+
+// Add this at the end of your preload script to test file writing
+try {
+  const testPath = path.join(basePath, 'test-write.txt');
+  fs.writeFileSync(testPath, 'Test write from preload', 'utf8');
+  console.log(`Successfully wrote test file to: ${testPath}`);
+} catch (err) {
+  console.error('Failed to write test file:', err);
 }

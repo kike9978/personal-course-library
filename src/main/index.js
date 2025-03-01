@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog } from 'electron'
-import { join, path } from 'path'
+import { join } from 'path'
+import path from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import fs from 'fs'
@@ -226,6 +227,62 @@ app.on('ready', () => {
       case 'info':
         console.info(...args);
         break;
+    }
+  });
+
+  ipcMain.handle('write-course-property', async (event, { coursePath, property, value }) => {
+    try {
+      console.log(`Main process: Updating course property ${property} for ${coursePath}`);
+      
+      // Get the base path from the preload script
+      const basePath = app.getPath('userData');
+      console.log(`Main process: Base path: ${basePath}`);
+      
+      // Determine if the path is absolute or relative
+      const isAbsolutePath = path.isAbsolute(coursePath);
+      console.log(`Main process: Path is ${isAbsolutePath ? 'absolute' : 'relative'}`);
+      
+      // Construct the proper file path
+      let filePath;
+      if (isAbsolutePath) {
+        filePath = path.join(coursePath, 'courseProps.json');
+      } else {
+        filePath = path.join(basePath, coursePath, 'courseProps.json');
+      }
+      
+      console.log(`Main process: Full file path: ${filePath}`);
+      
+      // Check if the file exists
+      if (!fs.existsSync(filePath)) {
+        console.error(`Main process: File does not exist: ${filePath}`);
+        return { success: false, error: 'File does not exist' };
+      }
+      
+      // Read the current data
+      let data;
+      try {
+        const fileContent = fs.readFileSync(filePath, 'utf8');
+        data = JSON.parse(fileContent);
+      } catch (readErr) {
+        console.error(`Main process: Error reading file:`, readErr);
+        return { success: false, error: readErr.message };
+      }
+      
+      // Update the property
+      data[property] = value;
+      
+      // Write it back
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+        console.log(`Main process: Successfully wrote to file: ${filePath}`);
+        return { success: true };
+      } catch (writeErr) {
+        console.error(`Main process: Error writing file:`, writeErr);
+        return { success: false, error: writeErr.message };
+      }
+    } catch (error) {
+      console.error(`Main process: Error:`, error);
+      return { success: false, error: error.message };
     }
   });
 })
