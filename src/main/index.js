@@ -242,9 +242,6 @@ app.on('ready', () => {
   ipcMain.handle('write-course-property', async (event, { coursePath, property, value }) => {
     try {
       console.log(`Main process: Updating course property ${property} for ${coursePath}`)
-
-      // Get the base path from the preload script
-      const basePath = app.getPath('userData')
       console.log(`Main process: Base path: ${basePath}`)
 
       // Determine if the path is absolute or relative

@@ -3,7 +3,6 @@ import CourseCard from './CourseCard'
 import CourseEditModal from './CourseEditModal'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import ErrorDisplay from './ErrorDisplay'
-import DebugModal from './DebugModal'
 import Toast from './Toast'
 import { Toaster, toast } from 'react-hot-toast'
 
@@ -18,7 +17,6 @@ export default function CoursesGrid({
   const [modalProgramsList, setModalProgramsList] = useState([])
   const [currentCoursePath, setCurrentCoursePath] = useState('')
   const [error, setError] = useState(null)
-  const [showDebug, setShowDebug] = useState(false)
   const [toast, setToast] = useState(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [selectedCoursePath, setSelectedCoursePath] = useState(null)
@@ -247,16 +245,6 @@ export default function CoursesGrid({
     onSortedCourses(filteredCount)
   }, [filteredCount, onSortedCourses])
 
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-        setShowDebug(true)
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
 
   return (
     <>
@@ -274,7 +262,6 @@ export default function CoursesGrid({
           onClose={handleCloseModal}
         />
       )}
-      {showDebug && <DebugModal onClose={() => setShowDebug(false)} />}
       {toast && (
         <Toast
           message={toast.message}

@@ -25,10 +25,6 @@ function CourseCard({
   useEffect(() => {
     // Find the institution image
     const institutionLower = institution ? institution.toLowerCase() : ''
-    console.log('Looking for institution image for:', institutionLower)
-
-    // Debug available images
-    console.log('Available institution images:', Object.keys(institutionImages))
 
     // Try to find a matching image
     let foundImage = null
@@ -37,7 +33,6 @@ function CourseCard({
     Object.keys(institutionImages).forEach((path) => {
       const filename = path.split('/').pop().toLowerCase()
       if (filename.includes(institutionLower)) {
-        console.log('Found matching institution image:', path)
         foundImage = institutionImages[path].default || institutionImages[path]
       }
     })
@@ -47,7 +42,6 @@ function CourseCard({
       const imgName = institutionImgUrl.split('/').pop().toLowerCase()
       Object.keys(institutionImages).forEach((path) => {
         if (path.toLowerCase().includes(imgName)) {
-          console.log('Found institution image by URL:', path)
           foundImage = institutionImages[path].default || institutionImages[path]
         }
       })
@@ -55,7 +49,6 @@ function CourseCard({
 
     // If still not found, use default
     if (!foundImage) {
-      console.log('Using default institution image')
       // Try to find a default image
       Object.keys(institutionImages).forEach((path) => {
         if (path.toLowerCase().includes('default')) {
@@ -65,7 +58,6 @@ function CourseCard({
     }
 
     setInstitutionImg(foundImage)
-    console.log('Set institution image to:', foundImage)
 
     // Lazy load cover image when card comes into view
     const loadCoverImage = async () => {
@@ -141,20 +133,17 @@ function CourseCard({
   const toggleDropdown = (e) => {
     e.preventDefault()
     e.stopPropagation() // Stop event propagation to prevent card click
-    console.log('Dropdown button clicked!')
     setIsDropdownOpen(!isDropdownOpen)
   }
 
   const handleEditClick = (e) => {
     e.stopPropagation()
-    console.log('Edit button clicked!')
 
     if (typeof onOpenModalClick === 'function') {
       try {
         onOpenModalClick(coursePath)
-        console.log('Modal function called successfully')
       } catch (err) {
-        console.error('Error calling modal function:', err)
+        console.error('Error opening edit modal:', err)
         alert('Error opening edit modal: ' + err.message)
       }
     } else {
@@ -215,14 +204,12 @@ function CourseCard({
               alt={`${institution} logo`}
               title={institution}
               onError={(e) => {
-                console.error('Failed to load institution image:', e)
                 e.target.style.display = 'none'
               }}
             />
           )}
         </div>
         <div className="chips-container flex flex-wrap mt-2">{programChips}</div>
-        <div className="completion-rate text-sm text-gray-500">100%</div>
         <label className="in-progress flex items-center mt-2">
           <input
             type="checkbox"
@@ -234,14 +221,6 @@ function CourseCard({
           />{' '}
           En curso
         </label>
-        <a
-          href="http://"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-500 hover:underline"
-        >
-          Notas →
-        </a>
       </div>
     </article>
   )

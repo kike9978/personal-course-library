@@ -1,7 +1,6 @@
 import CoursesGrid from './components/CoursesGrid'
 import { useState, useEffect } from 'react'
 import ErrorBoundary from './components/ErrorBoundary'
-import DebugModal from './components/DebugModal'
 import Loader from './components/Loader'
 import { Toaster } from 'react-hot-toast'
 
@@ -54,7 +53,7 @@ function FilterableCoursesGrid({ courses = [], isLoading, onRefresh }) {
 FilterableCoursesGrid.defaultProps = {
   courses: [],
   isLoading: false,
-  onRefresh: () => {}
+  onRefresh: () => { }
 }
 
 function SearchBar({
@@ -108,7 +107,6 @@ function SearchBar({
 }
 
 function App() {
-  const [showDebug, setShowDebug] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [courses, setCourses] = useState([])
 
@@ -153,10 +151,7 @@ function App() {
     loadData()
 
     const handleKeyDown = (e) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-        setShowDebug((prev) => !prev)
-        console.log('Debug mode toggled')
-      } else if (e.ctrlKey && e.key === 'r') {
+      if (e.ctrlKey && e.key === 'r') {
         // Add keyboard shortcut for refresh
         refreshCourses()
       }
@@ -171,26 +166,6 @@ function App() {
       <div className="container">
         <Toaster position="top-right" />
         <FilterableCoursesGrid courses={courses} isLoading={isLoading} onRefresh={refreshCourses} />
-        <button
-          style={{
-            position: 'fixed',
-            bottom: '10px',
-            right: '10px',
-            zIndex: 1000,
-            padding: '8px 16px',
-            background: '#333',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px'
-          }}
-          onClick={() => {
-            setShowDebug(true)
-            console.log('Debug button clicked')
-          }}
-        >
-          Debug
-        </button>
-        {showDebug && <DebugModal onClose={() => setShowDebug(false)} />}
       </div>
     </ErrorBoundary>
   )

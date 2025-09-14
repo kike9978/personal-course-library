@@ -30,7 +30,6 @@ function CourseRow({ courseTitle, institution, programs, onClick, institutionImg
         src={institutionImages[institutionImgUrl]}
       />
       {programChips}
-      <div className="completion-rate">100%</div>
     </button>
   )
 }
