@@ -1,50 +1,23 @@
 import { contextBridge, nativeImage, ipcRenderer, shell } from 'electron'
 import fs from 'fs'
 import { electronAPI } from '@electron-toolkit/preload'
-import { readJSON, basePath, courseList, iterateCourseFolder } from '../scripts/iterateCourseFolder'
+import {
+  readJSON,
+  readJSONAsync,
+  basePath,
+  courseList,
+  courseListAsync
+} from '../scripts/iterateCourseFolder'
 import { updateInProcessState, updateCourseProgramsList } from '../scripts/updateJson'
 import path from 'path'
 import { collectDebugInfo } from '../renderer/src/utils/debugInfo'
 
 const coursesCoverImages = {}
 
-function createCoursesCoverImages() {
-  try {
-    const courses = courseList(); // Get the list of courses
-    courses.forEach((course) => {
-      try {
-        // Check for multiple formats
-        const formats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
-        let imageFound = false
-        
-        for (const format of formats) {
-          const filePath = path.join(basePath, course, `cover-image.${format}`)
-          if (fs.existsSync(filePath)) {
-            coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(filePath).toDataURL()
-            imageFound = true
-            break
-          }
-        }
-        
-        if (!imageFound && fs.existsSync(path.join(basePath, course, 'cover-image'))) {
-          // Try without extension
-          coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(
-            path.join(basePath, course, 'cover-image')
-          ).toDataURL()
-        }
-      } catch (error) {
-        console.error(`Error processing cover image for ${course}: ${error.message}`)
-      }
-    })
-  } catch (error) {
-    console.error(`Failed to create cover images: ${error.message}`)
-    throw error
-  }
-}
-
 console.table(courseList())
-createCoursesCoverImages()
-console.table(coursesCoverImages)
+// Remove startup image loading for performance
+// createCoursesCoverImages()
+// console.table(coursesCoverImages)
 // Custom APIs for renderer
 
 function openFolder(extension) {
@@ -60,45 +33,47 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('ipcRenderer', {
       // Explicitly expose all ipcRenderer methods we need
       on: (channel, func) => {
-        const validChannels = ['console-message', 'error-handler'];
+        const validChannels = ['console-message', 'error-handler', 'course-updated']
         if (validChannels.includes(channel)) {
-          ipcRenderer.on(channel, (event, ...args) => func(event, ...args));
+          ipcRenderer.on(channel, (event, ...args) => func(event, ...args))
         }
       },
       once: (channel, func) => {
-        const validChannels = ['console-message', 'error-handler'];
+        const validChannels = ['console-message', 'error-handler']
         if (validChannels.includes(channel)) {
-          ipcRenderer.once(channel, (event, ...args) => func(event, ...args));
+          ipcRenderer.once(channel, (event, ...args) => func(event, ...args))
         }
       },
       removeListener: (channel, func) => {
-        const validChannels = ['console-message', 'error-handler'];
+        const validChannels = ['console-message', 'error-handler']
         if (validChannels.includes(channel)) {
-          ipcRenderer.removeListener(channel, func);
+          ipcRenderer.removeListener(channel, func)
         }
       },
       send: (channel, data) => {
-        const validChannels = ['renderer-log', 'error-handler', 'show-debug-window'];
+        const validChannels = ['renderer-log', 'error-handler', 'show-debug-window']
         if (validChannels.includes(channel)) {
-          ipcRenderer.send(channel, data);
+          ipcRenderer.send(channel, data)
         }
       },
       invoke: (channel, ...args) => {
         const validChannels = [
-          'getNativeImage', 
-          'findCoverImage', 
+          'getNativeImage',
+          'findCoverImage',
           'refreshCourseList',
           'write-course-property'
-        ];
+        ]
         if (validChannels.includes(channel)) {
-          return ipcRenderer.invoke(channel, ...args);
+          return ipcRenderer.invoke(channel, ...args)
         }
-        return Promise.reject(new Error(`Unauthorized IPC invoke to channel: ${channel}`));
+        return Promise.reject(new Error(`Unauthorized IPC invoke to channel: ${channel}`))
       }
     })
     contextBridge.exposeInMainWorld('courseList', courseList())
+    contextBridge.exposeInMainWorld('courseListAsync', courseListAsync)
     contextBridge.exposeInMainWorld('openFolder', openFolder)
     contextBridge.exposeInMainWorld('readJSON', readJSON)
+    contextBridge.exposeInMainWorld('readJSONAsync', readJSONAsync)
     contextBridge.exposeInMainWorld('updateInProcessState', updateInProcessState)
     contextBridge.exposeInMainWorld('updateCourseProgramsList', updateCourseProgramsList)
     contextBridge.exposeInMainWorld('fileSystem', {
@@ -111,62 +86,62 @@ if (process.contextIsolated) {
       writeFile,
       updateCourseProperty: (coursePath, property, value) => {
         try {
-          console.log(`Updating course property: ${property} for ${coursePath}`);
-          
+          console.log(`Updating course property: ${property} for ${coursePath}`)
+
           // Check if coursePath exists
           if (!fs.existsSync(coursePath)) {
-            console.error(`Course path does not exist: ${coursePath}`);
-            return false;
+            console.error(`Course path does not exist: ${coursePath}`)
+            return false
           }
-          
+
           // Construct the proper file path
-          const filePath = path.join(coursePath, 'courseProps.json');
-          console.log(`Full file path: ${filePath}`);
-          
+          const filePath = path.join(coursePath, 'courseProps.json')
+          console.log(`Full file path: ${filePath}`)
+
           // Check if the file exists
           if (!fs.existsSync(filePath)) {
-            console.error(`File does not exist: ${filePath}`);
-            return false;
+            console.error(`File does not exist: ${filePath}`)
+            return false
           }
-          
+
           // Read the current data
-          let data;
+          let data
           try {
-            const fileContent = fs.readFileSync(filePath, 'utf8');
-            console.log(`File content read: ${fileContent.substring(0, 100)}...`);
-            
-            data = JSON.parse(fileContent);
-            console.log(`Successfully parsed JSON from file: ${filePath}`);
+            const fileContent = fs.readFileSync(filePath, 'utf8')
+            console.log(`File content read: ${fileContent.substring(0, 100)}...`)
+
+            data = JSON.parse(fileContent)
+            console.log(`Successfully parsed JSON from file: ${filePath}`)
           } catch (readErr) {
-            console.error(`Error reading file ${filePath}:`, readErr);
-            return false;
+            console.error(`Error reading file ${filePath}:`, readErr)
+            return false
           }
-          
+
           // Update the property
-          const oldValue = JSON.stringify(data[property]);
-          data[property] = value;
-          console.log(`Updated property ${property} from ${oldValue} to ${JSON.stringify(value)}`);
-          
+          const oldValue = JSON.stringify(data[property])
+          data[property] = value
+          console.log(`Updated property ${property} from ${oldValue} to ${JSON.stringify(value)}`)
+
           // Write it back
           try {
-            const jsonString = JSON.stringify(data, null, 2);
-            console.log(`Preparing to write: ${jsonString.substring(0, 100)}...`);
-            
-            fs.writeFileSync(filePath, jsonString, 'utf8');
-            console.log(`Successfully wrote to file: ${filePath}`);
-            
+            const jsonString = JSON.stringify(data, null, 2)
+            console.log(`Preparing to write: ${jsonString.substring(0, 100)}...`)
+
+            fs.writeFileSync(filePath, jsonString, 'utf8')
+            console.log(`Successfully wrote to file: ${filePath}`)
+
             // Verify the write was successful
-            const verifyContent = fs.readFileSync(filePath, 'utf8');
-            console.log(`Verification read: ${verifyContent.substring(0, 100)}...`);
-            
-            return true;
+            const verifyContent = fs.readFileSync(filePath, 'utf8')
+            console.log(`Verification read: ${verifyContent.substring(0, 100)}...`)
+
+            return true
           } catch (writeErr) {
-            console.error(`Error writing to file ${filePath}:`, writeErr);
-            return false;
+            console.error(`Error writing to file ${filePath}:`, writeErr)
+            return false
           }
         } catch (error) {
-          console.error(`Error updating course property ${property}:`, error);
-          return false;
+          console.error(`Error updating course property ${property}:`, error)
+          return false
         }
       },
       handleError: (error) => {
@@ -178,7 +153,42 @@ if (process.contextIsolated) {
       verifyPath: async () => {
         // Your verifyPath logic here
       },
-      joinPath: (...parts) => path.join(...parts)
+      joinPath: (...parts) => path.join(...parts),
+      loadCoverImage: async (coursePath) => {
+        try {
+          const courseData = readJSON(coursePath)
+          const title = courseData.title
+
+          // Check if already loaded
+          if (coursesCoverImages[title]) {
+            return coursesCoverImages[title]
+          }
+
+          // Try to find cover image with multiple formats
+          const formats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
+          for (const format of formats) {
+            const filePath = path.join(basePath, coursePath, `cover-image.${format}`)
+            if (fs.existsSync(filePath)) {
+              const imageData = nativeImage.createFromPath(filePath).toDataURL()
+              coursesCoverImages[title] = imageData
+              return imageData
+            }
+          }
+
+          // Try without extension
+          const fallbackPath = path.join(basePath, coursePath, 'cover-image')
+          if (fs.existsSync(fallbackPath)) {
+            const imageData = nativeImage.createFromPath(fallbackPath).toDataURL()
+            coursesCoverImages[title] = imageData
+            return imageData
+          }
+
+          return null
+        } catch (error) {
+          console.error('Error loading cover image:', error)
+          return null
+        }
+      }
     })
     contextBridge.exposeInMainWorld('coursesCoverImages', coursesCoverImages)
     contextBridge.exposeInMainWorld('debug', {
@@ -206,62 +216,62 @@ if (process.contextIsolated) {
     writeFile,
     updateCourseProperty: (coursePath, property, value) => {
       try {
-        console.log(`Updating course property: ${property} for ${coursePath}`);
-        
+        console.log(`Updating course property: ${property} for ${coursePath}`)
+
         // Check if coursePath exists
         if (!fs.existsSync(coursePath)) {
-          console.error(`Course path does not exist: ${coursePath}`);
-          return false;
+          console.error(`Course path does not exist: ${coursePath}`)
+          return false
         }
-        
+
         // Construct the proper file path
-        const filePath = path.join(coursePath, 'courseProps.json');
-        console.log(`Full file path: ${filePath}`);
-        
+        const filePath = path.join(coursePath, 'courseProps.json')
+        console.log(`Full file path: ${filePath}`)
+
         // Check if the file exists
         if (!fs.existsSync(filePath)) {
-          console.error(`File does not exist: ${filePath}`);
-          return false;
+          console.error(`File does not exist: ${filePath}`)
+          return false
         }
-        
+
         // Read the current data
-        let data;
+        let data
         try {
-          const fileContent = fs.readFileSync(filePath, 'utf8');
-          console.log(`File content read: ${fileContent.substring(0, 100)}...`);
-          
-          data = JSON.parse(fileContent);
-          console.log(`Successfully parsed JSON from file: ${filePath}`);
+          const fileContent = fs.readFileSync(filePath, 'utf8')
+          console.log(`File content read: ${fileContent.substring(0, 100)}...`)
+
+          data = JSON.parse(fileContent)
+          console.log(`Successfully parsed JSON from file: ${filePath}`)
         } catch (readErr) {
-          console.error(`Error reading file ${filePath}:`, readErr);
-          return false;
+          console.error(`Error reading file ${filePath}:`, readErr)
+          return false
         }
-        
+
         // Update the property
-        const oldValue = JSON.stringify(data[property]);
-        data[property] = value;
-        console.log(`Updated property ${property} from ${oldValue} to ${JSON.stringify(value)}`);
-        
+        const oldValue = JSON.stringify(data[property])
+        data[property] = value
+        console.log(`Updated property ${property} from ${oldValue} to ${JSON.stringify(value)}`)
+
         // Write it back
         try {
-          const jsonString = JSON.stringify(data, null, 2);
-          console.log(`Preparing to write: ${jsonString.substring(0, 100)}...`);
-          
-          fs.writeFileSync(filePath, jsonString, 'utf8');
-          console.log(`Successfully wrote to file: ${filePath}`);
-          
+          const jsonString = JSON.stringify(data, null, 2)
+          console.log(`Preparing to write: ${jsonString.substring(0, 100)}...`)
+
+          fs.writeFileSync(filePath, jsonString, 'utf8')
+          console.log(`Successfully wrote to file: ${filePath}`)
+
           // Verify the write was successful
-          const verifyContent = fs.readFileSync(filePath, 'utf8');
-          console.log(`Verification read: ${verifyContent.substring(0, 100)}...`);
-          
-          return true;
+          const verifyContent = fs.readFileSync(filePath, 'utf8')
+          console.log(`Verification read: ${verifyContent.substring(0, 100)}...`)
+
+          return true
         } catch (writeErr) {
-          console.error(`Error writing to file ${filePath}:`, writeErr);
-          return false;
+          console.error(`Error writing to file ${filePath}:`, writeErr)
+          return false
         }
       } catch (error) {
-        console.error(`Error updating course property ${property}:`, error);
-        return false;
+        console.error(`Error updating course property ${property}:`, error)
+        return false
       }
     },
     handleError: (error) => {
@@ -280,59 +290,21 @@ if (process.contextIsolated) {
 
 function writeFile(filePath, content) {
   try {
-    console.log(`Writing to file: ${filePath}`);
+    console.log(`Writing to file: ${filePath}`)
     // Make sure we're using the correct encoding
-    fs.writeFileSync(filePath, content, 'utf8');
-    return true;
+    fs.writeFileSync(filePath, content, 'utf8')
+    return true
   } catch (error) {
-    console.error('Error writing file:', error);
-    return false;
-  }
-}
-
-const api = {
-  // ... existing API methods
-  
-  writeFile: (filePath, content) => {
-    try {
-      console.log(`API writeFile called for: ${filePath}`);
-      return writeFile(filePath, content);
-    } catch (error) {
-      console.error('Error in API writeFile:', error);
-      return false;
-    }
-  },
-  
-  // Add a more direct method to update course properties
-  updateCourseProperty: (coursePath, property, value) => {
-    try {
-      console.log(`Updating course property: ${property} for ${coursePath}`);
-      
-      // Construct the proper file path
-      const filePath = path.join(coursePath, 'courseProps.json');
-      
-      // Read the current data
-      const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      
-      // Update the property
-      data[property] = value;
-      
-      // Write it back
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-      
-      return true;
-    } catch (error) {
-      console.error(`Error updating course property ${property}:`, error);
-      return false;
-    }
+    console.error('Error writing file:', error)
+    return false
   }
 }
 
 // Add this at the end of your preload script to test file writing
 try {
-  const testPath = path.join(basePath, 'test-write.txt');
-  fs.writeFileSync(testPath, 'Test write from preload', 'utf8');
-  console.log(`Successfully wrote test file to: ${testPath}`);
+  const testPath = path.join(basePath, 'test-write.txt')
+  fs.writeFileSync(testPath, 'Test write from preload', 'utf8')
+  console.log(`Successfully wrote test file to: ${testPath}`)
 } catch (err) {
-  console.error('Failed to write test file:', err);
+  console.error('Failed to write test file:', err)
 }

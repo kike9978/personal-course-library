@@ -4,50 +4,51 @@ import path from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import fs from 'fs'
+import { courseList, basePath, readJSON } from '../scripts/iterateCourseFolder'
 
 function setupConsoleRedirection() {
-  const originalConsoleLog = console.log;
-  const originalConsoleError = console.error;
-  const originalConsoleWarn = console.warn;
-  const originalConsoleInfo = console.info;
+  const originalConsoleLog = console.log
+  const originalConsoleError = console.error
+  const originalConsoleWarn = console.warn
+  const originalConsoleInfo = console.info
 
   console.log = (...args) => {
-    originalConsoleLog(...args);
-    logToRenderer('log', ...args);
-  };
+    originalConsoleLog(...args)
+    logToRenderer('log', ...args)
+  }
 
   console.error = (...args) => {
-    originalConsoleError(...args);
-    logToRenderer('error', ...args);
-  };
+    originalConsoleError(...args)
+    logToRenderer('error', ...args)
+  }
 
   console.warn = (...args) => {
-    originalConsoleWarn(...args);
-    logToRenderer('warn', ...args);
-  };
+    originalConsoleWarn(...args)
+    logToRenderer('warn', ...args)
+  }
 
   console.info = (...args) => {
-    originalConsoleInfo(...args);
-    logToRenderer('info', ...args);
-  };
+    originalConsoleInfo(...args)
+    logToRenderer('info', ...args)
+  }
 }
 
 function logToRenderer(type, ...args) {
-  const windows = BrowserWindow.getAllWindows();
+  const windows = BrowserWindow.getAllWindows()
   if (windows.length > 0) {
-    const mainWindow = windows[0];
+    const mainWindow = windows[0]
     try {
-      const safeArgs = args.map(arg => {
+      const safeArgs = args.map((arg) => {
         if (typeof arg === 'object') {
           try {
-            return JSON.stringify(arg);
+            return JSON.stringify(arg)
           } catch (e) {
-            return String(arg);
+            return String(arg)
           }
         }
-        return arg;
-      });
-      mainWindow.webContents.send('console-message', { type, args: safeArgs });
+        return arg
+      })
+      mainWindow.webContents.send('console-message', { type, args: safeArgs })
     } catch (error) {
       // Fallback if sending to renderer fails
     }
@@ -121,7 +122,7 @@ app.on('window-all-closed', () => {
 // In this file you can include the rest of your app"s specific main process
 // code. You can also put them in separate files and require them here.
 app.on('ready', () => {
-  setupConsoleRedirection();
+  setupConsoleRedirection()
 
   ipcMain.handle('getNativeImage', (e, pathToImage) => {
     try {
@@ -136,7 +137,7 @@ app.on('ready', () => {
 
   ipcMain.handle('findCoverImage', (e, basePath, coursePath) => {
     const formats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
-    
+
     for (const format of formats) {
       const imagePath = path.join(basePath, coursePath, `cover-image.${format}`)
       try {
@@ -148,43 +149,48 @@ app.on('ready', () => {
         console.error(`Error checking ${format} image:`, error)
       }
     }
-    
+
     return null // No image found in any format
   })
 
-  ipcMain.handle('refreshCourseList', () => {
+  ipcMain.handle('refreshCourseList', async () => {
     try {
       // Re-initialize the course list
       const courses = courseList()
-      
-      // Recreate cover images
+
+      // Recreate cover images (limit to prevent memory issues)
       const coursesCoverImages = {}
-      courses.forEach((course) => {
+      const maxImages = 50 // Limit to prevent excessive memory usage
+
+      for (let i = 0; i < Math.min(courses.length, maxImages); i++) {
+        const course = courses[i]
         try {
           // Check for multiple formats
           const formats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
           let imageFound = false
-          
+
           for (const format of formats) {
             const filePath = path.join(basePath, course, `cover-image.${format}`)
             if (fs.existsSync(filePath)) {
-              coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(filePath).toDataURL()
+              coursesCoverImages[readJSON(course).title] = nativeImage
+                .createFromPath(filePath)
+                .toDataURL()
               imageFound = true
               break
             }
           }
-          
+
           if (!imageFound && fs.existsSync(path.join(basePath, course, 'cover-image'))) {
             // Try without extension
-            coursesCoverImages[readJSON(course).title] = nativeImage.createFromPath(
-              path.join(basePath, course, 'cover-image')
-            ).toDataURL()
+            coursesCoverImages[readJSON(course).title] = nativeImage
+              .createFromPath(path.join(basePath, course, 'cover-image'))
+              .toDataURL()
           }
         } catch (error) {
           console.error(`Error processing cover image for ${course}: ${error.message}`)
         }
-      })
-      
+      }
+
       return { courses, coursesCoverImages }
     } catch (error) {
       console.error('Error refreshing course list:', error)
@@ -193,10 +199,13 @@ app.on('ready', () => {
   })
 
   ipcMain.on('error-handler', (event, error) => {
-    dialog.showErrorBox('Application Error', `
+    dialog.showErrorBox(
+      'Application Error',
+      `
       Message: ${error.message}
       Stack: ${error.stack}
-    `)
+    `
+    )
   })
 
   ipcMain.on('show-debug-window', () => {
@@ -208,7 +217,7 @@ app.on('ready', () => {
         contextIsolation: false
       }
     })
-    
+
     debugWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '#debug')
   })
 
@@ -216,73 +225,86 @@ app.on('ready', () => {
   ipcMain.on('renderer-log', (event, { type, args }) => {
     switch (type) {
       case 'log':
-        console.log(...args);
-        break;
+        console.log(...args)
+        break
       case 'error':
-        console.error(...args);
-        break;
+        console.error(...args)
+        break
       case 'warn':
-        console.warn(...args);
-        break;
+        console.warn(...args)
+        break
       case 'info':
-        console.info(...args);
-        break;
+        console.info(...args)
+        break
     }
-  });
+  })
 
   ipcMain.handle('write-course-property', async (event, { coursePath, property, value }) => {
     try {
-      console.log(`Main process: Updating course property ${property} for ${coursePath}`);
-      
+      console.log(`Main process: Updating course property ${property} for ${coursePath}`)
+
       // Get the base path from the preload script
-      const basePath = app.getPath('userData');
-      console.log(`Main process: Base path: ${basePath}`);
-      
+      const basePath = app.getPath('userData')
+      console.log(`Main process: Base path: ${basePath}`)
+
       // Determine if the path is absolute or relative
-      const isAbsolutePath = path.isAbsolute(coursePath);
-      console.log(`Main process: Path is ${isAbsolutePath ? 'absolute' : 'relative'}`);
-      
+      const isAbsolutePath = path.isAbsolute(coursePath)
+      console.log(`Main process: Path is ${isAbsolutePath ? 'absolute' : 'relative'}`)
+
       // Construct the proper file path
-      let filePath;
+      let filePath
       if (isAbsolutePath) {
-        filePath = path.join(coursePath, 'courseProps.json');
+        filePath = path.join(coursePath, 'courseProps.json')
       } else {
-        filePath = path.join(basePath, coursePath, 'courseProps.json');
+        filePath = path.join(basePath, coursePath, 'courseProps.json')
       }
-      
-      console.log(`Main process: Full file path: ${filePath}`);
-      
+
+      console.log(`Main process: Full file path: ${filePath}`)
+
       // Check if the file exists
       if (!fs.existsSync(filePath)) {
-        console.error(`Main process: File does not exist: ${filePath}`);
-        return { success: false, error: 'File does not exist' };
+        console.error(`Main process: File does not exist: ${filePath}`)
+        return { success: false, error: 'File does not exist' }
       }
-      
+
       // Read the current data
-      let data;
+      let data
       try {
-        const fileContent = fs.readFileSync(filePath, 'utf8');
-        data = JSON.parse(fileContent);
+        const fileContent = fs.readFileSync(filePath, 'utf8')
+        data = JSON.parse(fileContent)
       } catch (readErr) {
-        console.error(`Main process: Error reading file:`, readErr);
-        return { success: false, error: readErr.message };
+        console.error(`Main process: Error reading file:`, readErr)
+        return { success: false, error: readErr.message }
       }
-      
+
       // Update the property
-      data[property] = value;
-      
+      data[property] = value
+
       // Write it back
       try {
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-        console.log(`Main process: Successfully wrote to file: ${filePath}`);
-        return { success: true };
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
+        console.log(`Main process: Successfully wrote to file: ${filePath}`)
+
+        // Notify renderer of the update
+        const windows = BrowserWindow.getAllWindows()
+        if (windows.length > 0) {
+          const mainWindow = windows[0]
+          mainWindow.webContents.send('course-updated', {
+            coursePath,
+            property,
+            value,
+            fullData: data
+          })
+        }
+
+        return { success: true }
       } catch (writeErr) {
-        console.error(`Main process: Error writing file:`, writeErr);
-        return { success: false, error: writeErr.message };
+        console.error(`Main process: Error writing file:`, writeErr)
+        return { success: false, error: writeErr.message }
       }
     } catch (error) {
-      console.error(`Main process: Error:`, error);
-      return { success: false, error: error.message };
+      console.error(`Main process: Error:`, error)
+      return { success: false, error: error.message }
     }
-  });
+  })
 })

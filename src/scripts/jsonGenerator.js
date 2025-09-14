@@ -1,4 +1,5 @@
 import { basePath, courseList } from './iterateCourseFolder'
+import fs from 'fs'
 import path from 'path'
 
 const possiblePrograms = [

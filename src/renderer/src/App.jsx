@@ -5,8 +5,6 @@ import DebugModal from './components/DebugModal'
 import Loader from './components/Loader'
 import { Toaster } from 'react-hot-toast'
 
-
-
 // function getNativeImageData(pathToImage) {
 //   return ipcRenderer.invoke("getNativeImage", pathToImage);
 // }
@@ -67,7 +65,7 @@ function SearchBar({
   isInProcessOnly,
   onInProcessOnlyChange,
   courseCount,
-  
+
   isLoading
 }) {
   return (
@@ -110,74 +108,70 @@ function SearchBar({
 }
 
 function App() {
-  const [showDebug, setShowDebug] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [courses, setCourses] = useState([]);
-  
+  const [showDebug, setShowDebug] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [courses, setCourses] = useState([])
+
   const refreshCourses = async () => {
-    setIsLoading(true);
+    setIsLoading(true)
     try {
       // Use the IPC to refresh course list
-      const result = await window.ipcRenderer.invoke('refreshCourseList');
-      
+      const result = await window.ipcRenderer.invoke('refreshCourseList')
+
       // Update the global coursesCoverImages
-      window.coursesCoverImages = result.coursesCoverImages;
-      
+      window.coursesCoverImages = result.coursesCoverImages
+
       // Update courses state
-      setCourses(result.courses);
-      
-      console.log('Courses refreshed successfully');
+      setCourses(result.courses)
+
+      console.log('Courses refreshed successfully')
     } catch (error) {
-      console.error('Error refreshing courses:', error);
+      console.error('Error refreshing courses:', error)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
-  
+  }
+
   useEffect(() => {
     // Initial load
     const loadData = async () => {
       try {
         // Get courses from window.courseList
-        const courseList = window.courseList || [];
-        
+        const courseList = window.courseList || []
+
         // Artificial delay to ensure UI components are ready
         setTimeout(() => {
-          setCourses(courseList);
-          setIsLoading(false);
-        }, 1000);
+          setCourses(courseList)
+          setIsLoading(false)
+        }, 1000)
       } catch (error) {
-        console.error('Error loading courses:', error);
-        setIsLoading(false);
+        console.error('Error loading courses:', error)
+        setIsLoading(false)
       }
-    };
-    
-    loadData();
-    
+    }
+
+    loadData()
+
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-        setShowDebug(prev => !prev);
-        console.log('Debug mode toggled');
+        setShowDebug((prev) => !prev)
+        console.log('Debug mode toggled')
       } else if (e.ctrlKey && e.key === 'r') {
         // Add keyboard shortcut for refresh
-        refreshCourses();
+        refreshCourses()
       }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-  
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   return (
     <ErrorBoundary>
       <div className="container">
         <Toaster position="top-right" />
-        <FilterableCoursesGrid 
-          courses={courses} 
-          isLoading={isLoading} 
-          onRefresh={refreshCourses}
-        />
-        <button 
+        <FilterableCoursesGrid courses={courses} isLoading={isLoading} onRefresh={refreshCourses} />
+        <button
           style={{
             position: 'fixed',
             bottom: '10px',
@@ -190,8 +184,8 @@ function App() {
             borderRadius: '4px'
           }}
           onClick={() => {
-            setShowDebug(true);
-            console.log('Debug button clicked');
+            setShowDebug(true)
+            console.log('Debug button clicked')
           }}
         >
           Debug

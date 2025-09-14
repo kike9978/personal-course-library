@@ -13,4 +13,4 @@ export function collectDebugInfo() {
     courseCount: debugInfo.courses.length,
     currentTime: new Date().toISOString()
   }
-} 
+}

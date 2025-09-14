@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import coverImage from '../assets/img/coverimage-test.svg'
 
 // Import all institution images using a more reliable approach
-const institutionImages = import.meta.glob('/src/assets/img/institutions/*.{png,jpg,jpeg,svg}', { eager: true })
+const institutionImages = import.meta.glob('/src/assets/img/institutions/*.{png,jpg,jpeg,svg}', {
+  eager: true
+})
 
 function CourseCard({
   courseTitle,
@@ -12,99 +14,124 @@ function CourseCard({
   onOpenModalClick,
   institutionImgUrl
 }) {
-  const [isInProcess, setIsInProcess] = useState(window.readJSON(coursePath).isInProcess)
+  const [courseData, setCourseData] = useState(() => window.readJSON(coursePath))
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [institutionImg, setInstitutionImg] = useState(null)
   const [coverImg, setCoverImg] = useState(window.coursesCoverImages[courseTitle] || coverImage)
+  const cardRef = useRef(null)
 
-  const fetchData = () => {
-    setIsInProcess(window.readJSON(coursePath).isInProcess)
-  }
+  const isInProcess = courseData.isInProcess
 
   useEffect(() => {
-    fetchData() // Initial fetch
-
     // Find the institution image
-    const institutionLower = institution ? institution.toLowerCase() : '';
-    console.log('Looking for institution image for:', institutionLower);
-    
+    const institutionLower = institution ? institution.toLowerCase() : ''
+    console.log('Looking for institution image for:', institutionLower)
+
     // Debug available images
-    console.log('Available institution images:', Object.keys(institutionImages));
-    
+    console.log('Available institution images:', Object.keys(institutionImages))
+
     // Try to find a matching image
-    let foundImage = null;
-    
+    let foundImage = null
+
     // First try exact match with institution name
-    Object.keys(institutionImages).forEach(path => {
-      const filename = path.split('/').pop().toLowerCase();
+    Object.keys(institutionImages).forEach((path) => {
+      const filename = path.split('/').pop().toLowerCase()
       if (filename.includes(institutionLower)) {
-        console.log('Found matching institution image:', path);
-        foundImage = institutionImages[path].default || institutionImages[path];
+        console.log('Found matching institution image:', path)
+        foundImage = institutionImages[path].default || institutionImages[path]
       }
-    });
-    
+    })
+
     // If not found, try with the provided URL
     if (!foundImage && institutionImgUrl) {
-      const imgName = institutionImgUrl.split('/').pop().toLowerCase();
-      Object.keys(institutionImages).forEach(path => {
+      const imgName = institutionImgUrl.split('/').pop().toLowerCase()
+      Object.keys(institutionImages).forEach((path) => {
         if (path.toLowerCase().includes(imgName)) {
-          console.log('Found institution image by URL:', path);
-          foundImage = institutionImages[path].default || institutionImages[path];
+          console.log('Found institution image by URL:', path)
+          foundImage = institutionImages[path].default || institutionImages[path]
         }
-      });
+      })
     }
-    
+
     // If still not found, use default
     if (!foundImage) {
-      console.log('Using default institution image');
+      console.log('Using default institution image')
       // Try to find a default image
-      Object.keys(institutionImages).forEach(path => {
+      Object.keys(institutionImages).forEach((path) => {
         if (path.toLowerCase().includes('default')) {
-          foundImage = institutionImages[path].default || institutionImages[path];
+          foundImage = institutionImages[path].default || institutionImages[path]
         }
-      });
+      })
     }
-    
-    setInstitutionImg(foundImage);
-    console.log('Set institution image to:', foundImage);
 
-    // Try to find cover image in multiple formats
-    const checkCoverImage = async () => {
+    setInstitutionImg(foundImage)
+    console.log('Set institution image to:', foundImage)
+
+    // Lazy load cover image when card comes into view
+    const loadCoverImage = async () => {
       if (window.coursesCoverImages[courseTitle]) {
-        setCoverImg(window.coursesCoverImages[courseTitle]);
+        setCoverImg(window.coursesCoverImages[courseTitle])
       } else {
         try {
-          // Try to find cover image with multiple formats via IPC
-          const coverImageData = await window.ipcRenderer.invoke(
-            'findCoverImage', 
-            window.fileSystem.basePath, 
-            coursePath
-          );
-          
+          // Use the new loadCoverImage function from preload
+          const coverImageData = await window.fileSystem.loadCoverImage(coursePath)
           if (coverImageData) {
-            setCoverImg(coverImageData);
+            setCoverImg(coverImageData)
           }
         } catch (error) {
-          console.error('Error finding cover image:', error);
+          console.error('Error loading cover image:', error)
         }
       }
-    };
-    
-    checkCoverImage();
+    }
 
-    // Listen for changes in isInProcess and re-fetch data
-    const interval = setInterval(() => {
-      fetchData()
-    }, 600) // Adjust the interval as needed
+    // Set up intersection observer for lazy loading
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadCoverImage()
+          observer.disconnect() // Load once
+        }
+      },
+      { threshold: 0.1 } // Load when 10% visible
+    )
 
-    return () => clearInterval(interval) // Cleanup interval
-  }, [isInProcess, institution, institutionImgUrl, courseTitle, coursePath])
+    if (cardRef.current) {
+      observer.observe(cardRef.current)
+    }
+
+    return () => observer.disconnect()
+
+    // Listen for course updates
+    const handleCourseUpdate = (event, updateData) => {
+      if (updateData.coursePath === coursePath) {
+        setCourseData((prevData) => ({
+          ...prevData,
+          [updateData.property]: updateData.value
+        }))
+      }
+    }
+
+    window.ipcRenderer.on('course-updated', handleCourseUpdate)
+
+    return () => {
+      window.ipcRenderer.removeListener('course-updated', handleCourseUpdate)
+    }
+  }, [institution, institutionImgUrl, courseTitle, coursePath])
 
   const handleCheckboxClick = async (e) => {
     e.preventDefault()
-    await window.updateInProcessState(`${window.extensions.macos}${coursePath}/courseProps.json`)
+    const newValue = !isInProcess
+    try {
+      await window.ipcRenderer.invoke('write-course-property', {
+        coursePath,
+        property: 'isInProcess',
+        value: newValue
+      })
+    } catch (error) {
+      console.error('Error updating isInProcess:', error)
+    }
   }
-  
+
   const handleCardClick = (e) => {
     if (!e.target.closest('.in-progress') && !e.target.closest('.kebab-menu')) {
       window.openFolder(coursePath)
@@ -114,43 +141,53 @@ function CourseCard({
   const toggleDropdown = (e) => {
     e.preventDefault()
     e.stopPropagation() // Stop event propagation to prevent card click
-    console.log("Dropdown button clicked!")
+    console.log('Dropdown button clicked!')
     setIsDropdownOpen(!isDropdownOpen)
   }
 
   const handleEditClick = (e) => {
-    e.stopPropagation();
-    console.log("Edit button clicked!");
-    
-    if (typeof onOpenModalClick === "function") {
+    e.stopPropagation()
+    console.log('Edit button clicked!')
+
+    if (typeof onOpenModalClick === 'function') {
       try {
-        onOpenModalClick(coursePath);
-        console.log("Modal function called successfully");
+        onOpenModalClick(coursePath)
+        console.log('Modal function called successfully')
       } catch (err) {
-        console.error("Error calling modal function:", err);
-        alert("Error opening edit modal: " + err.message);
+        console.error('Error calling modal function:', err)
+        alert('Error opening edit modal: ' + err.message)
       }
     } else {
-      console.error("onOpenModalClick is not a function!", typeof onOpenModalClick);
-      alert("Could not open edit modal: function not available");
+      console.error('onOpenModalClick is not a function!', typeof onOpenModalClick)
+      alert('Could not open edit modal: function not available')
     }
-    
-    setIsDropdownOpen(false);
+
+    setIsDropdownOpen(false)
   }
 
   const programChips = programs.map((program, index) => {
     return (
-      <div key={`${program}-${index}`} className="badge badge--programs bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded mr-1 mb-1">
+      <div
+        key={`${program}-${index}`}
+        className="badge badge--programs bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded mr-1 mb-1"
+      >
         <span>{program}</span>
       </div>
     )
   })
 
   return (
-    <article onClick={handleCardClick} className="course-card p-4 border rounded-lg shadow-md hover:shadow-lg transition">
+    <article
+      ref={cardRef}
+      onClick={handleCardClick}
+      className="course-card p-4 border rounded-lg shadow-md hover:shadow-lg transition"
+    >
       <img src={coverImg} alt="course thumbnail" className="w-full h-32 object-cover rounded-md" />
       <div className="kebab-menu relative">
-        <button className="kebab-button p-2 rounded-full hover:bg-gray-200" onClick={toggleDropdown}>
+        <button
+          className="kebab-button p-2 rounded-full hover:bg-gray-200"
+          onClick={toggleDropdown}
+        >
           <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24">
             <circle cx="12" cy="12" r="2" />
             <circle cx="12" cy="6" r="2" />
@@ -159,8 +196,8 @@ function CourseCard({
         </button>
         {isDropdownOpen && (
           <div className="dropdown-menu absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-md shadow-lg z-10">
-            <button 
-              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" 
+            <button
+              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
               onClick={handleEditClick}
             >
               Edit Details
@@ -178,8 +215,8 @@ function CourseCard({
               alt={`${institution} logo`}
               title={institution}
               onError={(e) => {
-                console.error('Failed to load institution image:', e);
-                e.target.style.display = 'none';
+                console.error('Failed to load institution image:', e)
+                e.target.style.display = 'none'
               }}
             />
           )}
@@ -197,7 +234,12 @@ function CourseCard({
           />{' '}
           En curso
         </label>
-        <a href="http://" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+        <a
+          href="http://"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-500 hover:underline"
+        >
           Notas →
         </a>
       </div>
