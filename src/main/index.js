@@ -27,7 +27,15 @@ import {
   setLessonProgress,
   getLessonProgress,
   setCourseCurriculum,
-  getAllCourseProgress
+  getAllCourseProgress,
+  listNotes,
+  upsertNote,
+  deleteNote,
+  listBookmarks,
+  upsertBookmark,
+  deleteBookmark,
+  listAllNotes,
+  listAllBookmarks
 } from './services/learningStore.js'
 
 protocol.registerSchemesAsPrivileged([
@@ -334,6 +342,21 @@ function registerIpcHandlers() {
   ipcMain.handle('set-lesson-progress', (_event, { coursePath, ...update }) => {
     return setLessonProgress(coursePath, update)
   })
+
+  ipcMain.handle('list-notes', (_event, coursePath) => listNotes(coursePath))
+  ipcMain.handle('upsert-note', (_event, { coursePath, note }) => upsertNote(coursePath, note))
+  ipcMain.handle('delete-note', (_event, { coursePath, noteId }) =>
+    deleteNote(coursePath, noteId)
+  )
+  ipcMain.handle('list-bookmarks', (_event, coursePath) => listBookmarks(coursePath))
+  ipcMain.handle('upsert-bookmark', (_event, { coursePath, bookmark }) =>
+    upsertBookmark(coursePath, bookmark)
+  )
+  ipcMain.handle('delete-bookmark', (_event, { coursePath, bookmarkId }) =>
+    deleteBookmark(coursePath, bookmarkId)
+  )
+  ipcMain.handle('list-all-notes', () => listAllNotes())
+  ipcMain.handle('list-all-bookmarks', () => listAllBookmarks())
 }
 
 app.whenReady().then(() => {

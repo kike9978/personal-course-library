@@ -220,18 +220,18 @@ Catalog fields to activate over time:
 
 ---
 
-### Phase C — Notes & bookmarks (P1, “fun” core)
+### Phase C — Annotations (P1, “fun” core)
 
 **Outcome:** Sticky reason to use the app daily.
 
-- [ ] Timestamped notes (create at current player time; click seeks)
-- [ ] Markdown body (simple textarea first; preview optional)
-- [ ] Lesson bookmarks + moment bookmarks (label/color optional)
-- [ ] Notes panel in Course Room
-- [ ] Keyboard: `N` note, `B` bookmark, `M` mark complete
-- [ ] Course-level scratchpad / journal (note with `timeSec = null`)
-- [ ] Global Notes page (list + search across courses)
-- [ ] Global Bookmarks page
+- [x] Unified **annotations** (timed marks on video + course-level notes — one model; empty body = pin)
+- [x] Markdown body (simple textarea first; preview optional)
+- [x] Playhead marks for timed annotations; click seeks
+- [x] Annotations panel in Course Room
+- [x] Keyboard: `N` focus composer, `B` quick pin at current time, `M` mark complete
+- [x] Course-level scratchpad / journal (`timeSec = null`)
+- [x] Global Anotaciones page (list + search across courses)
+- [x] One-time migrate legacy bookmarks → notes
 
 **Exit criteria:** User can leave a note at 4:12, find it later from library or Room, and jump back to that moment.
 

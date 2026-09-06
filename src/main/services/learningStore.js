@@ -11,7 +11,7 @@ function getStorePath() {
 
 function emptyStore() {
   return {
-    version: 2,
+    version: 3,
     courses: {}
   }
 }
@@ -23,8 +23,64 @@ function emptyCourseState() {
     lastPositionSec: 0,
     lastOpenedAt: null,
     playableLessons: [],
-    lessons: {}
+    lessons: {},
+    notes: [],
+    bookmarks: []
   }
+}
+
+function makeId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function ensureArrays(course) {
+  if (!Array.isArray(course.notes)) course.notes = []
+  if (!Array.isArray(course.bookmarks)) course.bookmarks = []
+  migrateBookmarksIntoNotes(course)
+  return course
+}
+
+/**
+ * One-time merge: bookmarks become notes (same thing as timed notes with text).
+ */
+function migrateBookmarksIntoNotes(course) {
+  if (course.bookmarksMigrated || !course.bookmarks?.length) {
+    if (!course.bookmarksMigrated && (!course.bookmarks || course.bookmarks.length === 0)) {
+      course.bookmarksMigrated = true
+    }
+    return
+  }
+
+  for (const bm of course.bookmarks) {
+    const body = String(bm.note || bm.label || '').trim()
+    const id = `bm-${bm.id}`
+    if (course.notes.some((n) => n.id === id)) continue
+    // Skip near-duplicates already saved as notes
+    const dup = course.notes.some(
+      (n) =>
+        n.lessonRelativePath === bm.lessonRelativePath &&
+        ((n.timeSec == null && bm.timeSec == null) ||
+          (typeof n.timeSec === 'number' &&
+            typeof bm.timeSec === 'number' &&
+            Math.abs(n.timeSec - bm.timeSec) < 0.5)) &&
+        (n.body || '') === body
+    )
+    if (dup) continue
+
+    course.notes.push({
+      id,
+      body: body || '',
+      lessonRelativePath: bm.lessonRelativePath || null,
+      lessonTitle: bm.lessonTitle || null,
+      timeSec: typeof bm.timeSec === 'number' ? bm.timeSec : null,
+      color: bm.color || null,
+      createdAt: bm.createdAt || Date.now(),
+      updatedAt: bm.updatedAt || bm.createdAt || Date.now()
+    })
+  }
+
+  course.bookmarks = []
+  course.bookmarksMigrated = true
 }
 
 function readStore() {
@@ -65,7 +121,7 @@ function lessonTitleFromPath(relativePath) {
  * Derive summary fields from raw course state.
  */
 export function summarizeCourseState(courseState) {
-  const state = courseState || emptyCourseState()
+  const state = ensureArrays(courseState || emptyCourseState())
   const playable = Array.isArray(state.playableLessons) ? state.playableLessons : []
   const playableCount = playable.length
   const lessonMap = state.lessons || {}
@@ -102,6 +158,10 @@ export function summarizeCourseState(courseState) {
 
   return {
     ...state,
+    notes: state.notes,
+    bookmarks: state.bookmarks,
+    noteCount: state.notes.length,
+    bookmarkCount: 0,
     playableCount,
     completedCount,
     percent,
@@ -237,6 +297,162 @@ export function getAllCourseProgress() {
     out[key] = summarizeCourseState(value)
   }
   return out
+}
+
+function getMutableCourse(store, coursePath) {
+  const key = courseKey(coursePath)
+  const course = ensureArrays(store.courses[key] || emptyCourseState())
+  store.courses[key] = course
+  return { key, course }
+}
+
+export function listNotes(coursePath) {
+  const store = readStore()
+  const key = courseKey(coursePath)
+  const hadMigrated = Boolean(store.courses[key]?.bookmarksMigrated)
+  const course = ensureArrays(store.courses[key] || emptyCourseState())
+  store.courses[key] = course
+  if (!hadMigrated && course.bookmarksMigrated) writeStore(store)
+  return [...course.notes].sort(compareStudyItems)
+}
+
+/**
+ * Sort: by lesson, then by time ascending; course-wide / no-time items last within group.
+ */
+function compareStudyItems(a, b) {
+  const aLesson = a.lessonRelativePath || ''
+  const bLesson = b.lessonRelativePath || ''
+  const aIsCourseWide = !aLesson && (a.timeSec == null || a.timeSec === undefined)
+  const bIsCourseWide = !bLesson && (b.timeSec == null || b.timeSec === undefined)
+
+  // Course-wide notes after everything lesson-scoped
+  if (aIsCourseWide !== bIsCourseWide) return aIsCourseWide ? 1 : -1
+
+  const lessonCmp = String(aLesson).localeCompare(String(bLesson), undefined, {
+    numeric: true,
+    sensitivity: 'base'
+  })
+  if (lessonCmp !== 0) return lessonCmp
+
+  const aHasTime = typeof a.timeSec === 'number'
+  const bHasTime = typeof b.timeSec === 'number'
+  if (aHasTime && bHasTime) return a.timeSec - b.timeSec
+  // Lesson-level pins (no time) after timed marks in the same lesson
+  if (aHasTime && !bHasTime) return -1
+  if (!aHasTime && bHasTime) return 1
+
+  return (a.createdAt || a.updatedAt || 0) - (b.createdAt || b.updatedAt || 0)
+}
+
+/** @deprecated Merged into notes. */
+export function listBookmarks(coursePath) {
+  listNotes(coursePath)
+  return []
+}
+
+/**
+ * @param {string} coursePath
+ * @param {{ id?: string, body?: string, lessonRelativePath?: string|null, lessonTitle?: string|null, timeSec?: number|null, color?: string|null }} payload
+ */
+export function upsertNote(coursePath, payload) {
+  const store = readStore()
+  const { course } = getMutableCourse(store, coursePath)
+  const now = Date.now()
+  // Empty body allowed = pin on timeline / lesson without text yet
+  const body = String(payload.body ?? '').trim()
+
+  if (payload.id) {
+    const idx = course.notes.findIndex((n) => n.id === payload.id)
+    if (idx === -1) throw new Error('Anotación no encontrada')
+    course.notes[idx] = {
+      ...course.notes[idx],
+      body: payload.body !== undefined ? body : course.notes[idx].body,
+      lessonRelativePath:
+        payload.lessonRelativePath !== undefined
+          ? payload.lessonRelativePath
+          : course.notes[idx].lessonRelativePath,
+      lessonTitle:
+        payload.lessonTitle !== undefined ? payload.lessonTitle : course.notes[idx].lessonTitle,
+      timeSec: payload.timeSec !== undefined ? payload.timeSec : course.notes[idx].timeSec,
+      color: payload.color !== undefined ? payload.color : course.notes[idx].color,
+      updatedAt: now
+    }
+  } else {
+    course.notes.push({
+      id: makeId(),
+      body,
+      lessonRelativePath: payload.lessonRelativePath ?? null,
+      lessonTitle: payload.lessonTitle ?? null,
+      timeSec: typeof payload.timeSec === 'number' ? Math.max(0, payload.timeSec) : null,
+      color: payload.color ?? null,
+      createdAt: now,
+      updatedAt: now
+    })
+  }
+
+  writeStore(store)
+  return listNotes(coursePath)
+}
+
+export function deleteNote(coursePath, noteId) {
+  const store = readStore()
+  const { course } = getMutableCourse(store, coursePath)
+  course.notes = course.notes.filter((n) => n.id !== noteId)
+  writeStore(store)
+  return listNotes(coursePath)
+}
+
+/** @deprecated Use upsertNote — bookmarks are notes. */
+export function upsertBookmark(coursePath, payload) {
+  return upsertNote(coursePath, {
+    id: payload.id,
+    body: payload.note || payload.label || '',
+    lessonRelativePath: payload.lessonRelativePath,
+    lessonTitle: payload.lessonTitle,
+    timeSec: payload.timeSec,
+    color: payload.color
+  })
+}
+
+/** @deprecated Use deleteNote. */
+export function deleteBookmark(coursePath, bookmarkId) {
+  return deleteNote(coursePath, bookmarkId)
+}
+
+/**
+ * Flatten notes/bookmarks across all courses for global pages.
+ */
+export function listAllNotes() {
+  const store = readStore()
+  // Ensure migration runs for every course
+  let dirty = false
+  for (const value of Object.values(store.courses || {})) {
+    const before = value.bookmarksMigrated
+    ensureArrays(value)
+    if (!before && value.bookmarksMigrated) dirty = true
+  }
+  if (dirty) writeStore(store)
+
+  const items = []
+  for (const [coursePath, value] of Object.entries(store.courses || {})) {
+    const course = ensureArrays(value)
+    for (const note of course.notes) {
+      items.push({
+        ...note,
+        coursePath
+      })
+    }
+  }
+  return items.sort((a, b) => {
+    const courseCmp = String(a.coursePath || '').localeCompare(String(b.coursePath || ''))
+    if (courseCmp !== 0) return courseCmp
+    return compareStudyItems(a, b)
+  })
+}
+
+/** @deprecated Bookmarks merged into notes; kept for IPC compat. */
+export function listAllBookmarks() {
+  return []
 }
 
 export { COMPLETE_THRESHOLD }

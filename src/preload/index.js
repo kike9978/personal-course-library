@@ -23,6 +23,16 @@ const api = {
     ipcRenderer.invoke('get-lesson-progress', { coursePath, relativePath }),
   setLessonProgress: (coursePath, update) =>
     ipcRenderer.invoke('set-lesson-progress', { coursePath, ...update }),
+  listNotes: (coursePath) => ipcRenderer.invoke('list-notes', coursePath),
+  upsertNote: (coursePath, note) => ipcRenderer.invoke('upsert-note', { coursePath, note }),
+  deleteNote: (coursePath, noteId) => ipcRenderer.invoke('delete-note', { coursePath, noteId }),
+  listBookmarks: (coursePath) => ipcRenderer.invoke('list-bookmarks', coursePath),
+  upsertBookmark: (coursePath, bookmark) =>
+    ipcRenderer.invoke('upsert-bookmark', { coursePath, bookmark }),
+  deleteBookmark: (coursePath, bookmarkId) =>
+    ipcRenderer.invoke('delete-bookmark', { coursePath, bookmarkId }),
+  listAllNotes: () => ipcRenderer.invoke('list-all-notes'),
+  listAllBookmarks: () => ipcRenderer.invoke('list-all-bookmarks'),
   onCourseUpdated: (callback) => {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('course-updated', listener)

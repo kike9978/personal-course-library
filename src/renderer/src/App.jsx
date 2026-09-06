@@ -4,6 +4,7 @@ import CourseCard from './components/CourseCard'
 import CourseEditModal from './components/CourseEditModal'
 import CourseDetailPanel from './components/CourseDetailPanel'
 import CourseRoom from './components/CourseRoom'
+import LibraryStudyView from './components/LibraryStudyView'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
 import { Toaster, toast } from 'react-hot-toast'
@@ -59,6 +60,7 @@ function AppHeader({
   isLoading,
   onRefresh,
   onChangeLibrary,
+  onOpenNotes,
   institutions,
   programs,
   institutionFilter,
@@ -122,6 +124,14 @@ function AppHeader({
             En curso
           </button>
 
+          <button
+            type="button"
+            className="icon-btn icon-btn--ghost"
+            onClick={onOpenNotes}
+            title="Todas las anotaciones"
+          >
+            Anotaciones
+          </button>
           <button
             type="button"
             className="icon-btn"
@@ -221,7 +231,8 @@ function FilterableCoursesGrid({
   isLoading,
   onRefresh,
   onChangeLibrary,
-  onOpenCourse
+  onOpenCourse,
+  onOpenNotes
 }) {
   const [filterText, setFilterText] = useState('')
   const [isCardLayout, setIsCardLayout] = useState(true)
@@ -409,6 +420,7 @@ function FilterableCoursesGrid({
         isLoading={isLoading}
         onRefresh={onRefresh}
         onChangeLibrary={onChangeLibrary}
+        onOpenNotes={onOpenNotes}
         institutions={institutions}
         programs={programs}
         institutionFilter={institutionFilter}
@@ -508,6 +520,8 @@ function App() {
   const [libraryPath, setLibraryPath] = useState(null)
   const [needsSetup, setNeedsSetup] = useState(false)
   const [activeCoursePath, setActiveCoursePath] = useState(null)
+  const [resumeTarget, setResumeTarget] = useState(null)
+  const [libraryStudyMode, setLibraryStudyMode] = useState(null)
   const loadingRef = useRef(false)
 
   const mergeLearning = useCallback(async (list) => {
@@ -647,10 +661,24 @@ function App() {
             loadCourses()
           }}
         />
+      ) : libraryStudyMode ? (
+        <LibraryStudyView
+          courses={courses}
+          onBack={() => setLibraryStudyMode(null)}
+          onOpenCourse={(course, target = null) => {
+            setLibraryStudyMode(null)
+            setResumeTarget(target)
+            setActiveCoursePath(course.path)
+          }}
+        />
       ) : activeCourse ? (
         <CourseRoom
           course={activeCourse}
-          onBack={() => setActiveCoursePath(null)}
+          resumeTarget={resumeTarget}
+          onBack={() => {
+            setActiveCoursePath(null)
+            setResumeTarget(null)
+          }}
           onOpenExplorer={(c) => window.api.openCourseFolder(c.path)}
           onProgressChange={handleLearningProgressChange}
         />
@@ -661,7 +689,11 @@ function App() {
           onRefresh={refreshCourses}
           libraryPath={libraryPath}
           onChangeLibrary={handleChangeLibrary}
-          onOpenCourse={(course) => setActiveCoursePath(course.path)}
+          onOpenNotes={() => setLibraryStudyMode('annotations')}
+          onOpenCourse={(course, target = null) => {
+            setResumeTarget(target)
+            setActiveCoursePath(course.path)
+          }}
         />
       )}
     </ErrorBoundary>
