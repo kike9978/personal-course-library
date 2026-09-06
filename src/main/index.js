@@ -1,71 +1,50 @@
-import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog } from 'electron'
-import { join } from 'path'
-import path from 'path'
+import { app, shell, BrowserWindow, ipcMain, dialog, protocol } from 'electron'
+import { join, extname } from 'path'
+import fs from 'fs'
+import fsPromises from 'fs/promises'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import fs from 'fs'
-import { courseList, basePath, readJSON } from '../scripts/iterateCourseFolder'
+import { getLibraryPath, setLibraryPath, isLibraryPathValid } from './services/config.js'
+import {
+  listCourses,
+  getCourse,
+  updateCourse,
+  updateCourseProperty,
+  getCoverImageUrl,
+  findCoverImagePath,
+  openCourseFolder,
+  clearCourseCache
+} from './services/courses.js'
 
-function setupConsoleRedirection() {
-  const originalConsoleLog = console.log
-  const originalConsoleError = console.error
-  const originalConsoleWarn = console.warn
-  const originalConsoleInfo = console.info
-
-  console.log = (...args) => {
-    originalConsoleLog(...args)
-    logToRenderer('log', ...args)
-  }
-
-  console.error = (...args) => {
-    originalConsoleError(...args)
-    logToRenderer('error', ...args)
-  }
-
-  console.warn = (...args) => {
-    originalConsoleWarn(...args)
-    logToRenderer('warn', ...args)
-  }
-
-  console.info = (...args) => {
-    originalConsoleInfo(...args)
-    logToRenderer('info', ...args)
-  }
-}
-
-function logToRenderer(type, ...args) {
-  const windows = BrowserWindow.getAllWindows()
-  if (windows.length > 0) {
-    const mainWindow = windows[0]
-    try {
-      const safeArgs = args.map((arg) => {
-        if (typeof arg === 'object') {
-          try {
-            return JSON.stringify(arg)
-          } catch (e) {
-            return String(arg)
-          }
-        }
-        return arg
-      })
-      mainWindow.webContents.send('console-message', { type, args: safeArgs })
-    } catch (error) {
-      // Fallback if sending to renderer fails
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'course-media',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true,
+      stream: true
     }
   }
-}
+])
+
+let mainWindow = null
+let libraryWatcher = null
+let watchDebounceTimer = null
 
 function createWindow() {
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+  mainWindow = new BrowserWindow({
+    width: 1100,
+    height: 720,
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
     }
   })
 
@@ -78,8 +57,6 @@ function createWindow() {
     return { action: 'deny' }
   })
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -87,221 +64,186 @@ function createWindow() {
   }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+function notifyLibraryChanged() {
+  clearCourseCache()
+  BrowserWindow.getAllWindows().forEach((win) => {
+    win.webContents.send('library-changed')
+  })
+}
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+function stopLibraryWatcher() {
+  if (libraryWatcher) {
+    libraryWatcher.close()
+    libraryWatcher = null
+  }
+  if (watchDebounceTimer) {
+    clearTimeout(watchDebounceTimer)
+    watchDebounceTimer = null
+  }
+}
+
+function startLibraryWatcher() {
+  stopLibraryWatcher()
+  const libraryPath = getLibraryPath()
+  if (!isLibraryPathValid(libraryPath)) return
+
+  try {
+    libraryWatcher = fs.watch(libraryPath, { recursive: false }, () => {
+      if (watchDebounceTimer) clearTimeout(watchDebounceTimer)
+      watchDebounceTimer = setTimeout(() => {
+        notifyLibraryChanged()
+      }, 500)
+    })
+  } catch (error) {
+    console.warn('Could not watch library folder:', error.message)
+  }
+}
+
+const COVER_MIME = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp',
+  '.ico': 'image/x-icon'
+}
+
+function registerCourseMediaProtocol() {
+  protocol.handle('course-media', async (request) => {
+    try {
+      const url = new URL(request.url)
+      const courseDir = url.searchParams.get('course')
+
+      if (url.hostname !== 'cover' || !courseDir) {
+        return new Response('Not Found', { status: 404 })
+      }
+
+      const imagePath = findCoverImagePath(courseDir)
+      if (!imagePath || !fs.existsSync(imagePath)) {
+        return new Response('Not Found', { status: 404 })
+      }
+
+      // Read bytes directly — more reliable on Windows than net.fetch(file://)
+      const data = await fsPromises.readFile(imagePath)
+      const mime = COVER_MIME[extname(imagePath).toLowerCase()] || 'application/octet-stream'
+      return new Response(data, {
+        headers: {
+          'Content-Type': mime,
+          'Cache-Control': 'public, max-age=3600'
+        }
+      })
+    } catch (error) {
+      console.error('course-media protocol error:', error)
+      return new Response('Error', { status: 500 })
+    }
+  })
+}
+
+function registerIpcHandlers() {
+  ipcMain.handle('get-library-path', () => {
+    const libraryPath = getLibraryPath()
+    return {
+      path: libraryPath,
+      valid: isLibraryPathValid(libraryPath)
+    }
+  })
+
+  ipcMain.handle('set-library-path', (_event, libraryPath) => {
+    const pathSet = setLibraryPath(libraryPath)
+    clearCourseCache()
+    startLibraryWatcher()
+    return { path: pathSet, valid: true }
+  })
+
+  ipcMain.handle('pick-library-folder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select courses library folder',
+      properties: ['openDirectory']
+    })
+
+    if (result.canceled || !result.filePaths[0]) {
+      return { canceled: true }
+    }
+
+    const pathSet = setLibraryPath(result.filePaths[0])
+    clearCourseCache()
+    startLibraryWatcher()
+    return { canceled: false, path: pathSet, valid: true }
+  })
+
+  ipcMain.handle('list-courses', async () => {
+    if (!isLibraryPathValid()) {
+      return []
+    }
+    return listCourses()
+  })
+
+  ipcMain.handle('get-course', async (_event, courseDir) => {
+    return getCourse(courseDir)
+  })
+
+  ipcMain.handle('update-course', async (_event, { coursePath, updates }) => {
+    const data = await updateCourse(coursePath, updates)
+    BrowserWindow.getAllWindows().forEach((win) => {
+      win.webContents.send('course-updated', { coursePath, fullData: data })
+    })
+    return { success: true, data }
+  })
+
+  ipcMain.handle('update-course-property', async (_event, { coursePath, property, value }) => {
+    const data = await updateCourseProperty(coursePath, property, value)
+    BrowserWindow.getAllWindows().forEach((win) => {
+      win.webContents.send('course-updated', {
+        coursePath,
+        property,
+        value,
+        fullData: data
+      })
+    })
+    return { success: true, data }
+  })
+
+  ipcMain.handle('open-course-folder', async (_event, courseDir) => {
+    await openCourseFolder(courseDir)
+    return { success: true }
+  })
+
+  ipcMain.handle('get-cover-image-url', (_event, courseDir) => {
+    return getCoverImageUrl(courseDir)
+  })
+
+  ipcMain.handle('refresh-courses', async () => {
+    clearCourseCache()
+    if (!isLibraryPathValid()) {
+      return []
+    }
+    return listCourses()
+  })
+}
+
+app.whenReady().then(() => {
+  electronApp.setAppUserModelId('com.personal.courselibrary')
+
+  registerCourseMediaProtocol()
+  registerIpcHandlers()
+  startLibraryWatcher()
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
   createWindow()
 
-  app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
+  app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
+  stopLibraryWatcher()
   if (process.platform !== 'darwin') {
     app.quit()
   }
-})
-
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.
-app.on('ready', () => {
-  setupConsoleRedirection()
-
-  ipcMain.handle('getNativeImage', (e, pathToImage) => {
-    try {
-      const image = nativeImage.createFromPath(pathToImage)
-      const imageDataURL = image.toDataURL()
-      return imageDataURL
-    } catch (error) {
-      console.error('Error loading image:', error)
-      return null
-    }
-  })
-
-  ipcMain.handle('findCoverImage', (e, basePath, coursePath) => {
-    const formats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
-
-    for (const format of formats) {
-      const imagePath = path.join(basePath, coursePath, `cover-image.${format}`)
-      try {
-        if (fs.existsSync(imagePath)) {
-          const image = nativeImage.createFromPath(imagePath)
-          return image.toDataURL()
-        }
-      } catch (error) {
-        console.error(`Error checking ${format} image:`, error)
-      }
-    }
-
-    return null // No image found in any format
-  })
-
-  ipcMain.handle('refreshCourseList', async () => {
-    try {
-      // Re-initialize the course list
-      const courses = courseList()
-
-      // Recreate cover images (limit to prevent memory issues)
-      const coursesCoverImages = {}
-      const maxImages = 50 // Limit to prevent excessive memory usage
-
-      for (let i = 0; i < Math.min(courses.length, maxImages); i++) {
-        const course = courses[i]
-        try {
-          // Check for multiple formats
-          const formats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
-          let imageFound = false
-
-          for (const format of formats) {
-            const filePath = path.join(basePath, course, `cover-image.${format}`)
-            if (fs.existsSync(filePath)) {
-              coursesCoverImages[readJSON(course).title] = nativeImage
-                .createFromPath(filePath)
-                .toDataURL()
-              imageFound = true
-              break
-            }
-          }
-
-          if (!imageFound && fs.existsSync(path.join(basePath, course, 'cover-image'))) {
-            // Try without extension
-            coursesCoverImages[readJSON(course).title] = nativeImage
-              .createFromPath(path.join(basePath, course, 'cover-image'))
-              .toDataURL()
-          }
-        } catch (error) {
-          console.error(`Error processing cover image for ${course}: ${error.message}`)
-        }
-      }
-
-      return { courses, coursesCoverImages }
-    } catch (error) {
-      console.error('Error refreshing course list:', error)
-      throw error
-    }
-  })
-
-  ipcMain.on('error-handler', (event, error) => {
-    dialog.showErrorBox(
-      'Application Error',
-      `
-      Message: ${error.message}
-      Stack: ${error.stack}
-    `
-    )
-  })
-
-  ipcMain.on('show-debug-window', () => {
-    const debugWindow = new BrowserWindow({
-      width: 800,
-      height: 600,
-      webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false
-      }
-    })
-
-    debugWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '#debug')
-  })
-
-  // Add a handler for console logs from renderer
-  ipcMain.on('renderer-log', (event, { type, args }) => {
-    switch (type) {
-      case 'log':
-        console.log(...args)
-        break
-      case 'error':
-        console.error(...args)
-        break
-      case 'warn':
-        console.warn(...args)
-        break
-      case 'info':
-        console.info(...args)
-        break
-    }
-  })
-
-  ipcMain.handle('write-course-property', async (event, { coursePath, property, value }) => {
-    try {
-      console.log(`Main process: Updating course property ${property} for ${coursePath}`)
-      console.log(`Main process: Base path: ${basePath}`)
-
-      // Determine if the path is absolute or relative
-      const isAbsolutePath = path.isAbsolute(coursePath)
-      console.log(`Main process: Path is ${isAbsolutePath ? 'absolute' : 'relative'}`)
-
-      // Construct the proper file path
-      let filePath
-      if (isAbsolutePath) {
-        filePath = path.join(coursePath, 'courseProps.json')
-      } else {
-        filePath = path.join(basePath, coursePath, 'courseProps.json')
-      }
-
-      console.log(`Main process: Full file path: ${filePath}`)
-
-      // Check if the file exists
-      if (!fs.existsSync(filePath)) {
-        console.error(`Main process: File does not exist: ${filePath}`)
-        return { success: false, error: 'File does not exist' }
-      }
-
-      // Read the current data
-      let data
-      try {
-        const fileContent = fs.readFileSync(filePath, 'utf8')
-        data = JSON.parse(fileContent)
-      } catch (readErr) {
-        console.error(`Main process: Error reading file:`, readErr)
-        return { success: false, error: readErr.message }
-      }
-
-      // Update the property
-      data[property] = value
-
-      // Write it back
-      try {
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
-        console.log(`Main process: Successfully wrote to file: ${filePath}`)
-
-        // Notify renderer of the update
-        const windows = BrowserWindow.getAllWindows()
-        if (windows.length > 0) {
-          const mainWindow = windows[0]
-          mainWindow.webContents.send('course-updated', {
-            coursePath,
-            property,
-            value,
-            fullData: data
-          })
-        }
-
-        return { success: true }
-      } catch (writeErr) {
-        console.error(`Main process: Error writing file:`, writeErr)
-        return { success: false, error: writeErr.message }
-      }
-    } catch (error) {
-      console.error(`Main process: Error:`, error)
-      return { success: false, error: error.message }
-    }
-  })
 })

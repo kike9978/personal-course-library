@@ -1,6 +1,9 @@
-import { basePath, courseList } from './iterateCourseFolder'
-import fs from 'fs'
-import path from 'path'
+/**
+ * One-shot CLI to generate courseProps.json for each course folder.
+ * Usage: node src/scripts/jsonGenerator.js "/path/to/_All Courses"
+ */
+const fs = require('fs')
+const path = require('path')
 
 const possiblePrograms = [
   'Photoshop',
@@ -14,89 +17,45 @@ const possiblePrograms = [
   'VS Code'
 ]
 
-const institutionList = [
-  '21Draw',
-  'Juice',
-  'AJ & SMART and JAKE KNAPP',
-  'Alive!',
-  'Art Challenge',
-  'Art-Wod',
-  'ArtOfSteveAhn',
-  'ArtStation',
-  'Artstation',
-  'Awwwards',
-  'Building a Second Brain',
-  'CGCookie',
-  'CGMA',
-  'Character Creation in Blender',
-  'Cineversity',
-  'Class101',
-  'Creative Shrimp',
-  'Domestika',
-  'Fireship-io',
-  'Foundation Patreon',
-  'Greyscalegorilla Plus',
-  'Gumroad',
-  'Holdframe + School of Motion',
-  'James Douglas (moderndayjames)',
-  'Learn Squared',
-  'Masterclass',
-  'Meds Map',
-  'MedsMap',
-  'Mograph Mentor',
-  'Motion Design School',
-  'New Master Academy',
-  'Phlearn',
-  'Pluralsight',
-  'Polygon Runway',
-  'Project City',
-  'Proko',
-  'Rad How To Class',
-  'Rad How to Class',
-  'Ross Draws Bootcamp',
-  'School of Motion',
-  'Schoolism',
-  'Second Brain',
-  'SkillShare',
-  'Skillshare',
-  'Stylized Station',
-  'SuperHi',
-  'Test',
-  'The Futur',
-  'The Gnomon Workshop',
-  'Udemy',
-  'Watts Atelier',
-  'Wingfox'
-]
+const libraryPath = process.argv[2]
 
-function addProgramsToObject(extension) {
-  const programsList = []
-  possiblePrograms.forEach((program) => {
-    if (extension.toLowerCase().includes(program.toLowerCase())) {
-      programsList.push(program)
-    }
-  })
-  return programsList
+if (!libraryPath) {
+  console.error('Usage: node src/scripts/jsonGenerator.js "/path/to/courses"')
+  process.exit(1)
 }
 
-courseList().forEach((extension) => {
+if (!fs.existsSync(libraryPath) || !fs.statSync(libraryPath).isDirectory()) {
+  console.error(`Not a directory: ${libraryPath}`)
+  process.exit(1)
+}
+
+function addProgramsToObject(extension) {
+  return possiblePrograms.filter((program) =>
+    extension.toLowerCase().includes(program.toLowerCase())
+  )
+}
+
+const dirs = fs
+  .readdirSync(libraryPath)
+  .filter((name) => fs.statSync(path.join(libraryPath, name)).isDirectory())
+
+dirs.forEach((extension) => {
+  const parts = extension.split(' - ')
   const courseProps = {
-    title: extension.split(' - ')[1].trim(),
+    title: (parts[1] || extension).trim(),
     programs: addProgramsToObject(extension),
     theme: [],
-    institution: extension.split(' - ')[0].trim(),
+    institution: (parts[0] || '').trim(),
     instructor: '',
     isIncomplete: false,
     isInProcess: false,
     rate: 0
   }
-  const jsonString = JSON.stringify(courseProps)
-  const outputPath = path.join(basePath, extension, 'courseProps.json')
-  fs.writeFileSync(outputPath, jsonString, (err) => {
-    if (err) {
-      console.log('Error writing file', err)
-    } else {
-      console.log('Successfully wrote file')
-    }
-  })
+  const outputPath = path.join(libraryPath, extension, 'courseProps.json')
+  if (fs.existsSync(outputPath)) {
+    console.log(`Skip (exists): ${extension}`)
+    return
+  }
+  fs.writeFileSync(outputPath, JSON.stringify(courseProps, null, 2), 'utf8')
+  console.log(`Wrote: ${outputPath}`)
 })

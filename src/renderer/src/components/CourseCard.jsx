@@ -1,169 +1,117 @@
 import { useState, useEffect, useRef } from 'react'
-import coverImage from '../assets/img/coverimage-test.svg'
+import { getInstitutionLogo, getCoverFallback, absoluteAssetUrl } from '../utils/images'
 
-// Import all institution images using a more reliable approach
-const institutionImages = import.meta.glob('/src/assets/img/institutions/*.{png,jpg,jpeg,svg}', {
-  eager: true
-})
+function CourseCard({ course, onOpenModalClick, onError }) {
+  const {
+    path: coursePath,
+    title: courseTitle,
+    institution,
+    programs = [],
+    isInProcess: initialInProcess,
+    hasCover
+  } = course
 
-function CourseCard({
-  courseTitle,
-  institution,
-  programs,
-  coursePath,
-  onOpenModalClick,
-  institutionImgUrl
-}) {
-  const [courseData, setCourseData] = useState(() => window.readJSON(coursePath))
+  const fallbackCover = absoluteAssetUrl(getCoverFallback())
+  const [isInProcess, setIsInProcess] = useState(Boolean(initialInProcess))
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const [institutionImg, setInstitutionImg] = useState(null)
-  const [coverImg, setCoverImg] = useState(window.coursesCoverImages[courseTitle] || coverImage)
+  const [coverImg, setCoverImg] = useState(fallbackCover)
+  const [coverFailed, setCoverFailed] = useState(false)
+  const [institutionImg, setInstitutionImg] = useState(() =>
+    absoluteAssetUrl(getInstitutionLogo(institution))
+  )
   const cardRef = useRef(null)
 
-  const isInProcess = courseData.isInProcess
+  useEffect(() => {
+    setIsInProcess(Boolean(course.isInProcess))
+  }, [course.isInProcess])
 
   useEffect(() => {
-    // Find the institution image
-    const institutionLower = institution ? institution.toLowerCase() : ''
+    setInstitutionImg(absoluteAssetUrl(getInstitutionLogo(institution)))
+  }, [institution])
 
-    // Try to find a matching image
-    let foundImage = null
-
-    // First try exact match with institution name
-    Object.keys(institutionImages).forEach((path) => {
-      const filename = path.split('/').pop().toLowerCase()
-      if (filename.includes(institutionLower)) {
-        foundImage = institutionImages[path].default || institutionImages[path]
-      }
-    })
-
-    // If not found, try with the provided URL
-    if (!foundImage && institutionImgUrl) {
-      const imgName = institutionImgUrl.split('/').pop().toLowerCase()
-      Object.keys(institutionImages).forEach((path) => {
-        if (path.toLowerCase().includes(imgName)) {
-          foundImage = institutionImages[path].default || institutionImages[path]
-        }
-      })
+  useEffect(() => {
+    setCoverFailed(false)
+    if (!hasCover) {
+      setCoverImg(fallbackCover)
+      return undefined
     }
 
-    // If still not found, use default
-    if (!foundImage) {
-      // Try to find a default image
-      Object.keys(institutionImages).forEach((path) => {
-        if (path.toLowerCase().includes('default')) {
-          foundImage = institutionImages[path].default || institutionImages[path]
-        }
-      })
-    }
-
-    setInstitutionImg(foundImage)
-
-    // Lazy load cover image when card comes into view
-    const loadCoverImage = async () => {
-      if (window.coursesCoverImages[courseTitle]) {
-        setCoverImg(window.coursesCoverImages[courseTitle])
-      } else {
-        try {
-          // Use the new loadCoverImage function from preload
-          const coverImageData = await window.fileSystem.loadCoverImage(coursePath)
-          if (coverImageData) {
-            setCoverImg(coverImageData)
-          }
-        } catch (error) {
-          console.error('Error loading cover image:', error)
-        }
-      }
-    }
-
-    // Set up intersection observer for lazy loading
+    let cancelled = false
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          loadCoverImage()
-          observer.disconnect() // Load once
-        }
+        if (!entries[0]?.isIntersecting) return
+        observer.disconnect()
+        window.api
+          .getCoverImageUrl(coursePath)
+          .then((url) => {
+            if (!cancelled && url) setCoverImg(url)
+          })
+          .catch((error) => {
+            console.error('Error loading cover image:', error)
+            if (!cancelled) setCoverImg(fallbackCover)
+            if (onError) onError(error)
+          })
       },
-      { threshold: 0.1 } // Load when 10% visible
+      { threshold: 0.1 }
     )
 
-    if (cardRef.current) {
-      observer.observe(cardRef.current)
-    }
-
-    return () => observer.disconnect()
-
-    // Listen for course updates
-    const handleCourseUpdate = (event, updateData) => {
-      if (updateData.coursePath === coursePath) {
-        setCourseData((prevData) => ({
-          ...prevData,
-          [updateData.property]: updateData.value
-        }))
-      }
-    }
-
-    window.ipcRenderer.on('course-updated', handleCourseUpdate)
+    if (cardRef.current) observer.observe(cardRef.current)
 
     return () => {
-      window.ipcRenderer.removeListener('course-updated', handleCourseUpdate)
+      cancelled = true
+      observer.disconnect()
     }
-  }, [institution, institutionImgUrl, courseTitle, coursePath])
+  }, [coursePath, hasCover, onError, fallbackCover])
+
+  useEffect(() => {
+    const unsubscribe = window.api.onCourseUpdated((update) => {
+      if (update.coursePath === coursePath && update.property === 'isInProcess') {
+        setIsInProcess(Boolean(update.value))
+      }
+    })
+    return unsubscribe
+  }, [coursePath])
 
   const handleCheckboxClick = async (e) => {
     e.preventDefault()
+    e.stopPropagation()
     const newValue = !isInProcess
+    const previous = isInProcess
+    setIsInProcess(newValue)
     try {
-      await window.ipcRenderer.invoke('write-course-property', {
-        coursePath,
-        property: 'isInProcess',
-        value: newValue
-      })
+      const result = await window.api.updateCourseProperty(coursePath, 'isInProcess', newValue)
+      if (!result.success) {
+        setIsInProcess(previous)
+      }
     } catch (error) {
+      setIsInProcess(previous)
       console.error('Error updating isInProcess:', error)
+      if (onError) onError(error)
     }
   }
 
   const handleCardClick = (e) => {
     if (!e.target.closest('.in-progress') && !e.target.closest('.kebab-menu')) {
-      window.openFolder(coursePath)
+      window.api.openCourseFolder(coursePath).catch((error) => {
+        console.error(error)
+        if (onError) onError(error)
+      })
     }
   }
 
   const toggleDropdown = (e) => {
     e.preventDefault()
-    e.stopPropagation() // Stop event propagation to prevent card click
-    setIsDropdownOpen(!isDropdownOpen)
+    e.stopPropagation()
+    setIsDropdownOpen((open) => !open)
   }
 
   const handleEditClick = (e) => {
     e.stopPropagation()
-
     if (typeof onOpenModalClick === 'function') {
-      try {
-        onOpenModalClick(coursePath)
-      } catch (err) {
-        console.error('Error opening edit modal:', err)
-        alert('Error opening edit modal: ' + err.message)
-      }
-    } else {
-      console.error('onOpenModalClick is not a function!', typeof onOpenModalClick)
-      alert('Could not open edit modal: function not available')
+      onOpenModalClick(course)
     }
-
     setIsDropdownOpen(false)
   }
-
-  const programChips = programs.map((program, index) => {
-    return (
-      <div
-        key={`${program}-${index}`}
-        className="badge badge--programs bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded mr-1 mb-1"
-      >
-        <span>{program}</span>
-      </div>
-    )
-  })
 
   return (
     <article
@@ -171,9 +119,18 @@ function CourseCard({
       onClick={handleCardClick}
       className="course-card p-4 border rounded-lg shadow-md hover:shadow-lg transition"
     >
-      <img src={coverImg} alt="course thumbnail" className="w-full h-32 object-cover rounded-md" />
+      <img
+        src={coverFailed ? fallbackCover : coverImg}
+        alt=""
+        className="w-full h-32 object-cover rounded-md"
+        onError={() => {
+          setCoverFailed(true)
+          setCoverImg(fallbackCover)
+        }}
+      />
       <div className="kebab-menu relative">
         <button
+          type="button"
           className="kebab-button p-2 rounded-full hover:bg-gray-200"
           onClick={toggleDropdown}
         >
@@ -186,6 +143,7 @@ function CourseCard({
         {isDropdownOpen && (
           <div className="dropdown-menu absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-md shadow-lg z-10">
             <button
+              type="button"
               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
               onClick={handleEditClick}
             >
@@ -196,27 +154,39 @@ function CourseCard({
       </div>
       <div className="course-info mt-2">
         <div className="course-header flex items-center justify-between">
-          <h3 className="text-lg font-semibold">{courseTitle && courseTitle}</h3>
+          <h3 className="text-lg font-semibold">{courseTitle}</h3>
           {institutionImg && (
             <img
               className="institution-logo h-8 w-8 rounded-full object-contain"
               src={institutionImg}
-              alt={`${institution} logo`}
+              alt=""
               title={institution}
               onError={(e) => {
-                e.target.style.display = 'none'
+                const fallback = absoluteAssetUrl(getInstitutionLogo(null))
+                if (fallback && e.currentTarget.src !== fallback) {
+                  e.currentTarget.src = absoluteAssetUrl(fallback)
+                } else {
+                  e.currentTarget.style.display = 'none'
+                }
               }}
             />
           )}
         </div>
-        <div className="chips-container flex flex-wrap mt-2">{programChips}</div>
+        <div className="chips-container flex flex-wrap mt-2">
+          {programs.map((program, index) => (
+            <div
+              key={`${program}-${index}`}
+              className="badge badge--programs bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded mr-1 mb-1"
+            >
+              <span>{program}</span>
+            </div>
+          ))}
+        </div>
         <label className="in-progress flex items-center mt-2">
           <input
             type="checkbox"
             checked={isInProcess}
-            onChange={(e) => {
-              handleCheckboxClick(e)
-            }}
+            onChange={handleCheckboxClick}
             className="mr-2"
           />{' '}
           En curso

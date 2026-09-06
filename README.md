@@ -1,34 +1,23 @@
 # personal-course-library
 
-An Electron application with React
+Local Electron + React catalog for courses stored on disk.
 
-## Recommended IDE Setup
-
-- [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
-
-## Project Setup
-
-### Install
+## Setup
 
 ```bash
-$ npm install
+bun install
+bun run dev
 ```
 
-### Development
+On first launch, choose the folder that contains your course directories. The path is saved in the app userData config and works across Windows, macOS, and Linux.
+
+## Scripts
 
 ```bash
-$ npm run dev
-```
-
-### Build
-
-```bash
-# For windows
-$ npm run build:win
-
-# For macOS
-$ npm run build:mac
-
-# For Linux
-$ npm run build:linux
+bun run dev          # development
+bun run build        # compile
+bun run build:win    # Windows installer
+bun run build:mac    # macOS build
+bun run build:linux  # Linux build
+bun run generate:json -- "/path/to/courses"  # create missing courseProps.json files
 ```

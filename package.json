@@ -1,10 +1,10 @@
 {
   "name": "personal-course-library",
   "version": "1.0.0",
-  "description": "An Electron application with React",
+  "description": "Local personal course library catalog",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://www.electronjs.org",
+  "author": "personal-course-library",
+  "homepage": "https://github.com/personal-course-library",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
@@ -14,26 +14,26 @@
     "postinstall": "electron-builder install-app-deps",
     "build:win": "npm run build && electron-builder --win --config",
     "build:mac": "npm run build && electron-builder --mac --config",
-    "build:linux": "npm run build && electron-builder --linux --config"
+    "build:linux": "npm run build && electron-builder --linux --config",
+    "generate:json": "node src/scripts/jsonGenerator.js"
   },
   "dependencies": {
-    "@electron-toolkit/preload": "^2.0.0",
-    "@electron-toolkit/utils": "^2.0.0",
-    "electron-updater": "^6.1.1",
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
     "react-hot-toast": "^2.5.2"
   },
   "devDependencies": {
-    "@electron-toolkit/eslint-config": "^1.0.1",
-    "@electron-toolkit/eslint-config-prettier": "^1.0.1",
-    "@vitejs/plugin-react": "^4.0.4",
-    "electron": "^25.6.0",
-    "electron-builder": "^24.6.3",
-    "electron-vite": "^1.0.28",
-    "eslint": "^8.47.0",
-    "eslint-plugin-react": "^7.33.2",
-    "prettier": "^3.0.2",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "vite": "^4.4.9"
+    "@electron-toolkit/eslint-config": "^1.0.2",
+    "@electron-toolkit/eslint-config-prettier": "^2.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react": "^7.37.2",
+    "prettier": "^3.4.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.11"
   }
 }

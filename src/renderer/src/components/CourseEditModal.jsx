@@ -1,67 +1,30 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 
-function CourseEditModal({ path, courseTitle, programsList, onCourseUpdated, onClose }) {
+function CourseEditModal({ course, onCourseUpdated, onClose }) {
   const dialogRef = useRef(null)
-  const [instructor, setInstructor] = useState('')
-  const [institution, setInstitution] = useState('')
-  const [localCourseTitle, setLocalCourseTitle] = useState('')
-  const [localProgramsList, setLocalProgramsList] = useState([])
+  const [instructor, setInstructor] = useState(course.instructor || '')
+  const [institution, setInstitution] = useState(course.institution || '')
+  const [localCourseTitle, setLocalCourseTitle] = useState(course.title || '')
+  const [localProgramsList, setLocalProgramsList] = useState(course.programs || [])
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    // Set local state from props
-    setLocalCourseTitle(courseTitle || '')
-    setLocalProgramsList(programsList || [])
+    setLocalCourseTitle(course.title || '')
+    setLocalProgramsList(course.programs || [])
+    setInstructor(course.instructor || '')
+    setInstitution(course.institution || '')
 
-    // Load additional data if path exists
-    if (path) {
-      try {
-        const courseData = window.readJSON(path)
-        setInstructor(courseData.instructor || '')
-        setInstitution(courseData.institution || '')
-      } catch (err) {
-        console.error('Error loading course data:', err)
-        toast.error('Error loading course data')
-      }
-    }
-
-    // Show the modal
-    if (dialogRef.current) {
+    if (dialogRef.current && !dialogRef.current.open) {
       dialogRef.current.showModal()
     }
-  }, [path, courseTitle, programsList])
+  }, [course])
 
   const handleClose = () => {
     if (dialogRef.current) {
       dialogRef.current.close()
     }
-    if (onClose) {
-      onClose()
-    }
-  }
-
-  const updateCourseProperty = async (property, value) => {
-    try {
-      if (!window.electron || !window.electron.ipcRenderer) {
-        throw new Error('IPC not available')
-      }
-
-      const result = await window.electron.ipcRenderer.invoke('write-course-property', {
-        coursePath: path,
-        property,
-        value
-      })
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to update property')
-      }
-
-      return true
-    } catch (err) {
-      console.error(`Error updating ${property}:`, err)
-      throw err
-    }
+    if (onClose) onClose()
   }
 
   const handleSaveAll = async () => {
@@ -69,47 +32,45 @@ function CourseEditModal({ path, courseTitle, programsList, onCourseUpdated, onC
 
     setIsSaving(true)
     try {
-      // Prepare programs array
       const programsArray =
         typeof localProgramsList === 'string'
           ? localProgramsList
-            .split(',')
-            .map((p) => p.trim())
-            .filter((p) => p)
+              .split(',')
+              .map((p) => p.trim())
+              .filter(Boolean)
           : localProgramsList
 
-      // Update all properties
-      await updateCourseProperty('title', localCourseTitle)
-      await updateCourseProperty('programs', programsArray)
-      await updateCourseProperty('instructor', instructor)
-      await updateCourseProperty('institution', institution)
-
-      // Show success toast
-      toast.success('Course details updated successfully!')
-
-      // Notify parent component that course was updated
-      if (onCourseUpdated) {
-        onCourseUpdated(path, {
-          title: localCourseTitle,
-          programs: programsArray,
-          instructor,
-          institution
-        })
+      const updates = {
+        title: localCourseTitle,
+        programs: programsArray,
+        instructor,
+        institution
       }
 
-      // Close the modal
+      const result = await window.api.updateCourse(course.path, updates)
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update course')
+      }
+
+      toast.success('Course details updated successfully!')
+      if (onCourseUpdated) {
+        onCourseUpdated(course.path, result.data)
+      }
       handleClose()
     } catch (err) {
       console.error('Error saving course details:', err)
-      toast.error('Failed to update course details')
+      toast.error(err.message || 'Failed to update course details')
     } finally {
       setIsSaving(false)
     }
   }
 
-
   return (
-    <dialog ref={dialogRef} className="dialog bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+    <dialog
+      ref={dialogRef}
+      className="dialog bg-white p-6 rounded-lg shadow-xl max-w-md w-full"
+      onClose={onClose}
+    >
       <h3 className="text-xl font-bold mb-4 text-gray-800">Editar propiedades de curso</h3>
 
       <div className="space-y-4">
@@ -156,12 +117,14 @@ function CourseEditModal({ path, courseTitle, programsList, onCourseUpdated, onC
 
         <div className="flex justify-end space-x-2 pt-4">
           <button
+            type="button"
             onClick={handleClose}
             className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
           >
             Cancelar
           </button>
           <button
+            type="button"
             onClick={handleSaveAll}
             disabled={isSaving}
             className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"

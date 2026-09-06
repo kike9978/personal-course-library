@@ -1,59 +1,45 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
 import CoursesGrid from './components/CoursesGrid'
-import { useState, useEffect } from 'react'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
-import { Toaster } from 'react-hot-toast'
+import { Toaster, toast } from 'react-hot-toast'
 
-// function getNativeImageData(pathToImage) {
-//   return ipcRenderer.invoke("getNativeImage", pathToImage);
-// }
-
-function FilterableCoursesGrid({ courses = [], isLoading, onRefresh }) {
-  const [filterText, setFilterText] = useState('')
-  const [isCardLayout, setIsCardLayout] = useState(true)
-  const [isInProcessOnly, setisInProcessOnly] = useState(false)
-  const [courseCount, setCourseCount] = useState(courses.length || 0)
-
-  // Add useEffect to handle course list changes
+function useDebouncedValue(value, delay = 200) {
+  const [debounced, setDebounced] = useState(value)
   useEffect(() => {
-    setCourseCount(courses.length || 0)
-  }, [courses])
-
-  return (
-    <div>
-      <SearchBar
-        filterText={filterText}
-        onFilterTextChange={setFilterText}
-        onCardLayoutChange={setIsCardLayout}
-        onInProcessOnlyChange={setisInProcessOnly}
-        isCardLayout={isCardLayout}
-        isInProcessOnly={isInProcessOnly}
-        courseCount={courseCount}
-        onRefresh={onRefresh}
-        isLoading={isLoading}
-      />
-      {isLoading ? (
-        <div className="loader-container">
-          <Loader />
-        </div>
-      ) : (
-        <CoursesGrid
-          courses={courses}
-          filterText={filterText}
-          isCardLayout={isCardLayout}
-          isInProcessOnly={isInProcessOnly}
-          onSortedCourses={setCourseCount}
-        />
-      )}
-    </div>
-  )
+    const id = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(id)
+  }, [value, delay])
+  return debounced
 }
 
-// Add prop validation
-FilterableCoursesGrid.defaultProps = {
-  courses: [],
-  isLoading: false,
-  onRefresh: () => { }
+function LibrarySetup({ onPathSet }) {
+  const [isPicking, setIsPicking] = useState(false)
+
+  const handlePick = async () => {
+    setIsPicking(true)
+    try {
+      const result = await window.api.pickLibraryFolder()
+      if (!result.canceled && result.valid) {
+        toast.success('Library folder selected')
+        onPathSet(result.path)
+      }
+    } catch (error) {
+      toast.error(error.message || 'Could not set library folder')
+    } finally {
+      setIsPicking(false)
+    }
+  }
+
+  return (
+    <div className="library-setup">
+      <h1>Personal Course Library</h1>
+      <p>Select the folder that contains your courses to get started.</p>
+      <button type="button" onClick={handlePick} disabled={isPicking}>
+        {isPicking ? 'Opening…' : 'Choose library folder'}
+      </button>
+    </div>
+  )
 }
 
 function SearchBar({
@@ -64,16 +50,42 @@ function SearchBar({
   isInProcessOnly,
   onInProcessOnlyChange,
   courseCount,
-
-  isLoading
+  isLoading,
+  onRefresh,
+  libraryPath,
+  onChangeLibrary
 }) {
   return (
     <div className="navbar bg-white shadow-lg p-4">
       <div className="navbar-header flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">Catálogo de cursos</h1>
+        <div className="navbar-actions">
+          <button
+            type="button"
+            className="nav-btn"
+            onClick={onRefresh}
+            disabled={isLoading}
+            title="Refresh courses (Ctrl+R)"
+          >
+            {isLoading ? 'Refreshing…' : 'Refresh'}
+          </button>
+          <button
+            type="button"
+            className="nav-btn"
+            onClick={onChangeLibrary}
+            title={libraryPath || ''}
+          >
+            Change folder
+          </button>
+        </div>
       </div>
+      {libraryPath && (
+        <p className="library-path" title={libraryPath}>
+          {libraryPath}
+        </p>
+      )}
       <div className="navbar-filters mt-4">
-        <form className="flex items-center">
+        <form className="flex items-center" onSubmit={(e) => e.preventDefault()}>
           <input
             type="text"
             value={filterText}
@@ -106,66 +118,168 @@ function SearchBar({
   )
 }
 
+function FilterableCoursesGrid({ courses, isLoading, onRefresh, libraryPath, onChangeLibrary }) {
+  const [filterText, setFilterText] = useState('')
+  const [isCardLayout, setIsCardLayout] = useState(true)
+  const [isInProcessOnly, setIsInProcessOnly] = useState(false)
+  const debouncedFilter = useDebouncedValue(filterText, 200)
+
+  const filteredCourses = courses.filter((course) => {
+    if (course.error) return false
+    const searchLower = debouncedFilter.toLowerCase()
+    const title = (course.title || '').toLowerCase()
+    const institution = (course.institution || '').toLowerCase()
+    const matchesText =
+      !searchLower || title.includes(searchLower) || institution.includes(searchLower)
+    const processCheck = !isInProcessOnly || course.isInProcess
+    return matchesText && processCheck
+  })
+
+  const sortedCourses = [...filteredCourses].sort((a, b) =>
+    (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' })
+  )
+
+  return (
+    <div>
+      <SearchBar
+        filterText={filterText}
+        onFilterTextChange={setFilterText}
+        onCardLayoutChange={setIsCardLayout}
+        onInProcessOnlyChange={setIsInProcessOnly}
+        isCardLayout={isCardLayout}
+        isInProcessOnly={isInProcessOnly}
+        courseCount={sortedCourses.length}
+        onRefresh={onRefresh}
+        isLoading={isLoading}
+        libraryPath={libraryPath}
+        onChangeLibrary={onChangeLibrary}
+      />
+      {isLoading && courses.length === 0 ? (
+        <div className="loader-container">
+          <Loader />
+        </div>
+      ) : (
+        <CoursesGrid courses={sortedCourses} isCardLayout={isCardLayout} />
+      )}
+    </div>
+  )
+}
+
 function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [courses, setCourses] = useState([])
+  const [libraryPath, setLibraryPath] = useState(null)
+  const [needsSetup, setNeedsSetup] = useState(false)
+  const loadingRef = useRef(false)
 
-  const refreshCourses = async () => {
+  const loadCourses = useCallback(async () => {
+    if (loadingRef.current) return
+    loadingRef.current = true
     setIsLoading(true)
     try {
-      // Use the IPC to refresh course list
-      const result = await window.ipcRenderer.invoke('refreshCourseList')
-
-      // Update the global coursesCoverImages
-      window.coursesCoverImages = result.coursesCoverImages
-
-      // Update courses state
-      setCourses(result.courses)
-
-      console.log('Courses refreshed successfully')
+      const lib = await window.api.getLibraryPath()
+      if (!lib.valid) {
+        setNeedsSetup(true)
+        setLibraryPath(null)
+        setCourses([])
+        return
+      }
+      setNeedsSetup(false)
+      setLibraryPath(lib.path)
+      const list = await window.api.listCourses()
+      setCourses(list)
     } catch (error) {
-      console.error('Error refreshing courses:', error)
+      console.error('Error loading courses:', error)
+      toast.error(error.message || 'Failed to load courses')
+      setCourses([])
     } finally {
       setIsLoading(false)
+      loadingRef.current = false
     }
-  }
+  }, [])
+
+  const refreshCourses = useCallback(async () => {
+    if (loadingRef.current) return
+    loadingRef.current = true
+    setIsLoading(true)
+    try {
+      const list = await window.api.refreshCourses()
+      setCourses(list)
+      toast.success('Courses refreshed')
+    } catch (error) {
+      console.error('Error refreshing courses:', error)
+      toast.error(error.message || 'Failed to refresh')
+    } finally {
+      setIsLoading(false)
+      loadingRef.current = false
+    }
+  }, [])
+
+  const handleChangeLibrary = useCallback(async () => {
+    try {
+      const result = await window.api.pickLibraryFolder()
+      if (!result.canceled && result.valid) {
+        setLibraryPath(result.path)
+        setNeedsSetup(false)
+        await loadCourses()
+        toast.success('Library folder updated')
+      }
+    } catch (error) {
+      toast.error(error.message || 'Could not change library folder')
+    }
+  }, [loadCourses])
 
   useEffect(() => {
-    // Initial load
-    const loadData = async () => {
-      try {
-        // Get courses from window.courseList
-        const courseList = window.courseList || []
+    loadCourses()
 
-        // Artificial delay to ensure UI components are ready
-        setTimeout(() => {
-          setCourses(courseList)
-          setIsLoading(false)
-        }, 1000)
-      } catch (error) {
-        console.error('Error loading courses:', error)
-        setIsLoading(false)
-      }
-    }
+    const unsubscribeUpdated = window.api.onCourseUpdated((update) => {
+      setCourses((prev) =>
+        prev.map((course) =>
+          course.path === update.coursePath ? { ...course, ...update.fullData } : course
+        )
+      )
+    })
 
-    loadData()
+    const unsubscribeLibrary = window.api.onLibraryChanged(() => {
+      loadCourses()
+    })
 
     const handleKeyDown = (e) => {
-      if (e.ctrlKey && e.key === 'r') {
-        // Add keyboard shortcut for refresh
+      if (e.ctrlKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault()
         refreshCourses()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+    return () => {
+      unsubscribeUpdated()
+      unsubscribeLibrary()
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [loadCourses, refreshCourses])
 
   return (
     <ErrorBoundary>
       <div className="container">
         <Toaster position="top-right" />
-        <FilterableCoursesGrid courses={courses} isLoading={isLoading} onRefresh={refreshCourses} />
+        {needsSetup ? (
+          <LibrarySetup
+            onPathSet={(path) => {
+              setLibraryPath(path)
+              setNeedsSetup(false)
+              loadCourses()
+            }}
+          />
+        ) : (
+          <FilterableCoursesGrid
+            courses={courses}
+            isLoading={isLoading}
+            onRefresh={refreshCourses}
+            libraryPath={libraryPath}
+            onChangeLibrary={handleChangeLibrary}
+          />
+        )}
       </div>
     </ErrorBoundary>
   )

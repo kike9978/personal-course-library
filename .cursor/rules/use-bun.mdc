@@ -1,0 +1,14 @@
+---
+description: Use Bun as the package manager and script runner for this project
+alwaysApply: true
+---
+
+# Package manager: Bun
+
+This project uses **Bun**, not npm or yarn.
+
+- Install deps with `bun install`
+- Run scripts with `bun run <script>` (e.g. `bun run dev`, `bun run build`)
+- Add packages with `bun add` / `bun add -d`
+- Prefer `bun.lock` over `package-lock.json`; do not regenerate or rely on npm lockfiles when Bun is available
+- In docs and agent commands for this repo, use Bun by default
