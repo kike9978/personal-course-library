@@ -14,12 +14,17 @@ import {
   getCoverImageUrl,
   findCoverImagePath,
   openCourseFolder,
+  openCourseFile,
+  revealCourseFile,
+  openAbsolutePath,
+  revealAbsolutePath,
   clearCourseCache
 } from './services/courses.js'
 import {
   scanCourse,
   resolveCourseFile,
-  getLessonMime
+  getLessonMime,
+  srtToWebVtt
 } from './services/courseScan.js'
 import { getLessonMediaUrl } from './services/mediaUrls.js'
 import {
@@ -35,7 +40,12 @@ import {
   upsertBookmark,
   deleteBookmark,
   listAllNotes,
-  listAllBookmarks
+  listAllBookmarks,
+  listProjects,
+  listAllProjects,
+  upsertProject,
+  deleteProject,
+  getProjectLinkedPath
 } from './services/learningStore.js'
 
 protocol.registerSchemesAsPrivileged([
@@ -213,6 +223,19 @@ function registerCourseMediaProtocol() {
         if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
           return new Response('Not Found', { status: 404 })
         }
+        const ext = extname(absolute).toLowerCase()
+        // Serve SRT as WebVTT so <track> works in the player
+        if (ext === '.srt') {
+          const raw = await fsPromises.readFile(absolute, 'utf8')
+          const vtt = srtToWebVtt(raw)
+          return new Response(vtt, {
+            status: 200,
+            headers: {
+              'Content-Type': 'text/vtt; charset=utf-8',
+              'Cache-Control': 'no-cache'
+            }
+          })
+        }
         const mime = getLessonMime(absolute)
         return serveFileWithRanges(request, absolute, mime)
       }
@@ -296,6 +319,16 @@ function registerIpcHandlers() {
     return { success: true }
   })
 
+  ipcMain.handle('open-course-file', async (_event, { coursePath, relativePath }) => {
+    await openCourseFile(coursePath, relativePath)
+    return { success: true }
+  })
+
+  ipcMain.handle('reveal-course-file', async (_event, { coursePath, relativePath }) => {
+    await revealCourseFile(coursePath, relativePath)
+    return { success: true }
+  })
+
   ipcMain.handle('get-cover-image-url', (_event, courseDir) => {
     return getCoverImageUrl(courseDir)
   })
@@ -357,6 +390,38 @@ function registerIpcHandlers() {
   )
   ipcMain.handle('list-all-notes', () => listAllNotes())
   ipcMain.handle('list-all-bookmarks', () => listAllBookmarks())
+
+  ipcMain.handle('list-projects', (_event, coursePath) => listProjects(coursePath))
+  ipcMain.handle('list-all-projects', () => listAllProjects())
+  ipcMain.handle('upsert-project', (_event, { coursePath, project }) =>
+    upsertProject(coursePath, project)
+  )
+  ipcMain.handle('delete-project', (_event, { coursePath, projectId }) =>
+    deleteProject(coursePath, projectId)
+  )
+
+  ipcMain.handle('pick-project-folder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Vincular carpeta del proyecto',
+      properties: ['openDirectory']
+    })
+    if (result.canceled || !result.filePaths[0]) {
+      return { canceled: true }
+    }
+    return { canceled: false, path: result.filePaths[0] }
+  })
+
+  ipcMain.handle('open-project-link', async (_event, { coursePath, projectId }) => {
+    const linked = getProjectLinkedPath(coursePath, projectId)
+    await openAbsolutePath(linked)
+    return { success: true }
+  })
+
+  ipcMain.handle('reveal-project-link', async (_event, { coursePath, projectId }) => {
+    const linked = getProjectLinkedPath(coursePath, projectId)
+    revealAbsolutePath(linked)
+    return { success: true }
+  })
 }
 
 app.whenReady().then(() => {

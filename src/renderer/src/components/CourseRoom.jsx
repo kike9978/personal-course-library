@@ -2,8 +2,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import LessonTree, { flattenLessons } from './LessonTree'
 import LessonPlayer from './LessonPlayer'
+import ResourceViewer from './ResourceViewer'
+import ProjectPanel from './ProjectPanel'
 import StudySidePanel from './StudySidePanel'
+import CourseAnnotationsView from './CourseAnnotationsView'
 import Loader from './Loader'
+
+function collectAllResources(tree) {
+  if (!tree) return []
+  const list = [...(tree.courseResources || [])]
+  for (const section of tree.sections || []) {
+    list.push(...(section.resources || []))
+    for (const lesson of section.lessons || []) {
+      list.push(...(lesson.resources || []))
+    }
+  }
+  return list
+}
 
 function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTarget = null }) {
   const coursePath = course.path
@@ -12,8 +27,16 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedPath, setSelectedPath] = useState(null)
+  const [selectedResourcePath, setSelectedResourcePath] = useState(null)
+  const [selectedProjectId, setSelectedProjectId] = useState(null)
+  const [creatingProject, setCreatingProject] = useState(false)
+  const [projects, setProjects] = useState([])
+  const [panelMode, setPanelMode] = useState('lesson') // 'lesson' | 'resource' | 'project'
+  const [studyOpen, setStudyOpen] = useState(false)
+  const [showCourseAnnotations, setShowCourseAnnotations] = useState(false)
   const [annotations, setAnnotations] = useState([])
-  const [draft, setDraft] = useState('')
+  const [draft, setDraft] = useState({ text: '', html: '', json: null })
+  const [editorKey, setEditorKey] = useState(0)
   const [editingId, setEditingId] = useState(null)
   const [noteScope, setNoteScope] = useState('moment')
   const [currentTimeSec, setCurrentTimeSec] = useState(0)
@@ -38,6 +61,17 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
     }
   }, [coursePath])
 
+  const refreshProjects = useCallback(async () => {
+    try {
+      const list = await window.api.listProjects(coursePath)
+      setProjects(list || [])
+      return list || []
+    } catch (err) {
+      console.error(err)
+      return []
+    }
+  }, [coursePath])
+
   const load = useCallback(
     async (force = false) => {
       setLoading(true)
@@ -49,21 +83,47 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
         ])
         setTree(scanned)
         applyProgress(courseProgress)
-        await refreshStudy()
+        const [, projectList] = await Promise.all([refreshStudy(), refreshProjects()])
 
         const flat = flattenLessons(scanned.sections)
-        const resumeLesson = resumeTarget?.lessonRelativePath
-        const last = resumeLesson || courseProgress?.lastLessonRelativePath
-        const lastExists = flat.some((l) => l.relativePath === last)
-        if (lastExists) {
-          setSelectedPath(last)
-          if (resumeTarget && typeof resumeTarget.timeSec === 'number') {
-            setPendingSeek(resumeTarget.timeSec)
-          }
-        } else if (flat[0]) {
-          setSelectedPath(flat[0].relativePath)
-        } else {
+        const resources = collectAllResources(scanned)
+        const resumeProjectId = resumeTarget?.projectId
+        const resumeProject =
+          resumeProjectId && Array.isArray(projectList)
+            ? projectList.find((p) => p.id === resumeProjectId)
+            : null
+
+        setCreatingProject(false)
+        if (resumeProject) {
+          setSelectedProjectId(resumeProject.id)
           setSelectedPath(null)
+          setSelectedResourcePath(null)
+          setPanelMode('project')
+        } else {
+          setSelectedProjectId(null)
+          const resumeLesson = resumeTarget?.lessonRelativePath
+          const last = resumeLesson || courseProgress?.lastLessonRelativePath
+          const lastExists = flat.some((l) => l.relativePath === last)
+          if (lastExists) {
+            setSelectedPath(last)
+            setSelectedResourcePath(null)
+            setPanelMode('lesson')
+            if (resumeTarget && typeof resumeTarget.timeSec === 'number') {
+              setPendingSeek(resumeTarget.timeSec)
+            }
+          } else if (flat[0]) {
+            setSelectedPath(flat[0].relativePath)
+            setSelectedResourcePath(null)
+            setPanelMode('lesson')
+          } else if (resources[0]) {
+            setSelectedPath(null)
+            setSelectedResourcePath(resources[0].relativePath)
+            setPanelMode('resource')
+          } else {
+            setSelectedPath(null)
+            setSelectedResourcePath(null)
+            setPanelMode('lesson')
+          }
         }
       } catch (err) {
         console.error(err)
@@ -73,7 +133,7 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
         setLoading(false)
       }
     },
-    [coursePath, applyProgress, refreshStudy, resumeTarget]
+    [coursePath, applyProgress, refreshStudy, refreshProjects, resumeTarget]
   )
 
   useEffect(() => {
@@ -87,6 +147,20 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
     if (!selectedPath) return null
     return flatLessons.find((l) => l.relativePath === selectedPath) || null
   }, [flatLessons, selectedPath])
+
+  const selectedResource = useMemo(() => {
+    if (!selectedResourcePath || !tree) return null
+    return collectAllResources(tree).find((r) => r.relativePath === selectedResourcePath) || null
+  }, [tree, selectedResourcePath])
+
+  const selectedProject = useMemo(() => {
+    if (creatingProject) return null
+    if (!selectedProjectId) return null
+    return projects.find((p) => p.id === selectedProjectId) || null
+  }, [projects, selectedProjectId, creatingProject])
+
+  const treeHighlightPath =
+    panelMode === 'resource' ? selectedResourcePath : selectedPath
 
   const selectedIndex = useMemo(() => {
     if (!selectedPath) return -1
@@ -117,6 +191,47 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
 
   const handleSelectLesson = (lesson) => {
     setSelectedPath(lesson.relativePath)
+    setSelectedResourcePath(null)
+    setSelectedProjectId(null)
+    setCreatingProject(false)
+    setPanelMode('lesson')
+  }
+
+  const handleSelectResource = (resource) => {
+    setSelectedResourcePath(resource.relativePath)
+    setSelectedProjectId(null)
+    setCreatingProject(false)
+    setPanelMode('resource')
+  }
+
+  const handleSelectProject = (project) => {
+    setSelectedProjectId(project.id)
+    setCreatingProject(false)
+    setPanelMode('project')
+  }
+
+  const handleAddProject = () => {
+    setSelectedProjectId(null)
+    setCreatingProject(true)
+    setPanelMode('project')
+  }
+
+  const handleProjectsSaved = (list, saved) => {
+    setProjects(list || [])
+    setCreatingProject(false)
+    if (saved?.id) {
+      setSelectedProjectId(saved.id)
+      setPanelMode('project')
+    }
+  }
+
+  const handleProjectDeleted = (list) => {
+    setProjects(list || [])
+    setSelectedProjectId(null)
+    setCreatingProject(false)
+    if (selectedPath) setPanelMode('lesson')
+    else if (selectedResourcePath) setPanelMode('resource')
+    else setPanelMode('lesson')
   }
 
   const handleProgress = useCallback(
@@ -166,6 +281,10 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
   const jumpTo = useCallback(
     (item) => {
       if (!item?.lessonRelativePath) return
+      setPanelMode('lesson')
+      setSelectedResourcePath(null)
+      setSelectedProjectId(null)
+      setCreatingProject(false)
       if (item.lessonRelativePath !== selectedPath) {
         setSelectedPath(item.lessonRelativePath)
         if (typeof item.timeSec === 'number') {
@@ -180,11 +299,33 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
     [selectedPath]
   )
 
+  const clearDraft = () => {
+    setDraft({ text: '', html: '', json: null })
+    setEditingId(null)
+    setEditorKey((k) => k + 1)
+  }
+
+  const loadDraftForEdit = (item) => {
+    setEditingId(item.id)
+    setDraft({
+      text: item.body || '',
+      html: item.bodyHtml || '',
+      json: item.bodyJson || null
+    })
+    setEditorKey((k) => k + 1)
+    setNoteScope(typeof item.timeSec === 'number' ? 'moment' : 'course')
+  }
+
   const saveNote = async () => {
-    const body = draft.trim()
+    const body = (draft.text || '').trim()
     try {
       if (editingId) {
-        const list = await window.api.upsertNote(coursePath, { id: editingId, body })
+        const list = await window.api.upsertNote(coursePath, {
+          id: editingId,
+          body,
+          bodyHtml: draft.html || null,
+          bodyJson: draft.json || null
+        })
         setAnnotations(list)
       } else if (noteScope === 'moment') {
         if (!selectedLesson) {
@@ -197,6 +338,8 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
         }
         const list = await window.api.upsertNote(coursePath, {
           body,
+          bodyHtml: draft.html || null,
+          bodyJson: draft.json || null,
           lessonRelativePath: selectedLesson.relativePath,
           lessonTitle: selectedLesson.title,
           timeSec: playerRef.current?.getCurrentTime?.() ?? currentTimeSec
@@ -209,14 +352,15 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
         }
         const list = await window.api.upsertNote(coursePath, {
           body,
+          bodyHtml: draft.html || null,
+          bodyJson: draft.json || null,
           lessonRelativePath: null,
           lessonTitle: null,
           timeSec: null
         })
         setAnnotations(list)
       }
-      setDraft('')
-      setEditingId(null)
+      clearDraft()
       toast.success('Anotación guardada')
     } catch (err) {
       toast.error(err.message || 'No se pudo guardar')
@@ -224,6 +368,8 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
   }
 
   const focusMomentNote = () => {
+    setShowCourseAnnotations(false)
+    setStudyOpen(true)
     setNoteScope('moment')
     setEditingId(null)
     toast('Escribe y pulsa Guardar — se guarda en el tiempo actual')
@@ -234,6 +380,9 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
       toast.error('Selecciona una lección primero')
       return
     }
+    setShowCourseAnnotations(false)
+    setStudyOpen(true)
+    setPanelMode('lesson')
     const timeSec = playerRef.current?.getCurrentTime?.() ?? currentTimeSec
     window.api
       .upsertNote(coursePath, {
@@ -253,7 +402,8 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
         )
         if (created) {
           setEditingId(created.id)
-          setDraft('')
+          setDraft({ text: '', html: '', json: null })
+          setEditorKey((k) => k + 1)
           setNoteScope('moment')
         }
         toast.success('Pin creado — puedes añadir texto')
@@ -277,12 +427,20 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
   const goPrev = () => {
     if (selectedIndex > 0) {
       setSelectedPath(flatLessons[selectedIndex - 1].relativePath)
+      setSelectedResourcePath(null)
+      setSelectedProjectId(null)
+      setCreatingProject(false)
+      setPanelMode('lesson')
     }
   }
 
   const goNext = () => {
     if (selectedIndex >= 0 && selectedIndex < flatLessons.length - 1) {
       setSelectedPath(flatLessons[selectedIndex + 1].relativePath)
+      setSelectedResourcePath(null)
+      setSelectedProjectId(null)
+      setCreatingProject(false)
+      setPanelMode('lesson')
     }
   }
 
@@ -300,12 +458,26 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
 
   useEffect(() => {
     const onKey = (e) => {
-      const tag = e.target?.tagName
+      const t = e.target
+      const tag = t?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      // Lexical uses contenteditable DIVs — never steal keys while typing notes
+      if (t?.isContentEditable || t?.closest?.('[contenteditable="true"], .note-editor')) return
+      if (showCourseAnnotations) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setShowCourseAnnotations(false)
+        }
+        return
+      }
       if (e.key === 'Escape') {
         if (document.fullscreenElement) return
         e.preventDefault()
-        onBack?.()
+        if (studyOpen) {
+          setStudyOpen(false)
+        } else {
+          onBack?.()
+        }
       } else if (e.key === '[') {
         e.preventDefault()
         goPrev()
@@ -326,9 +498,15 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIndex, flatLessons, onBack, selectedLesson, selectedCompleted, noteScope])
+  }, [selectedIndex, flatLessons, onBack, selectedLesson, selectedCompleted, noteScope, studyOpen, showCourseAnnotations])
 
-  const emptyPlayable = !loading && tree && tree.summary?.playableCount === 0
+  const emptyContent =
+    !loading &&
+    tree &&
+    tree.summary?.playableCount === 0 &&
+    (tree.summary?.resourceCount || 0) === 0 &&
+    projects.length === 0 &&
+    !creatingProject
   const percent = progress?.percent ?? 0
 
   return (
@@ -347,6 +525,18 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
               {percent}% · {progress.completedCount}/{progress.playableCount || '—'}
             </span>
           ) : null}
+          <button
+            type="button"
+            className="icon-btn icon-btn--ghost"
+            onClick={() => {
+              setStudyOpen(false)
+              setShowCourseAnnotations(true)
+            }}
+            title="Todas las anotaciones del curso"
+          >
+            Anotaciones
+            {annotations.length ? ` (${annotations.length})` : ''}
+          </button>
           <button
             type="button"
             className="icon-btn icon-btn--ghost"
@@ -379,71 +569,119 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
             Abrir en explorador
           </button>
         </div>
-      ) : emptyPlayable ? (
+      ) : emptyContent ? (
         <div className="course-room__empty">
-          <h2>No hay lecciones reproducibles</h2>
-          <p>
-            Este curso no tiene videos o audio que la app pueda reproducir. Puedes abrir la carpeta
-            en el explorador.
-          </p>
-          <button type="button" className="icon-btn" onClick={handleOpenExplorer}>
-            Abrir en explorador
-          </button>
+          <h2>Carpeta vacía</h2>
+          <p>No hay lecciones ni recursos que mostrar. Puedes vincular un proyecto o abrir el explorador.</p>
+          <div className="course-room__empty-actions">
+            <button type="button" className="icon-btn" onClick={handleAddProject}>
+              + Proyecto
+            </button>
+            <button type="button" className="icon-btn icon-btn--ghost" onClick={handleOpenExplorer}>
+              Abrir en explorador
+            </button>
+          </div>
         </div>
+      ) : showCourseAnnotations ? (
+        <CourseAnnotationsView
+          coursePath={coursePath}
+          courseTitle={course.title}
+          annotations={annotations}
+          currentLessonPath={selectedLesson?.relativePath}
+          currentLessonTitle={selectedLesson?.title}
+          onBack={() => setShowCourseAnnotations(false)}
+          onChange={setAnnotations}
+          onJump={(item) => {
+            setShowCourseAnnotations(false)
+            setStudyOpen(false)
+            setPanelMode('lesson')
+            setSelectedResourcePath(null)
+            jumpTo(item)
+          }}
+        />
       ) : (
-        <div className="course-room__body course-room__body--study">
+        <div
+          className={`course-room__body course-room__body--study${
+            studyOpen ? '' : ' course-room__body--study-collapsed'
+          }`}
+        >
           <aside className="course-room__sidebar">
             <LessonTree
               sections={tree?.sections || []}
               courseResources={tree?.courseResources || []}
-              selectedPath={selectedPath}
+              projects={projects}
+              selectedPath={treeHighlightPath}
+              selectedProjectId={creatingProject ? null : selectedProjectId}
               onSelectLesson={handleSelectLesson}
+              onSelectResource={handleSelectResource}
+              onSelectProject={handleSelectProject}
+              onAddProject={handleAddProject}
               onToggleLessonComplete={toggleLessonComplete}
               progressByLesson={progress?.lessons || {}}
             />
           </aside>
           <main className="course-room__main">
-            <LessonPlayer
-              ref={playerRef}
-              coursePath={coursePath}
-              lesson={selectedLesson}
-              initialPositionSec={initialPositionSec}
-              isCompleted={selectedCompleted}
-              timelineMarks={timelineMarks}
-              onTimeTick={setCurrentTimeSec}
-              onMarkClick={(mark) => jumpTo(mark)}
-              onProgress={handleProgress}
-              onToggleComplete={(completed) =>
-                selectedLesson && toggleLessonComplete(selectedLesson, completed)
-              }
-              onPrev={goPrev}
-              onNext={goNext}
-              hasPrev={selectedIndex > 0}
-              hasNext={selectedIndex >= 0 && selectedIndex < flatLessons.length - 1}
-              onEnded={() => {
-                if (selectedIndex >= 0 && selectedIndex < flatLessons.length - 1) {
-                  goNext()
+            {panelMode === 'project' ? (
+              <ProjectPanel
+                coursePath={coursePath}
+                project={creatingProject ? null : selectedProject}
+                sections={tree?.sections || []}
+                onSaved={handleProjectsSaved}
+                onDeleted={handleProjectDeleted}
+                onCancelCreate={() => {
+                  setCreatingProject(false)
+                  if (selectedProjectId) setPanelMode('project')
+                  else if (selectedPath) setPanelMode('lesson')
+                  else if (selectedResourcePath) setPanelMode('resource')
+                  else setPanelMode('lesson')
+                }}
+              />
+            ) : panelMode === 'resource' ? (
+              <ResourceViewer coursePath={coursePath} resource={selectedResource} />
+            ) : (
+              <LessonPlayer
+                ref={playerRef}
+                coursePath={coursePath}
+                lesson={selectedLesson}
+                initialPositionSec={initialPositionSec}
+                isCompleted={selectedCompleted}
+                timelineMarks={timelineMarks}
+                onTimeTick={setCurrentTimeSec}
+                onMarkClick={(mark) => {
+                  setStudyOpen(true)
+                  jumpTo(mark)
+                }}
+                onProgress={handleProgress}
+                onToggleComplete={(completed) =>
+                  selectedLesson && toggleLessonComplete(selectedLesson, completed)
                 }
-              }}
-            />
+                onPrev={goPrev}
+                onNext={goNext}
+                hasPrev={selectedIndex > 0}
+                hasNext={selectedIndex >= 0 && selectedIndex < flatLessons.length - 1}
+                onEnded={() => {
+                  if (selectedIndex >= 0 && selectedIndex < flatLessons.length - 1) {
+                    goNext()
+                  }
+                }}
+              />
+            )}
           </main>
           <StudySidePanel
+            expanded={studyOpen}
             annotations={annotations}
             draft={draft}
+            editorKey={`note-${editorKey}-${editingId || 'new'}`}
             onDraftChange={setDraft}
             noteScope={noteScope}
             onNoteScopeChange={setNoteScope}
             currentTimeSec={currentTimeSec}
             onSave={saveNote}
             editingId={editingId}
-            onCancelEdit={() => {
-              setEditingId(null)
-              setDraft('')
-            }}
+            onCancelEdit={clearDraft}
             onEdit={(item) => {
-              setEditingId(item.id)
-              setDraft(item.body || '')
-              setNoteScope(typeof item.timeSec === 'number' ? 'moment' : 'course')
+              setStudyOpen(true)
+              loadDraftForEdit(item)
             }}
             onDelete={async (id) => {
               try {
@@ -453,10 +691,20 @@ function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange, resumeTa
               }
             }}
             onQuickPin={quickPin}
-            onJump={jumpTo}
+            onJump={(item) => {
+              setPanelMode('lesson')
+              setSelectedResourcePath(null)
+              jumpTo(item)
+            }}
+            onExpand={() => setStudyOpen(true)}
+            onCollapse={() => setStudyOpen(false)}
+            onOpenFullPage={() => {
+              setStudyOpen(false)
+              setShowCourseAnnotations(true)
+            }}
             currentLessonPath={selectedLesson?.relativePath}
             currentLessonTitle={selectedLesson?.title}
-            hasLesson={Boolean(selectedLesson)}
+            hasLesson={Boolean(selectedLesson) && panelMode === 'lesson'}
           />
         </div>
       )}

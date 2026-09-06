@@ -3,6 +3,7 @@ import fsSync from 'fs'
 import path from 'path'
 import { shell } from 'electron'
 import { getLibraryPath, isLibraryPathValid } from './config.js'
+import { resolveCourseFile } from './courseScan.js'
 
 const COVER_FORMATS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
 const READ_CONCURRENCY = 12
@@ -174,6 +175,56 @@ export async function openCourseFolder(courseDir) {
   if (result) {
     throw new Error(result)
   }
+  return true
+}
+
+/**
+ * Open a file inside a course with the OS default app.
+ */
+export async function openCourseFile(courseDir, relativePath) {
+  const absolute = resolveCourseFile(courseDir, relativePath)
+  if (!fsSync.existsSync(absolute) || !fsSync.statSync(absolute).isFile()) {
+    throw new Error('Archivo no encontrado')
+  }
+  const result = await shell.openPath(absolute)
+  if (result) {
+    throw new Error(result)
+  }
+  return true
+}
+
+/**
+ * Reveal a course file in the system file manager.
+ */
+export async function revealCourseFile(courseDir, relativePath) {
+  const absolute = resolveCourseFile(courseDir, relativePath)
+  if (!fsSync.existsSync(absolute)) {
+    throw new Error('Archivo no encontrado')
+  }
+  shell.showItemInFolder(absolute)
+  return true
+}
+
+/** Open an absolute folder/file path (used for virtual project links). */
+export async function openAbsolutePath(targetPath) {
+  const absolute = path.resolve(String(targetPath || ''))
+  if (!fsSync.existsSync(absolute)) {
+    throw new Error('Ruta no encontrada')
+  }
+  const result = await shell.openPath(absolute)
+  if (result) {
+    throw new Error(result)
+  }
+  return true
+}
+
+/** Reveal an absolute path in the file manager. */
+export function revealAbsolutePath(targetPath) {
+  const absolute = path.resolve(String(targetPath || ''))
+  if (!fsSync.existsSync(absolute)) {
+    throw new Error('Ruta no encontrada')
+  }
+  shell.showItemInFolder(absolute)
   return true
 }
 

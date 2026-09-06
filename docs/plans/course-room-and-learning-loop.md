@@ -241,10 +241,10 @@ Catalog fields to activate over time:
 
 **Outcome:** Creative courses (PDF + project files) work without constant Explorer trips.
 
-- [ ] Attach PDFs/images/archives to sections/lessons in the tree
-- [ ] Inline PDF and image preview
-- [ ] “Abrir externamente” / reveal in folder for PSD, ZIP, unknown types
-- [ ] Optional subtitle track load (`.srt` / `.vtt`) in player
+- [x] Attach PDFs/images/archives to sections/lessons in the tree (scan sidecars + section/course resources; selectable rows)
+- [x] Inline PDF and image preview (`ResourceViewer`; also HTML/txt/md/subs text)
+- [x] “Abrir externamente” / reveal in folder for PSD, ZIP, unknown types
+- [x] Optional subtitle track load (`.srt` / `.vtt`) in player — SRT served as WebVTT; CC toggle
 
 **Exit criteria:** Typical course with videos + PDF handouts is usable entirely in-app; project files hand off cleanly.
 
@@ -288,13 +288,13 @@ Creative courses often keep **watching** material under `_All Courses/…` and *
 - Tree merge API: `getCourseTree(coursePath)` → `{ sections, lessons, resources, projects }`.
 - Do not require the linked folder to live under the library root.
 
-- [ ] `ProjectItem` CRUD in learning store + IPC
-- [ ] Folder picker for link; open/reveal linked folder
-- [ ] Merge virtual projects into LessonTree (synthetic **Proyectos** section + optional section anchor)
-- [ ] Project detail panel in Course Room (no player)
-- [ ] Status + short notes on project
-- [ ] Broken-link detection and re-link flow
-- [ ] Optional: notes attached to `projectId` (extend Note model: `projectId?`)
+- [x] `ProjectItem` CRUD in learning store + IPC
+- [x] Folder picker for link; open/reveal linked folder
+- [x] Merge virtual projects into LessonTree (synthetic **Proyectos** section + optional section anchor)
+- [x] Project detail panel in Course Room (no player)
+- [x] Status + short notes on project
+- [x] Broken-link detection and re-link flow
+- [ ] Optional: notes attached to `projectId` (extend Note model: `projectId?`) — deferred
 
 **Exit criteria:** From a Coloso/Alive-style course, user can add “Mi práctica final”, link `D:\Proyectos\Snowboard`, open that folder from the tree, and the item survives rescans of the course download folder.
 

@@ -1,0 +1,51 @@
+---
+description: UI visual language for the personal course library renderer
+globs: src/renderer/**/*.{css,jsx,tsx,js,ts}
+alwaysApply: false
+---
+
+# UI style guidelines
+
+Source of truth for tokens: `src/renderer/src/assets/index.css` `:root`.
+
+## Tokens (use these — do not invent parallel palettes)
+
+- **Ink:** `--clr-ink` (primary text), `--clr-ink-soft` (secondary/meta)
+- **Surfaces:** `--clr-surface` (cards/panels), `--clr-cream` / `--clr-cream-deep` (page wash)
+- **Accent:** `--clr-coral` / `--clr-coral-deep` (primary actions, “in progress”)
+- **Secondary accent:** `--clr-teal` / `--clr-teal-soft` (success/done, project marks)
+- **Chips only:** `--clr-chip-programs-*` (programs / in-progress labels), `--clr-chip-status-*` (done/status labels)
+- **Radii:** `--radius-sm` controls, `--radius-md` content cards, `--radius-lg` columns/large cards, `--radius-pill` filters/search/segmented only
+- **Shadows:** `--shadow-card` default, `--shadow-lift` hover
+- **Fonts:** `--font-display` (Nunito) titles, `--font-body` (Outfit) UI copy
+
+## Content cards (course cards, kanban project cards, stat cards)
+
+- White `--clr-surface` background, `--border-thick`, `--radius-md` or `--radius-lg`, `--shadow-card`
+- Title in ink + display font; meta/notes in `--clr-ink-soft`
+- Hover: slight lift (`translateY(-1px/-2px)` + `--shadow-lift`), coral focus ring when focused
+- **Do not** paint the whole card with chip colors or use `--radius-pill` on multi-line content cards
+- Status on a card: left accent border or a small chip/badge — never a full pink/teal card wash
+- If status is already shown by column/context (e.g. kanban), omit redundant status text on the card
+
+## Chips & filters
+
+- Pill radius is for compact controls (search, segmented, filter pills, status badges)
+- Chip background colors are for labels/filters only, not card containers
+
+## Panels & forms (project panel, drawers)
+
+- Page/panel wash: cream + subtle coral/teal radial washes (match library hub)
+- Header: muted surface + thin border (like app header / kanban header)
+- Inputs: surface fill, thick border, `--radius-sm`; coral focus ring
+- Field labels: small, soft ink; values: ink
+
+## Buttons
+
+- Prefer existing `.btn`, `.btn--primary`, `.btn--ghost`
+- Compact actions inside cards: smaller padding + `--radius-sm`, no heavy shadow
+
+## Motion
+
+- Prefer `--ease-pop` for card hover/press; keep transitions short (~120–150ms)
+- Do not add glow effects, multi-layer decorative shadows, or emoji as UI chrome

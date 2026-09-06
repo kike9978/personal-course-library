@@ -37,6 +37,8 @@ const LessonPlayer = forwardRef(function LessonPlayer(
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [subtitleUrl, setSubtitleUrl] = useState(null)
+  const [subsEnabled, setSubsEnabled] = useState(true)
   const saveTimer = useRef(null)
   const restoredFor = useRef(null)
   const autoCompletedFor = useRef(null)
@@ -98,6 +100,40 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       cancelled = true
     }
   }, [coursePath, lesson?.relativePath])
+
+  const subtitleTracks = useMemo(() => {
+    return (lesson?.resources || []).filter((r) => r.kind === 'subtitle')
+  }, [lesson?.resources])
+
+  useEffect(() => {
+    let cancelled = false
+    setSubtitleUrl(null)
+    if (!coursePath || !subtitleTracks.length) return undefined
+
+    const preferred =
+      subtitleTracks.find((t) => /\.vtt$/i.test(t.name || t.relativePath)) || subtitleTracks[0]
+
+    window.api
+      .getLessonMediaUrl(coursePath, preferred.relativePath)
+      .then((url) => {
+        if (!cancelled) setSubtitleUrl(url)
+      })
+      .catch(() => {
+        if (!cancelled) setSubtitleUrl(null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [coursePath, subtitleTracks])
+
+  useEffect(() => {
+    const el = videoRef.current
+    if (!el?.textTracks) return
+    for (let i = 0; i < el.textTracks.length; i += 1) {
+      el.textTracks[i].mode = subsEnabled && subtitleUrl ? 'showing' : 'hidden'
+    }
+  }, [subsEnabled, subtitleUrl, src, playing])
 
   const persist = useCallback(
     (positionSec, extra = {}) => {
@@ -309,6 +345,16 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           <button type="button" className="icon-btn icon-btn--ghost" onClick={cycleRate} title="Velocidad">
             {rate}×
           </button>
+          {subtitleTracks.length > 0 ? (
+            <button
+              type="button"
+              className={`icon-btn ${subsEnabled ? 'icon-btn--teal' : 'icon-btn--ghost'}`}
+              onClick={() => setSubsEnabled((v) => !v)}
+              title="Subtítulos"
+            >
+              CC
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -326,6 +372,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
               className="lesson-player__video"
               src={src}
               autoPlay
+              crossOrigin="anonymous"
               onLoadedMetadata={handleLoadedMetadata}
               onTimeUpdate={scheduleSave}
               onPlay={() => setPlaying(true)}
@@ -343,7 +390,18 @@ const LessonPlayer = forwardRef(function LessonPlayer(
                 onEnded?.(lesson)
               }}
               onError={() => setError('Error al reproducir el archivo')}
-            />
+            >
+              {subtitleUrl && subsEnabled ? (
+                <track
+                  key={subtitleUrl}
+                  kind="subtitles"
+                  srcLang="es"
+                  label="Subtítulos"
+                  src={subtitleUrl}
+                  default
+                />
+              ) : null}
+            </video>
           ) : null}
         </div>
 

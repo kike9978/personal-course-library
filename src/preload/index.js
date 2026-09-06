@@ -11,6 +11,10 @@ const api = {
   updateCourseProperty: (coursePath, property, value) =>
     ipcRenderer.invoke('update-course-property', { coursePath, property, value }),
   openCourseFolder: (coursePath) => ipcRenderer.invoke('open-course-folder', coursePath),
+  openCourseFile: (coursePath, relativePath) =>
+    ipcRenderer.invoke('open-course-file', { coursePath, relativePath }),
+  revealCourseFile: (coursePath, relativePath) =>
+    ipcRenderer.invoke('reveal-course-file', { coursePath, relativePath }),
   getCoverImageUrl: (coursePath) => ipcRenderer.invoke('get-cover-image-url', coursePath),
   refreshCourses: () => ipcRenderer.invoke('refresh-courses'),
   scanCourse: (coursePath, force = false) =>
@@ -33,6 +37,17 @@ const api = {
     ipcRenderer.invoke('delete-bookmark', { coursePath, bookmarkId }),
   listAllNotes: () => ipcRenderer.invoke('list-all-notes'),
   listAllBookmarks: () => ipcRenderer.invoke('list-all-bookmarks'),
+  listProjects: (coursePath) => ipcRenderer.invoke('list-projects', coursePath),
+  listAllProjects: () => ipcRenderer.invoke('list-all-projects'),
+  upsertProject: (coursePath, project) =>
+    ipcRenderer.invoke('upsert-project', { coursePath, project }),
+  deleteProject: (coursePath, projectId) =>
+    ipcRenderer.invoke('delete-project', { coursePath, projectId }),
+  pickProjectFolder: () => ipcRenderer.invoke('pick-project-folder'),
+  openProjectLink: (coursePath, projectId) =>
+    ipcRenderer.invoke('open-project-link', { coursePath, projectId }),
+  revealProjectLink: (coursePath, projectId) =>
+    ipcRenderer.invoke('reveal-project-link', { coursePath, projectId }),
   onCourseUpdated: (callback) => {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('course-updated', listener)

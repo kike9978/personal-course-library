@@ -20,6 +20,14 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^3.0.0",
+    "@lexical/html": "^0.50.0",
+    "@lexical/link": "^0.50.0",
+    "@lexical/list": "^0.50.0",
+    "@lexical/react": "^0.50.0",
+    "@lexical/rich-text": "^0.50.0",
+    "@lexical/selection": "^0.50.0",
+    "@lexical/utils": "^0.50.0",
+    "lexical": "^0.50.0",
     "react-hot-toast": "^2.5.2"
   },
   "devDependencies": {

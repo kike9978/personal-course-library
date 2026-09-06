@@ -5,6 +5,8 @@ import CourseEditModal from './components/CourseEditModal'
 import CourseDetailPanel from './components/CourseDetailPanel'
 import CourseRoom from './components/CourseRoom'
 import LibraryStudyView from './components/LibraryStudyView'
+import ProjectsKanban from './components/ProjectsKanban'
+import AppNav from './components/AppNav'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
 import { Toaster, toast } from 'react-hot-toast'
@@ -60,7 +62,7 @@ function AppHeader({
   isLoading,
   onRefresh,
   onChangeLibrary,
-  onOpenNotes,
+  onNavigate,
   institutions,
   programs,
   institutionFilter,
@@ -77,7 +79,10 @@ function AppHeader({
           <div className="brand__mark">
             <img src={brandMark} alt="" />
           </div>
-          <h1 className="brand__title">Catálogo de cursos</h1>
+          <div className="brand__text">
+            <h1 className="brand__title">Catálogo de cursos</h1>
+            <AppNav active="library" onSelect={onNavigate} />
+          </div>
         </div>
 
         <div className="search-field">
@@ -124,14 +129,6 @@ function AppHeader({
             En curso
           </button>
 
-          <button
-            type="button"
-            className="icon-btn icon-btn--ghost"
-            onClick={onOpenNotes}
-            title="Todas las anotaciones"
-          >
-            Anotaciones
-          </button>
           <button
             type="button"
             className="icon-btn"
@@ -232,7 +229,7 @@ function FilterableCoursesGrid({
   onRefresh,
   onChangeLibrary,
   onOpenCourse,
-  onOpenNotes
+  onNavigate
 }) {
   const [filterText, setFilterText] = useState('')
   const [isCardLayout, setIsCardLayout] = useState(true)
@@ -358,8 +355,10 @@ function FilterableCoursesGrid({
 
   useEffect(() => {
     const onKeyDown = (e) => {
-      const tag = e.target?.tagName
+      const t = e.target
+      const tag = t?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (t?.isContentEditable || t?.closest?.('[contenteditable="true"], .note-editor')) return
       if (e.key === 'Escape') {
         if (editingCourse) {
           setEditingCourse(null)
@@ -420,7 +419,7 @@ function FilterableCoursesGrid({
         isLoading={isLoading}
         onRefresh={onRefresh}
         onChangeLibrary={onChangeLibrary}
-        onOpenNotes={onOpenNotes}
+        onNavigate={onNavigate}
         institutions={institutions}
         programs={programs}
         institutionFilter={institutionFilter}
@@ -639,6 +638,16 @@ function App() {
     return courses.find((c) => c.path === activeCoursePath) || { path: activeCoursePath, title: activeCoursePath }
   }, [courses, activeCoursePath])
 
+  const navigateApp = useCallback((section) => {
+    setActiveCoursePath(null)
+    setResumeTarget(null)
+    if (section === 'projects' || section === 'annotations') {
+      setLibraryStudyMode(section)
+      return
+    }
+    setLibraryStudyMode(null)
+  }, [])
+
   return (
     <ErrorBoundary>
       <Toaster
@@ -661,10 +670,20 @@ function App() {
             loadCourses()
           }}
         />
-      ) : libraryStudyMode ? (
+      ) : libraryStudyMode === 'annotations' ? (
         <LibraryStudyView
           courses={courses}
-          onBack={() => setLibraryStudyMode(null)}
+          onNavigate={navigateApp}
+          onOpenCourse={(course, target = null) => {
+            setLibraryStudyMode(null)
+            setResumeTarget(target)
+            setActiveCoursePath(course.path)
+          }}
+        />
+      ) : libraryStudyMode === 'projects' ? (
+        <ProjectsKanban
+          courses={courses}
+          onNavigate={navigateApp}
           onOpenCourse={(course, target = null) => {
             setLibraryStudyMode(null)
             setResumeTarget(target)
@@ -689,7 +708,7 @@ function App() {
           onRefresh={refreshCourses}
           libraryPath={libraryPath}
           onChangeLibrary={handleChangeLibrary}
-          onOpenNotes={() => setLibraryStudyMode('annotations')}
+          onNavigate={navigateApp}
           onOpenCourse={(course, target = null) => {
             setResumeTarget(target)
             setActiveCoursePath(course.path)

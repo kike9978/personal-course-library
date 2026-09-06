@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { formatTime } from './StudySidePanel'
+import AnnotationsWorkspace from './AnnotationsWorkspace'
+import AppNav from './AppNav'
 
-function LibraryStudyView({ courses, onBack, onOpenCourse }) {
+function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
   const [items, setItems] = useState([])
-  const [query, setQuery] = useState('')
+  const [selectedId, setSelectedId] = useState(null)
+  const [courseFilter, setCourseFilter] = useState('')
   const [loading, setLoading] = useState(true)
 
   const titleByPath = useMemo(() => {
@@ -15,13 +17,20 @@ function LibraryStudyView({ courses, onBack, onOpenCourse }) {
     return map
   }, [courses])
 
+  const refresh = async () => {
+    const list = await window.api.listAllNotes()
+    setItems(list || [])
+    return list || []
+  }
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    window.api
-      .listAllNotes()
+    refresh()
       .then((list) => {
-        if (!cancelled) setItems(list || [])
+        if (!cancelled && list[0]) {
+          setSelectedId({ id: list[0].id, coursePath: list[0].coursePath })
+        }
       })
       .catch((err) => {
         if (!cancelled) toast.error(err.message || 'No se pudo cargar')
@@ -34,20 +43,58 @@ function LibraryStudyView({ courses, onBack, onOpenCourse }) {
     }
   }, [])
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return items
-    return items.filter((item) => {
-      const courseTitle = (titleByPath[item.coursePath] || item.coursePath || '').toLowerCase()
-      const hay = [item.body, item.lessonTitle, item.coursePath, courseTitle]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return hay.includes(q)
-    })
-  }, [items, query, titleByPath])
+  const coursesWithNotes = useMemo(() => {
+    const paths = new Set(items.map((n) => n.coursePath).filter(Boolean))
+    return courses
+      .filter((c) => paths.has(c.path))
+      .sort((a, b) =>
+        (a.title || a.path).localeCompare(b.title || b.path, undefined, { sensitivity: 'base' })
+      )
+  }, [courses, items])
 
-  const handleOpen = (item) => {
+  const visibleItems = useMemo(() => {
+    if (!courseFilter) return items
+    return items.filter((item) => item.coursePath === courseFilter)
+  }, [items, courseFilter])
+
+  useEffect(() => {
+    if (!selectedId) return
+    const stillVisible = visibleItems.some(
+      (a) => a.id === selectedId.id && a.coursePath === selectedId.coursePath
+    )
+    if (!stillVisible) {
+      setSelectedId(
+        visibleItems[0]
+          ? { id: visibleItems[0].id, coursePath: visibleItems[0].coursePath }
+          : null
+      )
+    }
+  }, [visibleItems, selectedId])
+
+  const handleSave = async (item, payload) => {
+    await window.api.upsertNote(item.coursePath, {
+      id: item.id,
+      ...payload
+    })
+    const all = await refresh()
+    const still = all.find((a) => a.id === item.id && a.coursePath === item.coursePath)
+    if (still) setSelectedId({ id: still.id, coursePath: still.coursePath })
+  }
+
+  const handleDelete = async (item) => {
+    if (!window.confirm('¿Borrar esta anotación?')) return
+    try {
+      await window.api.deleteNote(item.coursePath, item.id)
+      const all = await refresh()
+      const scoped = courseFilter ? all.filter((a) => a.coursePath === courseFilter) : all
+      setSelectedId(scoped[0] ? { id: scoped[0].id, coursePath: scoped[0].coursePath } : null)
+      toast.success('Eliminada')
+    } catch (err) {
+      toast.error(err.message || 'Error')
+    }
+  }
+
+  const handleJump = (item) => {
     const course = courses.find((c) => c.path === item.coursePath)
     if (!course) {
       toast.error('Curso no encontrado en la biblioteca')
@@ -60,56 +107,42 @@ function LibraryStudyView({ courses, onBack, onOpenCourse }) {
   }
 
   return (
-    <div className="library-study">
-      <header className="library-study__header">
-        <button type="button" className="icon-btn icon-btn--ghost" onClick={onBack}>
-          ← Biblioteca
-        </button>
-        <h1>Anotaciones</h1>
-        <div className="search-field library-study__search">
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar…"
-            aria-label="Buscar"
-          />
-        </div>
-      </header>
-
-      <div className="library-study__content">
-        {loading ? (
-          <p className="library-study__empty">Cargando…</p>
-        ) : filtered.length === 0 ? (
-          <p className="library-study__empty">
-            {items.length === 0
-              ? 'Aún no hay anotaciones. Abre un curso y pulsa N o B.'
-              : 'Ningún resultado.'}
-          </p>
-        ) : (
-          <ul className="library-study__list">
-            {filtered.map((item) => (
-              <li key={`${item.coursePath}-${item.id}`} className="library-study__card">
-                <div className="library-study__meta">
-                  <strong>{titleByPath[item.coursePath] || item.coursePath}</strong>
-                  {typeof item.timeSec === 'number' ? (
-                    <span className="study-panel__time">{formatTime(item.timeSec)}</span>
-                  ) : (
-                    <span className="study-panel__tag">Curso</span>
-                  )}
-                </div>
-                {item.lessonTitle ? (
-                  <div className="library-study__lesson">{item.lessonTitle}</div>
-                ) : null}
-                <p>{item.body || 'Sin texto'}</p>
-                <button type="button" className="icon-btn" onClick={() => handleOpen(item)}>
-                  Abrir en curso
-                </button>
-              </li>
+    <div className="library-study library-study--workspace">
+      <div className="library-study__nav-strip">
+        <AppNav active="annotations" onSelect={onNavigate} />
+        <div className="chip-select library-study__course-filter">
+          <label htmlFor="annotations-course-filter">Curso</label>
+          <select
+            id="annotations-course-filter"
+            value={courseFilter}
+            onChange={(e) => setCourseFilter(e.target.value)}
+          >
+            <option value="">Todos</option>
+            {coursesWithNotes.map((course) => (
+              <option key={course.path} value={course.path}>
+                {course.title || course.path}
+              </option>
             ))}
-          </ul>
-        )}
+          </select>
+        </div>
       </div>
+      <AnnotationsWorkspace
+        title="Anotaciones"
+        subtitle={
+          courseFilter
+            ? titleByPath[courseFilter] || courseFilter
+            : 'Toda la biblioteca'
+        }
+        annotations={visibleItems}
+        selectedId={selectedId}
+        onSelect={(item) => setSelectedId({ id: item.id, coursePath: item.coursePath })}
+        onSave={handleSave}
+        onDelete={handleDelete}
+        onJump={handleJump}
+        courseColumn
+        courseTitleByPath={titleByPath}
+        loading={loading}
+      />
     </div>
   )
 }

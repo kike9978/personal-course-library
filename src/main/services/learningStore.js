@@ -25,7 +25,8 @@ function emptyCourseState() {
     playableLessons: [],
     lessons: {},
     notes: [],
-    bookmarks: []
+    bookmarks: [],
+    projects: []
   }
 }
 
@@ -36,6 +37,7 @@ function makeId() {
 function ensureArrays(course) {
   if (!Array.isArray(course.notes)) course.notes = []
   if (!Array.isArray(course.bookmarks)) course.bookmarks = []
+  if (!Array.isArray(course.projects)) course.projects = []
   migrateBookmarksIntoNotes(course)
   return course
 }
@@ -352,7 +354,7 @@ export function listBookmarks(coursePath) {
 
 /**
  * @param {string} coursePath
- * @param {{ id?: string, body?: string, lessonRelativePath?: string|null, lessonTitle?: string|null, timeSec?: number|null, color?: string|null }} payload
+ * @param {{ id?: string, title?: string|null, body?: string, bodyHtml?: string|null, bodyJson?: string|null, lessonRelativePath?: string|null, lessonTitle?: string|null, timeSec?: number|null, color?: string|null }} payload
  */
 export function upsertNote(coursePath, payload) {
   const store = readStore()
@@ -360,13 +362,32 @@ export function upsertNote(coursePath, payload) {
   const now = Date.now()
   // Empty body allowed = pin on timeline / lesson without text yet
   const body = String(payload.body ?? '').trim()
+  const title =
+    payload.title === undefined
+      ? undefined
+      : String(payload.title ?? '').trim() || null
+  const bodyHtml =
+    payload.bodyHtml === undefined
+      ? undefined
+      : payload.bodyHtml
+        ? String(payload.bodyHtml)
+        : null
+  const bodyJson =
+    payload.bodyJson === undefined
+      ? undefined
+      : payload.bodyJson
+        ? String(payload.bodyJson)
+        : null
 
   if (payload.id) {
     const idx = course.notes.findIndex((n) => n.id === payload.id)
     if (idx === -1) throw new Error('Anotación no encontrada')
     course.notes[idx] = {
       ...course.notes[idx],
+      title: title !== undefined ? title : course.notes[idx].title ?? null,
       body: payload.body !== undefined ? body : course.notes[idx].body,
+      bodyHtml: bodyHtml !== undefined ? bodyHtml : course.notes[idx].bodyHtml ?? null,
+      bodyJson: bodyJson !== undefined ? bodyJson : course.notes[idx].bodyJson ?? null,
       lessonRelativePath:
         payload.lessonRelativePath !== undefined
           ? payload.lessonRelativePath
@@ -380,7 +401,10 @@ export function upsertNote(coursePath, payload) {
   } else {
     course.notes.push({
       id: makeId(),
+      title: title ?? null,
       body,
+      bodyHtml: bodyHtml ?? null,
+      bodyJson: bodyJson ?? null,
       lessonRelativePath: payload.lessonRelativePath ?? null,
       lessonTitle: payload.lessonTitle ?? null,
       timeSec: typeof payload.timeSec === 'number' ? Math.max(0, payload.timeSec) : null,
@@ -453,6 +477,158 @@ export function listAllNotes() {
 /** @deprecated Bookmarks merged into notes; kept for IPC compat. */
 export function listAllBookmarks() {
   return []
+}
+
+const PROJECT_STATUSES = new Set(['todo', 'in_progress', 'done'])
+
+function linkStatus(linkedFolderPath) {
+  if (!linkedFolderPath) {
+    return { linkOk: false, linkMissing: true, linkIsFile: false }
+  }
+  try {
+    if (!fs.existsSync(linkedFolderPath)) {
+      return { linkOk: false, linkMissing: true, linkIsFile: false }
+    }
+    const stat = fs.statSync(linkedFolderPath)
+    if (stat.isDirectory()) {
+      return { linkOk: true, linkMissing: false, linkIsFile: false }
+    }
+    if (stat.isFile()) {
+      return { linkOk: true, linkMissing: false, linkIsFile: true }
+    }
+    return { linkOk: false, linkMissing: true, linkIsFile: false }
+  } catch {
+    return { linkOk: false, linkMissing: true, linkIsFile: false }
+  }
+}
+
+function decorateProject(project) {
+  return {
+    ...project,
+    ...linkStatus(project.linkedFolderPath)
+  }
+}
+
+export function listProjects(coursePath) {
+  const store = readStore()
+  const { course } = getMutableCourse(store, coursePath)
+  return [...course.projects]
+    .sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), undefined, {
+      numeric: true,
+      sensitivity: 'base'
+    }))
+    .map(decorateProject)
+}
+
+/**
+ * Flatten projects across all courses for the global kanban board.
+ */
+export function listAllProjects() {
+  const store = readStore()
+  const items = []
+  for (const [coursePath, value] of Object.entries(store.courses || {})) {
+    const course = ensureArrays(value)
+    for (const project of course.projects) {
+      items.push({
+        ...decorateProject(project),
+        coursePath
+      })
+    }
+  }
+  return items.sort((a, b) => {
+    const statusOrder = { in_progress: 0, todo: 1, done: 2 }
+    const aStatus = statusOrder[a.status] ?? 1
+    const bStatus = statusOrder[b.status] ?? 1
+    if (aStatus !== bStatus) return aStatus - bStatus
+    const updated = (b.updatedAt || 0) - (a.updatedAt || 0)
+    if (updated !== 0) return updated
+    return String(a.title || '').localeCompare(String(b.title || ''), undefined, {
+      numeric: true,
+      sensitivity: 'base'
+    })
+  })
+}
+
+/**
+ * @param {string} coursePath
+ * @param {{
+ *   id?: string,
+ *   title?: string,
+ *   linkedFolderPath?: string|null,
+ *   notes?: string,
+ *   status?: 'todo'|'in_progress'|'done',
+ *   sectionId?: string|null
+ * }} payload
+ */
+export function upsertProject(coursePath, payload) {
+  const store = readStore()
+  const { course } = getMutableCourse(store, coursePath)
+  const now = Date.now()
+  const title = String(payload.title ?? '').trim()
+  if (!payload.id && !title) {
+    throw new Error('El proyecto necesita un título')
+  }
+
+  const status = PROJECT_STATUSES.has(payload.status) ? payload.status : 'todo'
+  const linkedFolderPath =
+    payload.linkedFolderPath === undefined
+      ? undefined
+      : payload.linkedFolderPath
+        ? String(payload.linkedFolderPath).trim() || null
+        : null
+
+  if (payload.id) {
+    const idx = course.projects.findIndex((p) => p.id === payload.id)
+    if (idx === -1) throw new Error('Proyecto no encontrado')
+    course.projects[idx] = {
+      ...course.projects[idx],
+      title: payload.title !== undefined ? title || course.projects[idx].title : course.projects[idx].title,
+      linkedFolderPath:
+        linkedFolderPath !== undefined ? linkedFolderPath : course.projects[idx].linkedFolderPath,
+      notes:
+        payload.notes !== undefined
+          ? String(payload.notes || '').trim()
+          : course.projects[idx].notes,
+      status: payload.status !== undefined ? status : course.projects[idx].status,
+      sectionId:
+        payload.sectionId !== undefined
+          ? payload.sectionId || null
+          : course.projects[idx].sectionId,
+      updatedAt: now
+    }
+  } else {
+    course.projects.push({
+      id: makeId(),
+      title,
+      linkedFolderPath: linkedFolderPath ?? null,
+      notes: String(payload.notes || '').trim(),
+      status,
+      sectionId: payload.sectionId || null,
+      createdAt: now,
+      updatedAt: now
+    })
+  }
+
+  writeStore(store)
+  return listProjects(coursePath)
+}
+
+export function deleteProject(coursePath, projectId) {
+  const store = readStore()
+  const { course } = getMutableCourse(store, coursePath)
+  course.projects = course.projects.filter((p) => p.id !== projectId)
+  writeStore(store)
+  return listProjects(coursePath)
+}
+
+/** Resolve a stored project link for open/reveal (absolute path only if owned by this course). */
+export function getProjectLinkedPath(coursePath, projectId) {
+  const store = readStore()
+  const { course } = getMutableCourse(store, coursePath)
+  const project = course.projects.find((p) => p.id === projectId)
+  if (!project) throw new Error('Proyecto no encontrado')
+  if (!project.linkedFolderPath) throw new Error('Este proyecto no tiene carpeta vinculada')
+  return project.linkedFolderPath
 }
 
 export { COMPLETE_THRESHOLD }
