@@ -3,7 +3,7 @@ import { toast } from 'react-hot-toast'
 import { getCoverFallback, getInstitutionLogo, absoluteAssetUrl } from '../utils/images'
 import brandMark from '../assets/img/brand-mark.svg'
 
-function CourseDetailPanel({ course, onClose, onEdit, onToggleInProcess }) {
+function CourseDetailPanel({ course, onClose, onEdit, onOpenCourse, onToggleInProcess }) {
   const fallbackCover = absoluteAssetUrl(getCoverFallback())
   const [coverImg, setCoverImg] = useState(fallbackCover)
   const institutionImg = absoluteAssetUrl(getInstitutionLogo(course.institution))
@@ -27,7 +27,11 @@ function CourseDetailPanel({ course, onClose, onEdit, onToggleInProcess }) {
     }
   }, [course.path, course.hasCover, fallbackCover])
 
-  const handleOpen = async () => {
+  const handleOpenCourse = () => {
+    onOpenCourse?.(course)
+  }
+
+  const handleOpenFolder = async () => {
     try {
       await window.api.openCourseFolder(course.path)
     } catch (error) {
@@ -110,8 +114,8 @@ function CourseDetailPanel({ course, onClose, onEdit, onToggleInProcess }) {
         </div>
 
         <div className="detail-actions">
-          <button type="button" className="icon-btn" onClick={handleOpen}>
-            Abrir carpeta
+          <button type="button" className="icon-btn" onClick={handleOpenCourse}>
+            Abrir curso
           </button>
           <button
             type="button"
@@ -122,6 +126,9 @@ function CourseDetailPanel({ course, onClose, onEdit, onToggleInProcess }) {
           </button>
           <button type="button" className="icon-btn icon-btn--ghost" onClick={() => onEdit(course)}>
             Editar detalles
+          </button>
+          <button type="button" className="icon-btn icon-btn--ghost" onClick={handleOpenFolder}>
+            Abrir en explorador
           </button>
         </div>
       </div>

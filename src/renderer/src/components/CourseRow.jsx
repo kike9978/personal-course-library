@@ -5,6 +5,7 @@ import brandMark from '../assets/img/brand-mark.svg'
 function CourseRow({
   course,
   onOpenModalClick,
+  onOpenCourse,
   onSelect,
   onToggleInProcess,
   isSelected,
@@ -58,7 +59,11 @@ function CourseRow({
     }
   }, [coursePath, hasCover, fallbackCover])
 
-  const handleOpen = () => {
+  const handleOpenCourse = () => {
+    onOpenCourse?.(course)
+  }
+
+  const handleOpenFolder = () => {
     window.api.openCourseFolder(coursePath).catch((error) => {
       if (onError) onError(error)
     })
@@ -86,7 +91,7 @@ function CourseRow({
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      handleOpen()
+      handleOpenCourse()
     } else if (e.key.toLowerCase() === 'e' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault()
       onOpenModalClick?.(course)
@@ -102,7 +107,7 @@ function CourseRow({
       tabIndex={tabIndex ?? 0}
       className={`course-row${isSelected ? ' is-selected' : ''}`}
       onClick={() => onSelect?.(course)}
-      onDoubleClick={handleOpen}
+      onDoubleClick={handleOpenCourse}
       onKeyDown={handleKeyDown}
       data-course-path={coursePath}
     >
@@ -160,14 +165,31 @@ function CourseRow({
         <button
           type="button"
           className="card-action"
-          title="Abrir carpeta"
+          title="Abrir curso"
           onMouseDown={(e) => {
             e.preventDefault()
             e.stopPropagation()
           }}
           onClick={(e) => {
             e.stopPropagation()
-            handleOpen()
+            handleOpenCourse()
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="card-action"
+          title="Abrir en explorador"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+            handleOpenFolder()
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

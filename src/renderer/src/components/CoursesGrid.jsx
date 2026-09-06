@@ -8,6 +8,7 @@ export default function CoursesGrid({
   isCardLayout,
   selectedPath,
   onSelectCourse,
+  onOpenCourse,
   onOpenModal,
   onToggleInProcess,
   focusIndex
@@ -52,6 +53,7 @@ export default function CoursesGrid({
               <CourseCard
                 key={course.path}
                 course={course}
+                onOpenCourse={onOpenCourse}
                 onOpenModalClick={onOpenModal}
                 onSelect={onSelectCourse}
                 onToggleInProcess={onToggleInProcess}
@@ -64,6 +66,7 @@ export default function CoursesGrid({
               <CourseRow
                 key={course.path}
                 course={course}
+                onOpenCourse={onOpenCourse}
                 onOpenModalClick={onOpenModal}
                 onSelect={onSelectCourse}
                 onToggleInProcess={onToggleInProcess}

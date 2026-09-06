@@ -63,6 +63,7 @@ function stopCardEvent(e) {
 function CourseCard({
   course,
   onOpenModalClick,
+  onOpenCourse,
   onSelect,
   onToggleInProcess,
   isSelected,
@@ -110,7 +111,14 @@ function CourseCard({
     }
   }
 
-  const handleOpen = (e) => {
+  const handleOpenCourse = (e) => {
+    stopCardEvent(e)
+    if (typeof onOpenCourse === 'function') {
+      onOpenCourse(course)
+    }
+  }
+
+  const handleOpenFolder = (e) => {
     stopCardEvent(e)
     window.api.openCourseFolder(coursePath).catch((error) => {
       if (onError) onError(error)
@@ -131,9 +139,7 @@ function CourseCard({
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      window.api.openCourseFolder(coursePath).catch((error) => {
-        if (onError) onError(error)
-      })
+      onOpenCourse?.(course)
     } else if (e.key.toLowerCase() === 'e' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault()
       onOpenModalClick?.(course)
@@ -150,9 +156,7 @@ function CourseCard({
       onClick={handleSelect}
       onDoubleClick={(e) => {
         e.preventDefault()
-        window.api.openCourseFolder(coursePath).catch((error) => {
-          if (onError) onError(error)
-        })
+        onOpenCourse?.(course)
       }}
       onKeyDown={handleKeyDown}
       tabIndex={tabIndex ?? 0}
@@ -182,8 +186,19 @@ function CourseCard({
             type="button"
             className="card-action"
             onMouseDown={stopCardEvent}
-            onClick={handleOpen}
-            title="Abrir carpeta"
+            onClick={handleOpenCourse}
+            title="Abrir curso"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="card-action"
+            onMouseDown={stopCardEvent}
+            onClick={handleOpenFolder}
+            title="Abrir en explorador"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />

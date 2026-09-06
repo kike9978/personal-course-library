@@ -13,6 +13,15 @@ const api = {
   openCourseFolder: (coursePath) => ipcRenderer.invoke('open-course-folder', coursePath),
   getCoverImageUrl: (coursePath) => ipcRenderer.invoke('get-cover-image-url', coursePath),
   refreshCourses: () => ipcRenderer.invoke('refresh-courses'),
+  scanCourse: (coursePath, force = false) =>
+    ipcRenderer.invoke('scan-course', { coursePath, force }),
+  getLessonMediaUrl: (coursePath, relativePath) =>
+    ipcRenderer.invoke('get-lesson-media-url', { coursePath, relativePath }),
+  getCourseProgress: (coursePath) => ipcRenderer.invoke('get-course-progress', coursePath),
+  getLessonProgress: (coursePath, relativePath) =>
+    ipcRenderer.invoke('get-lesson-progress', { coursePath, relativePath }),
+  setLessonProgress: (coursePath, update) =>
+    ipcRenderer.invoke('set-lesson-progress', { coursePath, ...update }),
   onCourseUpdated: (callback) => {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('course-updated', listener)

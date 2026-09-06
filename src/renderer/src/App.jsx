@@ -3,6 +3,7 @@ import CoursesGrid from './components/CoursesGrid'
 import CourseCard from './components/CourseCard'
 import CourseEditModal from './components/CourseEditModal'
 import CourseDetailPanel from './components/CourseDetailPanel'
+import CourseRoom from './components/CourseRoom'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
 import { Toaster, toast } from 'react-hot-toast'
@@ -186,7 +187,7 @@ function AppHeader({
   )
 }
 
-function ContinueHub({ courses, onSelect, onOpenModal, onToggleInProcess }) {
+function ContinueHub({ courses, onSelect, onOpenCourse, onOpenModal, onToggleInProcess }) {
   if (!courses.length) return null
 
   return (
@@ -201,6 +202,7 @@ function ContinueHub({ courses, onSelect, onOpenModal, onToggleInProcess }) {
             key={`hub-${course.path}`}
             course={course}
             onSelect={onSelect}
+            onOpenCourse={onOpenCourse}
             onOpenModalClick={onOpenModal}
             onToggleInProcess={onToggleInProcess}
             tabIndex={0}
@@ -211,7 +213,13 @@ function ContinueHub({ courses, onSelect, onOpenModal, onToggleInProcess }) {
   )
 }
 
-function FilterableCoursesGrid({ courses, isLoading, onRefresh, onChangeLibrary }) {
+function FilterableCoursesGrid({
+  courses,
+  isLoading,
+  onRefresh,
+  onChangeLibrary,
+  onOpenCourse
+}) {
   const [filterText, setFilterText] = useState('')
   const [isCardLayout, setIsCardLayout] = useState(true)
   const [isInProcessOnly, setIsInProcessOnly] = useState(false)
@@ -292,6 +300,13 @@ function FilterableCoursesGrid({ courses, isLoading, onRefresh, onChangeLibrary 
     setSelectedPath(course.path)
   }, [])
 
+  const handleOpenCourse = useCallback(
+    (course) => {
+      if (course && onOpenCourse) onOpenCourse(course)
+    },
+    [onOpenCourse]
+  )
+
   const handleOpenEdit = useCallback((course) => {
     setEditingCourse(course)
   }, [])
@@ -334,11 +349,17 @@ function FilterableCoursesGrid({ courses, isLoading, onRefresh, onChangeLibrary 
           setSelectedPath(sortedCourses[next].path)
           return next
         })
+      } else if (e.key === 'Enter' && selectedPath) {
+        const course = sortedCourses.find((c) => c.path === selectedPath)
+        if (course) {
+          e.preventDefault()
+          handleOpenCourse(course)
+        }
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sortedCourses, editingCourse])
+  }, [sortedCourses, editingCourse, selectedPath, handleOpenCourse])
 
   const selectedCourse = useMemo(() => {
     if (!selectedPath) return null
@@ -405,6 +426,7 @@ function FilterableCoursesGrid({ courses, isLoading, onRefresh, onChangeLibrary 
                 <ContinueHub
                   courses={inProgressCourses}
                   onSelect={handleSelectCourse}
+                  onOpenCourse={handleOpenCourse}
                   onOpenModal={handleOpenEdit}
                   onToggleInProcess={handleToggleInProcess}
                 />
@@ -422,6 +444,7 @@ function FilterableCoursesGrid({ courses, isLoading, onRefresh, onChangeLibrary 
                 isCardLayout={isCardLayout}
                 selectedPath={selectedPath}
                 onSelectCourse={handleSelectCourse}
+                onOpenCourse={handleOpenCourse}
                 onOpenModal={handleOpenEdit}
                 onToggleInProcess={handleToggleInProcess}
                 focusIndex={focusIndex}
@@ -443,6 +466,7 @@ function FilterableCoursesGrid({ courses, isLoading, onRefresh, onChangeLibrary 
           <CourseDetailPanel
             course={selectedCourse}
             onClose={() => handleSelectCourse(null)}
+            onOpenCourse={handleOpenCourse}
             onEdit={handleOpenEdit}
             onToggleInProcess={handleToggleInProcess}
           />
@@ -457,6 +481,7 @@ function App() {
   const [courses, setCourses] = useState([])
   const [libraryPath, setLibraryPath] = useState(null)
   const [needsSetup, setNeedsSetup] = useState(false)
+  const [activeCoursePath, setActiveCoursePath] = useState(null)
   const loadingRef = useRef(false)
 
   const loadCourses = useCallback(async () => {
@@ -549,6 +574,11 @@ function App() {
     }
   }, [loadCourses, refreshCourses])
 
+  const activeCourse = useMemo(() => {
+    if (!activeCoursePath) return null
+    return courses.find((c) => c.path === activeCoursePath) || { path: activeCoursePath, title: activeCoursePath }
+  }, [courses, activeCoursePath])
+
   return (
     <ErrorBoundary>
       <Toaster
@@ -571,6 +601,12 @@ function App() {
             loadCourses()
           }}
         />
+      ) : activeCourse ? (
+        <CourseRoom
+          course={activeCourse}
+          onBack={() => setActiveCoursePath(null)}
+          onOpenExplorer={(c) => window.api.openCourseFolder(c.path)}
+        />
       ) : (
         <FilterableCoursesGrid
           courses={courses}
@@ -578,6 +614,7 @@ function App() {
           onRefresh={refreshCourses}
           libraryPath={libraryPath}
           onChangeLibrary={handleChangeLibrary}
+          onOpenCourse={(course) => setActiveCoursePath(course.path)}
         />
       )}
     </ErrorBoundary>
