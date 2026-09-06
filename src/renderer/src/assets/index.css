@@ -623,6 +623,35 @@ select {
   min-height: 1.5rem;
 }
 
+.course-card__resume {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--clr-ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.course-card__percent {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--clr-teal);
+}
+
+.course-card__progress {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: rgba(42, 36, 56, 0.08);
+  overflow: hidden;
+}
+
+.course-card__progress-bar {
+  height: 100%;
+  background: var(--clr-teal);
+  border-radius: inherit;
+}
+
 .institution-logo {
   max-height: 1.1rem;
   max-width: 4.5rem;
@@ -656,6 +685,12 @@ select {
   --clr-bdr: var(--clr-chip-programs-border);
   --clr-txt: var(--clr-chip-programs-text);
   --clr-bgr: var(--clr-chip-programs-bg);
+}
+
+.badge--done {
+  --clr-bdr: var(--clr-chip-status-border);
+  --clr-txt: var(--clr-chip-status-text);
+  --clr-bgr: var(--clr-chip-status-bg);
 }
 
 .badge--institution {
@@ -724,6 +759,21 @@ select {
   gap: 0.4rem;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.course-row__percent {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--clr-teal);
+}
+
+.course-row__resume {
+  max-width: 10rem;
+  font-size: 0.72rem;
+  color: var(--clr-ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .course-row__actions {
@@ -1245,6 +1295,17 @@ select {
   flex-wrap: wrap;
 }
 
+.course-room__progress {
+  height: 3px;
+  background: rgba(42, 36, 56, 0.08);
+}
+
+.course-room__progress-bar {
+  height: 100%;
+  background: var(--clr-teal);
+  transition: width 0.25s ease;
+}
+
 .course-room__body {
   flex: 1;
   min-height: 0;
@@ -1324,8 +1385,33 @@ select {
   gap: 0.2rem;
 }
 
+.lesson-tree__row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.15rem;
+}
+
+.lesson-tree__check {
+  flex: 0 0 1.5rem;
+  width: 1.5rem;
+  border: 1px solid var(--clr-border);
+  border-radius: 6px;
+  background: var(--clr-surface);
+  color: var(--clr-teal);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.lesson-tree__check.is-done {
+  background: var(--clr-chip-status-bg);
+  border-color: var(--clr-chip-status-border);
+}
+
 .lesson-tree__item {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 0.45rem;

@@ -109,8 +109,22 @@ function CourseDetailPanel({ course, onClose, onEdit, onOpenCourse, onToggleInPr
           </div>
           <div>
             <strong>Estado</strong>
-            <div>{course.isInProcess ? 'En curso' : 'Sin empezar / pausado'}</div>
+            <div>
+              {course.learning?.status === 'completed'
+                ? 'Completado'
+                : course.learning?.status === 'in_progress'
+                  ? `En progreso (${course.learning.percent || 0}%)`
+                  : course.isInProcess
+                    ? 'En curso'
+                    : 'Sin empezar / pausado'}
+            </div>
           </div>
+          {course.learning?.lastLessonTitle ? (
+            <div>
+              <strong>Última lección</strong>
+              <div>{course.learning.lastLessonTitle}</div>
+            </div>
+          ) : null}
         </div>
 
         <div className="detail-actions">

@@ -129,7 +129,18 @@ function CourseRow({
       </div>
       <h3 title={courseTitle}>{courseTitle}</h3>
       <div className="course-row__side">
+        {typeof course.learning?.percent === 'number' && course.learning.playableCount > 0 ? (
+          <span className="course-row__percent">{course.learning.percent}%</span>
+        ) : null}
+        {course.learning?.lastLessonTitle ? (
+          <span className="course-row__resume" title={course.learning.lastLessonTitle}>
+            {course.learning.lastLessonTitle}
+          </span>
+        ) : null}
         {isInProcess ? <span className="status-ribbon status-ribbon--inline">En curso</span> : null}
+        {course.learning?.status === 'completed' ? (
+          <span className="badge badge--done">Completado</span>
+        ) : null}
         {institutionImg ? (
           <img
             className="institution-logo"

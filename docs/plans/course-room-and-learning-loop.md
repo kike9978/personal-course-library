@@ -209,12 +209,12 @@ Catalog fields to activate over time:
 
 **Outcome:** Library hub reflects learning, not just a flag.
 
-- [ ] Per-lesson completed toggle (manual + auto ~90–95% watched)
-- [ ] Course % complete derived from lessons
-- [ ] Status lifecycle: not started / in progress / completed (wire `isIncomplete` if useful)
-- [ ] Continue rail: last lesson title + progress; click resumes Room at position
-- [ ] Sort: recently opened / most progress
-- [ ] Optional progress indicator on cards
+- [x] Per-lesson completed toggle (manual + auto ~90–95% watched)
+- [x] Course % complete derived from lessons
+- [x] Status lifecycle: not started / in progress / completed (wire `isIncomplete` if useful)
+- [x] Continue rail: last lesson title + progress; click resumes Room at position
+- [x] Sort: recently opened / most progress
+- [x] Optional progress indicator on cards
 
 **Exit criteria:** Continue Watching always lands on the correct lesson and timestamp.
 

@@ -4,13 +4,21 @@ import LessonTree, { flattenLessons } from './LessonTree'
 import LessonPlayer from './LessonPlayer'
 import Loader from './Loader'
 
-function CourseRoom({ course, onBack, onOpenExplorer }) {
+function CourseRoom({ course, onBack, onOpenExplorer, onProgressChange }) {
   const coursePath = course.path
   const [tree, setTree] = useState(null)
   const [progress, setProgress] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedPath, setSelectedPath] = useState(null)
+
+  const applyProgress = useCallback(
+    (next) => {
+      setProgress(next)
+      onProgressChange?.(coursePath, next)
+    },
+    [coursePath, onProgressChange]
+  )
 
   const load = useCallback(
     async (force = false) => {
@@ -22,7 +30,7 @@ function CourseRoom({ course, onBack, onOpenExplorer }) {
           window.api.getCourseProgress(coursePath)
         ])
         setTree(scanned)
-        setProgress(courseProgress)
+        applyProgress(courseProgress)
 
         const flat = flattenLessons(scanned.sections)
         const last = courseProgress?.lastLessonRelativePath
@@ -42,7 +50,7 @@ function CourseRoom({ course, onBack, onOpenExplorer }) {
         setLoading(false)
       }
     },
-    [coursePath]
+    [coursePath, applyProgress]
   )
 
   useEffect(() => {
@@ -63,11 +71,15 @@ function CourseRoom({ course, onBack, onOpenExplorer }) {
 
   const initialPositionSec = useMemo(() => {
     if (!selectedPath || !progress) return 0
+    const lessonProg = progress.lessons?.[selectedPath]
+    if (lessonProg?.completed) return 0
     if (progress.lastLessonRelativePath === selectedPath) {
       return progress.lastPositionSec || 0
     }
-    return progress.lessons?.[selectedPath]?.positionSec || 0
+    return lessonProg?.positionSec || 0
   }, [progress, selectedPath])
+
+  const selectedCompleted = Boolean(progress?.lessons?.[selectedPath]?.completed)
 
   const handleSelectLesson = (lesson) => {
     setSelectedPath(lesson.relativePath)
@@ -78,16 +90,44 @@ function CourseRoom({ course, onBack, onOpenExplorer }) {
       try {
         const next = await window.api.setLessonProgress(coursePath, {
           relativePath: update.relativePath,
+          title: update.title,
           positionSec: update.positionSec,
+          durationSec: update.durationSec,
           completed: update.completed,
           setAsLast: true
         })
-        setProgress(next)
+        applyProgress(next)
+
+        // Keep catalog "En curso" in sync when learning starts / finishes
+        if (next.status === 'in_progress' && !course.isInProcess) {
+          window.api.updateCourseProperty(coursePath, 'isInProcess', true).catch(() => {})
+        } else if (next.status === 'completed' && course.isInProcess) {
+          window.api.updateCourseProperty(coursePath, 'isInProcess', false).catch(() => {})
+        }
       } catch (err) {
         console.error('Failed to save progress', err)
       }
     },
-    [coursePath]
+    [coursePath, course.isInProcess, applyProgress]
+  )
+
+  const toggleLessonComplete = useCallback(
+    async (lesson, completed) => {
+      if (!lesson?.relativePath) return
+      try {
+        const next = await window.api.setLessonProgress(coursePath, {
+          relativePath: lesson.relativePath,
+          title: lesson.title,
+          completed,
+          setAsLast: true
+        })
+        applyProgress(next)
+        toast.success(completed ? 'Lección completada' : 'Lección reabierta')
+      } catch (err) {
+        toast.error(err.message || 'No se pudo actualizar')
+      }
+    },
+    [coursePath, applyProgress]
   )
 
   const goPrev = () => {
@@ -127,14 +167,18 @@ function CourseRoom({ course, onBack, onOpenExplorer }) {
       } else if (e.key === ']') {
         e.preventDefault()
         goNext()
+      } else if (e.key.toLowerCase() === 'm' && selectedLesson) {
+        e.preventDefault()
+        toggleLessonComplete(selectedLesson, !selectedCompleted)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIndex, flatLessons, onBack])
+  }, [selectedIndex, flatLessons, onBack, selectedLesson, selectedCompleted, toggleLessonComplete])
 
   const emptyPlayable = !loading && tree && tree.summary?.playableCount === 0
+  const percent = progress?.percent ?? 0
 
   return (
     <div className="course-room">
@@ -147,12 +191,13 @@ function CourseRoom({ course, onBack, onOpenExplorer }) {
           {course.institution ? <span>{course.institution}</span> : null}
         </div>
         <div className="course-room__actions">
-          {tree?.summary ? (
+          {progress ? (
+            <span className="count-badge" title={`${progress.completedCount}/${progress.playableCount}`}>
+              {percent}% · {progress.completedCount}/{progress.playableCount || '—'}
+            </span>
+          ) : tree?.summary ? (
             <span className="count-badge">
               {tree.summary.playableCount} lecciones
-              {tree.summary.sectionCount
-                ? ` · ${tree.summary.sectionCount} secciones`
-                : ''}
             </span>
           ) : null}
           <button
@@ -168,6 +213,12 @@ function CourseRoom({ course, onBack, onOpenExplorer }) {
           </button>
         </div>
       </header>
+
+      {progress && progress.playableCount > 0 ? (
+        <div className="course-room__progress" aria-hidden="true">
+          <div className="course-room__progress-bar" style={{ width: `${percent}%` }} />
+        </div>
+      ) : null}
 
       {loading && !tree ? (
         <div className="loader-container">
@@ -200,6 +251,7 @@ function CourseRoom({ course, onBack, onOpenExplorer }) {
               courseResources={tree?.courseResources || []}
               selectedPath={selectedPath}
               onSelectLesson={handleSelectLesson}
+              onToggleLessonComplete={toggleLessonComplete}
               progressByLesson={progress?.lessons || {}}
             />
           </aside>
@@ -208,7 +260,11 @@ function CourseRoom({ course, onBack, onOpenExplorer }) {
               coursePath={coursePath}
               lesson={selectedLesson}
               initialPositionSec={initialPositionSec}
+              isCompleted={selectedCompleted}
               onProgress={handleProgress}
+              onToggleComplete={(completed) =>
+                selectedLesson && toggleLessonComplete(selectedLesson, completed)
+              }
               onPrev={goPrev}
               onNext={goNext}
               hasPrev={selectedIndex > 0}

@@ -68,7 +68,8 @@ function CourseCard({
   onToggleInProcess,
   isSelected,
   tabIndex,
-  onError
+  onError,
+  showLearningMeta = true
 }) {
   const {
     path: coursePath,
@@ -222,6 +223,13 @@ function CourseCard({
         <h3 className="course-card__title" title={courseTitle}>
           {courseTitle}
         </h3>
+        {showLearningMeta && course.learning?.lastLessonTitle ? (
+          <p className="course-card__resume" title={course.learning.lastLessonTitle}>
+            {course.learning.status === 'completed'
+              ? 'Completado'
+              : `Continuar: ${course.learning.lastLessonTitle}`}
+          </p>
+        ) : null}
         <div className="course-card__meta">
           {institutionImg ? (
             <img
@@ -235,13 +243,27 @@ function CourseCard({
             />
           ) : null}
           {institution ? <span className="institution-name">{institution}</span> : null}
+          {showLearningMeta && typeof course.learning?.percent === 'number' && course.learning.playableCount > 0 ? (
+            <span className="course-card__percent">{course.learning.percent}%</span>
+          ) : null}
         </div>
+        {showLearningMeta && course.learning?.playableCount > 0 ? (
+          <div className="course-card__progress" aria-hidden="true">
+            <div
+              className="course-card__progress-bar"
+              style={{ width: `${Math.min(100, course.learning.percent || 0)}%` }}
+            />
+          </div>
+        ) : null}
         <div className="chips-container">
           {(programs || []).slice(0, 4).map((program, index) => (
             <span key={`${program}-${index}`} className="badge badge--programs">
               {program}
             </span>
           ))}
+          {course.learning?.status === 'completed' ? (
+            <span className="badge badge--done">Completado</span>
+          ) : null}
         </div>
       </div>
     </article>

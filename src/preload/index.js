@@ -18,6 +18,7 @@ const api = {
   getLessonMediaUrl: (coursePath, relativePath) =>
     ipcRenderer.invoke('get-lesson-media-url', { coursePath, relativePath }),
   getCourseProgress: (coursePath) => ipcRenderer.invoke('get-course-progress', coursePath),
+  getAllCourseProgress: () => ipcRenderer.invoke('get-all-course-progress'),
   getLessonProgress: (coursePath, relativePath) =>
     ipcRenderer.invoke('get-lesson-progress', { coursePath, relativePath }),
   setLessonProgress: (coursePath, update) =>

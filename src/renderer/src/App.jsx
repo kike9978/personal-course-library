@@ -147,6 +147,8 @@ function AppHeader({
           >
             <option value="az">A → Z</option>
             <option value="za">Z → A</option>
+            <option value="recent">Recientes</option>
+            <option value="progress">Más progreso</option>
             <option value="inProgress">En curso primero</option>
           </select>
         </div>
@@ -194,13 +196,14 @@ function ContinueHub({ courses, onSelect, onOpenCourse, onOpenModal, onToggleInP
     <section className="continue-hub" aria-label="Continuar aprendiendo">
       <div className="section-heading">
         <h2>Continuar aprendiendo</h2>
-        <span>{courses.length} en curso</span>
+        <span>{courses.length} reciente{courses.length === 1 ? '' : 's'}</span>
       </div>
       <div className="continue-rail">
         {courses.slice(0, 12).map((course) => (
           <CourseCard
             key={`hub-${course.path}`}
             course={course}
+            showLearningMeta
             onSelect={onSelect}
             onOpenCourse={onOpenCourse}
             onOpenModalClick={onOpenModal}
@@ -256,6 +259,18 @@ function FilterableCoursesGrid({
     [courses]
   )
 
+  const continueCourses = useMemo(() => {
+    return courses
+      .filter((c) => {
+        if (c.error) return false
+        const learning = c.learning
+        if (!learning?.lastOpenedAt) return false
+        if (learning.status === 'completed') return false
+        return learning.status === 'in_progress' || c.isInProcess || learning.lastLessonRelativePath
+      })
+      .sort((a, b) => (b.learning?.lastOpenedAt || 0) - (a.learning?.lastOpenedAt || 0))
+  }, [courses])
+
   const sortedCourses = useMemo(() => {
     const searchLower = debouncedFilter.toLowerCase()
     const filtered = courses.filter((course) => {
@@ -264,7 +279,7 @@ function FilterableCoursesGrid({
       const institution = (course.institution || '').toLowerCase()
       const matchesText =
         !searchLower || title.includes(searchLower) || institution.includes(searchLower)
-      const processCheck = !isInProcessOnly || course.isInProcess
+      const processCheck = !isInProcessOnly || course.isInProcess || course.learning?.status === 'in_progress'
       const institutionCheck =
         !institutionFilter || course.institution === institutionFilter
       const programCheck =
@@ -273,8 +288,19 @@ function FilterableCoursesGrid({
     })
 
     return [...filtered].sort((a, b) => {
+      if (sortMode === 'recent') {
+        return (b.learning?.lastOpenedAt || 0) - (a.learning?.lastOpenedAt || 0)
+      }
+      if (sortMode === 'progress') {
+        const diff = (b.learning?.percent || 0) - (a.learning?.percent || 0)
+        if (diff !== 0) return diff
+      }
       if (sortMode === 'inProgress') {
-        const diff = Number(Boolean(b.isInProcess)) - Number(Boolean(a.isInProcess))
+        const aActive =
+          Number(Boolean(a.isInProcess)) || Number(a.learning?.status === 'in_progress')
+        const bActive =
+          Number(Boolean(b.isInProcess)) || Number(b.learning?.status === 'in_progress')
+        const diff = bActive - aActive
         if (diff !== 0) return diff
       }
       const cmp = (a.title || '').localeCompare(b.title || '', undefined, {
@@ -424,7 +450,7 @@ function FilterableCoursesGrid({
 
               {!isInProcessOnly && !debouncedFilter && !institutionFilter && !programFilter && (
                 <ContinueHub
-                  courses={inProgressCourses}
+                  courses={continueCourses}
                   onSelect={handleSelectCourse}
                   onOpenCourse={handleOpenCourse}
                   onOpenModal={handleOpenEdit}
@@ -484,6 +510,18 @@ function App() {
   const [activeCoursePath, setActiveCoursePath] = useState(null)
   const loadingRef = useRef(false)
 
+  const mergeLearning = useCallback(async (list) => {
+    try {
+      const progressMap = await window.api.getAllCourseProgress()
+      return list.map((course) => ({
+        ...course,
+        learning: progressMap[course.path] || null
+      }))
+    } catch {
+      return list.map((course) => ({ ...course, learning: null }))
+    }
+  }, [])
+
   const loadCourses = useCallback(async () => {
     if (loadingRef.current) return
     loadingRef.current = true
@@ -499,7 +537,7 @@ function App() {
       setNeedsSetup(false)
       setLibraryPath(lib.path)
       const list = await window.api.listCourses()
-      setCourses(list)
+      setCourses(await mergeLearning(list))
     } catch (error) {
       console.error('Error loading courses:', error)
       toast.error(error.message || 'No se pudieron cargar los cursos')
@@ -508,7 +546,7 @@ function App() {
       setIsLoading(false)
       loadingRef.current = false
     }
-  }, [])
+  }, [mergeLearning])
 
   const refreshCourses = useCallback(async () => {
     if (loadingRef.current) return
@@ -516,7 +554,7 @@ function App() {
     setIsLoading(true)
     try {
       const list = await window.api.refreshCourses()
-      setCourses(list)
+      setCourses(await mergeLearning(list))
       toast.success('Biblioteca actualizada')
     } catch (error) {
       console.error('Error refreshing courses:', error)
@@ -525,6 +563,14 @@ function App() {
       setIsLoading(false)
       loadingRef.current = false
     }
+  }, [mergeLearning])
+
+  const handleLearningProgressChange = useCallback((coursePath, learning) => {
+    setCourses((prev) =>
+      prev.map((course) =>
+        course.path === coursePath ? { ...course, learning } : course
+      )
+    )
   }, [])
 
   const handleChangeLibrary = useCallback(async () => {
@@ -548,7 +594,7 @@ function App() {
       setCourses((prev) =>
         prev.map((course) => {
           if (course.path !== update.coursePath) return course
-          if (update.fullData) return { ...course, ...update.fullData }
+          if (update.fullData) return { ...course, ...update.fullData, learning: course.learning }
           if (update.property) return { ...course, [update.property]: update.value }
           return course
         })
@@ -606,6 +652,7 @@ function App() {
           course={activeCourse}
           onBack={() => setActiveCoursePath(null)}
           onOpenExplorer={(c) => window.api.openCourseFolder(c.path)}
+          onProgressChange={handleLearningProgressChange}
         />
       ) : (
         <FilterableCoursesGrid

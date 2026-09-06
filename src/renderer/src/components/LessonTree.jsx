@@ -3,6 +3,7 @@ function LessonTree({
   courseResources = [],
   selectedPath,
   onSelectLesson,
+  onToggleLessonComplete,
   progressByLesson = {}
 }) {
   const hasContent = sections.some((s) => s.lessons?.length)
@@ -26,12 +27,25 @@ function LessonTree({
             {(section.lessons || []).map((lesson) => {
               const prog = progressByLesson[lesson.relativePath]
               const isActive = selectedPath === lesson.relativePath
+              const isDone = Boolean(prog?.completed)
               return (
-                <li key={lesson.id || lesson.relativePath}>
+                <li key={lesson.id || lesson.relativePath} className="lesson-tree__row">
+                  <button
+                    type="button"
+                    className={`lesson-tree__check${isDone ? ' is-done' : ''}`}
+                    title={isDone ? 'Marcar como no completada' : 'Marcar como completada'}
+                    aria-pressed={isDone}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onToggleLessonComplete?.(lesson, !isDone)
+                    }}
+                  >
+                    {isDone ? '✓' : ''}
+                  </button>
                   <button
                     type="button"
                     className={`lesson-tree__item${isActive ? ' is-active' : ''}${
-                      prog?.completed ? ' is-done' : ''
+                      isDone ? ' is-done' : ''
                     }`}
                     onClick={() => onSelectLesson(lesson)}
                     title={lesson.relativePath}
@@ -40,7 +54,7 @@ function LessonTree({
                       {lesson.kind === 'audio' ? '♪' : '▶'}
                     </span>
                     <span className="lesson-tree__label">{lesson.title}</span>
-                    {prog?.positionSec > 0 && !prog?.completed ? (
+                    {prog?.positionSec > 0 && !isDone ? (
                       <span className="lesson-tree__resume" aria-hidden="true" />
                     ) : null}
                   </button>

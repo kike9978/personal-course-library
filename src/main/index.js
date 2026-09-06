@@ -25,7 +25,9 @@ import { getLessonMediaUrl } from './services/mediaUrls.js'
 import {
   getCourseProgress,
   setLessonProgress,
-  getLessonProgress
+  getLessonProgress,
+  setCourseCurriculum,
+  getAllCourseProgress
 } from './services/learningStore.js'
 
 protocol.registerSchemesAsPrivileged([
@@ -305,6 +307,10 @@ function registerIpcHandlers() {
       return scanCache.get(key)
     }
     const tree = await scanCourse(coursePath)
+    const playable = (tree.flatLessons || [])
+      .filter((l) => l.kind === 'video' || l.kind === 'audio')
+      .map((l) => ({ relativePath: l.relativePath, title: l.title }))
+    setCourseCurriculum(coursePath, playable)
     scanCache.set(key, tree)
     return tree
   })
@@ -315,6 +321,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle('get-course-progress', (_event, coursePath) => {
     return getCourseProgress(coursePath)
+  })
+
+  ipcMain.handle('get-all-course-progress', () => {
+    return getAllCourseProgress()
   })
 
   ipcMain.handle('get-lesson-progress', (_event, { coursePath, relativePath }) => {
