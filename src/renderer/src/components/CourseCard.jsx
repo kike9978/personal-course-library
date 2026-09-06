@@ -1,33 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { getInstitutionLogo, getCoverFallback, absoluteAssetUrl } from '../utils/images'
+import brandMark from '../assets/img/brand-mark.svg'
 
-function CourseCard({ course, onOpenModalClick, onError }) {
-  const {
-    path: coursePath,
-    title: courseTitle,
-    institution,
-    programs = [],
-    isInProcess: initialInProcess,
-    hasCover
-  } = course
-
+function useCoverImage(coursePath, hasCover) {
   const fallbackCover = absoluteAssetUrl(getCoverFallback())
-  const [isInProcess, setIsInProcess] = useState(Boolean(initialInProcess))
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [coverImg, setCoverImg] = useState(fallbackCover)
   const [coverFailed, setCoverFailed] = useState(false)
-  const [institutionImg, setInstitutionImg] = useState(() =>
-    absoluteAssetUrl(getInstitutionLogo(institution))
-  )
-  const cardRef = useRef(null)
-
-  useEffect(() => {
-    setIsInProcess(Boolean(course.isInProcess))
-  }, [course.isInProcess])
-
-  useEffect(() => {
-    setInstitutionImg(absoluteAssetUrl(getInstitutionLogo(institution)))
-  }, [institution])
+  const ref = useRef(null)
 
   useEffect(() => {
     setCoverFailed(false)
@@ -37,160 +16,218 @@ function CourseCard({ course, onOpenModalClick, onError }) {
     }
 
     let cancelled = false
+    const load = () => {
+      window.api
+        .getCoverImageUrl(coursePath)
+        .then((url) => {
+          if (!cancelled && url) setCoverImg(url)
+        })
+        .catch(() => {
+          if (!cancelled) setCoverImg(fallbackCover)
+        })
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries[0]?.isIntersecting) return
         observer.disconnect()
-        window.api
-          .getCoverImageUrl(coursePath)
-          .then((url) => {
-            if (!cancelled && url) setCoverImg(url)
-          })
-          .catch((error) => {
-            console.error('Error loading cover image:', error)
-            if (!cancelled) setCoverImg(fallbackCover)
-            if (onError) onError(error)
-          })
+        load()
       },
-      { threshold: 0.1 }
+      { threshold: 0.05, rootMargin: '120px' }
     )
 
-    if (cardRef.current) observer.observe(cardRef.current)
+    if (ref.current) observer.observe(ref.current)
+    else load()
 
     return () => {
       cancelled = true
       observer.disconnect()
     }
-  }, [coursePath, hasCover, onError, fallbackCover])
+  }, [coursePath, hasCover, fallbackCover])
+
+  return {
+    ref,
+    coverSrc: coverFailed ? fallbackCover : coverImg,
+    onCoverError: () => {
+      setCoverFailed(true)
+      setCoverImg(fallbackCover)
+    }
+  }
+}
+
+function stopCardEvent(e) {
+  e.preventDefault()
+  e.stopPropagation()
+}
+
+function CourseCard({
+  course,
+  onOpenModalClick,
+  onSelect,
+  onToggleInProcess,
+  isSelected,
+  tabIndex,
+  onError
+}) {
+  const {
+    path: coursePath,
+    title: courseTitle,
+    institution,
+    programs = [],
+    isInProcess: initialInProcess,
+    hasCover
+  } = course
+
+  const [isInProcess, setIsInProcess] = useState(Boolean(initialInProcess))
+  const [institutionImg, setInstitutionImg] = useState(() =>
+    absoluteAssetUrl(getInstitutionLogo(institution))
+  )
+  const { ref, coverSrc, onCoverError } = useCoverImage(coursePath, hasCover)
 
   useEffect(() => {
-    const unsubscribe = window.api.onCourseUpdated((update) => {
-      if (update.coursePath === coursePath && update.property === 'isInProcess') {
-        setIsInProcess(Boolean(update.value))
-      }
-    })
-    return unsubscribe
-  }, [coursePath])
+    setIsInProcess(Boolean(course.isInProcess))
+  }, [course.isInProcess])
 
-  const handleCheckboxClick = async (e) => {
-    e.preventDefault()
-    e.stopPropagation()
+  useEffect(() => {
+    setInstitutionImg(absoluteAssetUrl(getInstitutionLogo(institution)))
+  }, [institution])
+
+  const toggleInProcess = async (e) => {
+    stopCardEvent(e)
     const newValue = !isInProcess
     const previous = isInProcess
     setIsInProcess(newValue)
     try {
-      const result = await window.api.updateCourseProperty(coursePath, 'isInProcess', newValue)
-      if (!result.success) {
-        setIsInProcess(previous)
+      if (onToggleInProcess) {
+        await onToggleInProcess(course, newValue)
+      } else {
+        const result = await window.api.updateCourseProperty(coursePath, 'isInProcess', newValue)
+        if (!result.success) setIsInProcess(previous)
       }
     } catch (error) {
       setIsInProcess(previous)
-      console.error('Error updating isInProcess:', error)
       if (onError) onError(error)
     }
   }
 
-  const handleCardClick = (e) => {
-    if (!e.target.closest('.in-progress') && !e.target.closest('.kebab-menu')) {
-      window.api.openCourseFolder(coursePath).catch((error) => {
-        console.error(error)
-        if (onError) onError(error)
-      })
-    }
+  const handleOpen = (e) => {
+    stopCardEvent(e)
+    window.api.openCourseFolder(coursePath).catch((error) => {
+      if (onError) onError(error)
+    })
   }
 
-  const toggleDropdown = (e) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDropdownOpen((open) => !open)
-  }
-
-  const handleEditClick = (e) => {
-    e.stopPropagation()
+  const handleEdit = (e) => {
+    stopCardEvent(e)
     if (typeof onOpenModalClick === 'function') {
       onOpenModalClick(course)
     }
-    setIsDropdownOpen(false)
+  }
+
+  const handleSelect = () => {
+    onSelect?.(course)
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      window.api.openCourseFolder(coursePath).catch((error) => {
+        if (onError) onError(error)
+      })
+    } else if (e.key.toLowerCase() === 'e' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault()
+      onOpenModalClick?.(course)
+    } else if (e.key === ' ') {
+      e.preventDefault()
+      handleSelect()
+    }
   }
 
   return (
     <article
-      ref={cardRef}
-      onClick={handleCardClick}
-      className="course-card p-4 border rounded-lg shadow-md hover:shadow-lg transition"
+      ref={ref}
+      className={`course-card${isSelected ? ' is-selected' : ''}`}
+      onClick={handleSelect}
+      onDoubleClick={(e) => {
+        e.preventDefault()
+        window.api.openCourseFolder(coursePath).catch((error) => {
+          if (onError) onError(error)
+        })
+      }}
+      onKeyDown={handleKeyDown}
+      tabIndex={tabIndex ?? 0}
+      data-course-path={coursePath}
     >
-      <img
-        src={coverFailed ? fallbackCover : coverImg}
-        alt=""
-        className="w-full h-32 object-cover rounded-md"
-        onError={() => {
-          setCoverFailed(true)
-          setCoverImg(fallbackCover)
-        }}
-      />
-      <div className="kebab-menu relative">
-        <button
-          type="button"
-          className="kebab-button p-2 rounded-full hover:bg-gray-200"
-          onClick={toggleDropdown}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24">
-            <circle cx="12" cy="12" r="2" />
-            <circle cx="12" cy="6" r="2" />
-            <circle cx="12" cy="18" r="2" />
-          </svg>
-        </button>
-        {isDropdownOpen && (
-          <div className="dropdown-menu absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-md shadow-lg z-10">
-            <button
-              type="button"
-              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              onClick={handleEditClick}
-            >
-              Edit Details
-            </button>
+      <div className="course-card__cover">
+        {hasCover ? (
+          <img src={coverSrc} alt="" onError={onCoverError} />
+        ) : (
+          <div className="cover-placeholder">
+            <img src={brandMark} alt="" width={28} height={28} />
           </div>
         )}
+
+        <button
+          type="button"
+          className={`status-ribbon${isInProcess ? '' : ' status-ribbon--off'}`}
+          onMouseDown={stopCardEvent}
+          onClick={toggleInProcess}
+          title={isInProcess ? 'Quitar de en curso' : 'Marcar en curso'}
+        >
+          {isInProcess ? 'En curso' : '+ En curso'}
+        </button>
+
+        <div className="course-card__actions">
+          <button
+            type="button"
+            className="card-action"
+            onMouseDown={stopCardEvent}
+            onClick={handleOpen}
+            title="Abrir carpeta"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="card-action"
+            onMouseDown={stopCardEvent}
+            onClick={handleEdit}
+            title="Editar"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" />
+            </svg>
+          </button>
+        </div>
       </div>
-      <div className="course-info mt-2">
-        <div className="course-header flex items-center justify-between">
-          <h3 className="text-lg font-semibold">{courseTitle}</h3>
-          {institutionImg && (
+
+      <div className="course-card__body">
+        <h3 className="course-card__title" title={courseTitle}>
+          {courseTitle}
+        </h3>
+        <div className="course-card__meta">
+          {institutionImg ? (
             <img
-              className="institution-logo h-8 w-8 rounded-full object-contain"
+              className="institution-logo"
               src={institutionImg}
               alt=""
               title={institution}
               onError={(e) => {
-                const fallback = absoluteAssetUrl(getInstitutionLogo(null))
-                if (fallback && e.currentTarget.src !== fallback) {
-                  e.currentTarget.src = absoluteAssetUrl(fallback)
-                } else {
-                  e.currentTarget.style.display = 'none'
-                }
+                e.currentTarget.style.display = 'none'
               }}
             />
-          )}
+          ) : null}
+          {institution ? <span className="institution-name">{institution}</span> : null}
         </div>
-        <div className="chips-container flex flex-wrap mt-2">
-          {programs.map((program, index) => (
-            <div
-              key={`${program}-${index}`}
-              className="badge badge--programs bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded mr-1 mb-1"
-            >
-              <span>{program}</span>
-            </div>
+        <div className="chips-container">
+          {(programs || []).slice(0, 4).map((program, index) => (
+            <span key={`${program}-${index}`} className="badge badge--programs">
+              {program}
+            </span>
           ))}
         </div>
-        <label className="in-progress flex items-center mt-2">
-          <input
-            type="checkbox"
-            checked={isInProcess}
-            onChange={handleCheckboxClick}
-            className="mr-2"
-          />{' '}
-          En curso
-        </label>
       </div>
     </article>
   )

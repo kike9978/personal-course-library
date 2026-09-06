@@ -1,22 +1,52 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
+import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
+import brandMark from '../assets/img/brand-mark.svg'
+import ChipAutocomplete from './ChipAutocomplete'
 
-function CourseEditModal({ course, onCourseUpdated, onClose }) {
+function CourseEditModal({ course, onCourseUpdated, onClose, programOptions = [] }) {
   const dialogRef = useRef(null)
   const [instructor, setInstructor] = useState(course.instructor || '')
   const [institution, setInstitution] = useState(course.institution || '')
   const [localCourseTitle, setLocalCourseTitle] = useState(course.title || '')
-  const [localProgramsList, setLocalProgramsList] = useState(course.programs || [])
+  const [localProgramsList, setLocalProgramsList] = useState(
+    Array.isArray(course.programs) ? course.programs : []
+  )
   const [isSaving, setIsSaving] = useState(false)
+  const [coverImg, setCoverImg] = useState(absoluteAssetUrl(getCoverFallback()))
 
   useEffect(() => {
     setLocalCourseTitle(course.title || '')
-    setLocalProgramsList(course.programs || [])
+    setLocalProgramsList(Array.isArray(course.programs) ? course.programs : [])
     setInstructor(course.instructor || '')
     setInstitution(course.institution || '')
 
-    if (dialogRef.current && !dialogRef.current.open) {
-      dialogRef.current.showModal()
+    let cancelled = false
+    if (course.hasCover) {
+      window.api
+        .getCoverImageUrl(course.path)
+        .then((url) => {
+          if (!cancelled && url) setCoverImg(url)
+        })
+        .catch(() => {})
+    } else {
+      setCoverImg(absoluteAssetUrl(getCoverFallback()))
+    }
+
+    const dialog = dialogRef.current
+    const frame = requestAnimationFrame(() => {
+      if (dialog && !dialog.open) {
+        try {
+          dialog.showModal()
+        } catch (err) {
+          console.error('Failed to open edit dialog:', err)
+        }
+      }
+    })
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(frame)
     }
   }, [course])
 
@@ -27,18 +57,20 @@ function CourseEditModal({ course, onCourseUpdated, onClose }) {
     if (onClose) onClose()
   }
 
+  const handleBackdropClick = (e) => {
+    if (e.target === dialogRef.current) {
+      handleClose()
+    }
+  }
+
   const handleSaveAll = async () => {
     if (isSaving) return
 
     setIsSaving(true)
     try {
-      const programsArray =
-        typeof localProgramsList === 'string'
-          ? localProgramsList
-              .split(',')
-              .map((p) => p.trim())
-              .filter(Boolean)
-          : localProgramsList
+      const programsArray = (Array.isArray(localProgramsList) ? localProgramsList : [])
+        .map((p) => String(p).trim())
+        .filter(Boolean)
 
       const updates = {
         title: localCourseTitle,
@@ -52,84 +84,95 @@ function CourseEditModal({ course, onCourseUpdated, onClose }) {
         throw new Error(result.error || 'Failed to update course')
       }
 
-      toast.success('Course details updated successfully!')
+      toast.success('Curso actualizado')
       if (onCourseUpdated) {
         onCourseUpdated(course.path, result.data)
       }
       handleClose()
     } catch (err) {
       console.error('Error saving course details:', err)
-      toast.error(err.message || 'Failed to update course details')
+      toast.error(err.message || 'No se pudo guardar')
     } finally {
       setIsSaving(false)
     }
   }
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="dialog bg-white p-6 rounded-lg shadow-xl max-w-md w-full"
-      onClose={onClose}
-    >
-      <h3 className="text-xl font-bold mb-4 text-gray-800">Editar propiedades de curso</h3>
+    <dialog ref={dialogRef} className="dialog" onClose={onClose} onClick={handleBackdropClick}>
+      <div className="dialog__preview">
+        <div className="dialog__preview-cover">
+          {course.hasCover ? (
+            <img
+              src={coverImg}
+              alt=""
+              onError={(e) => {
+                e.currentTarget.src = brandMark
+              }}
+            />
+          ) : (
+            <div className="cover-placeholder">
+              <img src={brandMark} alt="" width={36} height={36} />
+            </div>
+          )}
+        </div>
+        <div>
+          <h3>Editar propiedades</h3>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--clr-ink-soft)' }}>
+            {course.title}
+          </p>
+        </div>
+      </div>
 
-      <div className="space-y-4">
-        <label className="block">
-          <span className="text-gray-700">Nombre de curso:</span>
+      <div className="dialog__form">
+        <div className="field">
+          <label htmlFor="course-title">Nombre de curso</label>
           <textarea
-            className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 p-2"
+            id="course-title"
             value={localCourseTitle}
             onChange={(e) => setLocalCourseTitle(e.target.value)}
           />
-        </label>
+        </div>
 
-        <label className="block">
-          <span className="text-gray-700">Programas:</span>
-          <input
-            type="text"
-            className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 p-2"
-            value={
-              Array.isArray(localProgramsList) ? localProgramsList.join(', ') : localProgramsList
-            }
-            onChange={(e) => setLocalProgramsList(e.target.value)}
-          />
-        </label>
+        <ChipAutocomplete
+          id="course-programs"
+          label="Programas"
+          values={localProgramsList}
+          options={programOptions}
+          onChange={setLocalProgramsList}
+          placeholder="Buscar o añadir programa…"
+        />
 
-        <label className="block">
-          <span className="text-gray-700">Instructor:</span>
+        <div className="field">
+          <label htmlFor="course-instructor">Instructor</label>
           <input
+            id="course-instructor"
             type="text"
-            className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 p-2"
             value={instructor}
             onChange={(e) => setInstructor(e.target.value)}
           />
-        </label>
+        </div>
 
-        <label className="block">
-          <span className="text-gray-700">Academia:</span>
+        <div className="field">
+          <label htmlFor="course-institution">Academia</label>
           <input
+            id="course-institution"
             type="text"
-            className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 p-2"
             value={institution}
             onChange={(e) => setInstitution(e.target.value)}
           />
-        </label>
+        </div>
 
-        <div className="flex justify-end space-x-2 pt-4">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
-          >
+        <div className="dialog__actions">
+          <button type="button" className="btn btn--ghost" onClick={handleClose}>
             Cancelar
           </button>
           <button
             type="button"
+            className="btn btn--primary"
             onClick={handleSaveAll}
             disabled={isSaving}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSaving ? 'Guardando...' : 'Guardar'}
+            {isSaving ? 'Guardando…' : 'Guardar'}
           </button>
         </div>
       </div>
