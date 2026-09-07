@@ -129,6 +129,11 @@ function CourseRow({
       </div>
       <h3 title={courseTitle}>{courseTitle}</h3>
       <div className="course-row__side">
+        {course.isNew ? <span className="badge badge--new">Nuevo</span> : null}
+        {course.missingProps ? <span className="badge badge--warn">Sin props</span> : null}
+        {typeof course.rate === 'number' && course.rate > 0 ? (
+          <span className="course-card__rate">{'★'.repeat(course.rate)}</span>
+        ) : null}
         {typeof course.learning?.percent === 'number' && course.learning.playableCount > 0 ? (
           <span className="course-row__percent">{course.learning.percent}%</span>
         ) : null}

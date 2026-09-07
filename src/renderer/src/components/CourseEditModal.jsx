@@ -4,7 +4,37 @@ import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import brandMark from '../assets/img/brand-mark.svg'
 import ChipAutocomplete from './ChipAutocomplete'
 
-function CourseEditModal({ course, onCourseUpdated, onClose, programOptions = [] }) {
+function StarRate({ value, onChange }) {
+  return (
+    <div className="star-rate" role="group" aria-label="Valoración">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          className={`star-rate__btn${value >= n ? ' is-on' : ''}`}
+          aria-pressed={value >= n}
+          onClick={() => onChange(value === n ? 0 : n)}
+          title={`${n} estrella${n === 1 ? '' : 's'}`}
+        >
+          ★
+        </button>
+      ))}
+      {value > 0 ? (
+        <button type="button" className="star-rate__clear" onClick={() => onChange(0)}>
+          Quitar
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+function CourseEditModal({
+  course,
+  onCourseUpdated,
+  onClose,
+  programOptions = [],
+  themeOptions = []
+}) {
   const dialogRef = useRef(null)
   const [instructor, setInstructor] = useState(course.instructor || '')
   const [institution, setInstitution] = useState(course.institution || '')
@@ -12,14 +42,18 @@ function CourseEditModal({ course, onCourseUpdated, onClose, programOptions = []
   const [localProgramsList, setLocalProgramsList] = useState(
     Array.isArray(course.programs) ? course.programs : []
   )
+  const [localThemes, setLocalThemes] = useState(Array.isArray(course.theme) ? course.theme : [])
+  const [rate, setRate] = useState(Number(course.rate) || 0)
   const [isSaving, setIsSaving] = useState(false)
   const [coverImg, setCoverImg] = useState(absoluteAssetUrl(getCoverFallback()))
 
   useEffect(() => {
     setLocalCourseTitle(course.title || '')
     setLocalProgramsList(Array.isArray(course.programs) ? course.programs : [])
+    setLocalThemes(Array.isArray(course.theme) ? course.theme : [])
     setInstructor(course.instructor || '')
     setInstitution(course.institution || '')
+    setRate(Number(course.rate) || 0)
 
     let cancelled = false
     if (course.hasCover) {
@@ -68,13 +102,22 @@ function CourseEditModal({ course, onCourseUpdated, onClose, programOptions = []
 
     setIsSaving(true)
     try {
+      if (course.missingProps) {
+        await window.api.generateCourseProps(course.path)
+      }
+
       const programsArray = (Array.isArray(localProgramsList) ? localProgramsList : [])
         .map((p) => String(p).trim())
+        .filter(Boolean)
+      const themesArray = (Array.isArray(localThemes) ? localThemes : [])
+        .map((t) => String(t).trim())
         .filter(Boolean)
 
       const updates = {
         title: localCourseTitle,
         programs: programsArray,
+        theme: themesArray,
+        rate,
         instructor,
         institution
       }
@@ -86,7 +129,13 @@ function CourseEditModal({ course, onCourseUpdated, onClose, programOptions = []
 
       toast.success('Curso actualizado')
       if (onCourseUpdated) {
-        onCourseUpdated(course.path, result.data)
+        onCourseUpdated(course.path, {
+          ...result.data,
+          theme: themesArray,
+          rate,
+          missingProps: false,
+          hasProps: true
+        })
       }
       handleClose()
     } catch (err) {
@@ -119,6 +168,7 @@ function CourseEditModal({ course, onCourseUpdated, onClose, programOptions = []
           <h3>Editar propiedades</h3>
           <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--clr-ink-soft)' }}>
             {course.title}
+            {course.missingProps ? ' · Sin courseProps (se creará al guardar)' : ''}
           </p>
         </div>
       </div>
@@ -141,6 +191,20 @@ function CourseEditModal({ course, onCourseUpdated, onClose, programOptions = []
           onChange={setLocalProgramsList}
           placeholder="Buscar o añadir programa…"
         />
+
+        <ChipAutocomplete
+          id="course-themes"
+          label="Temas"
+          values={localThemes}
+          options={themeOptions}
+          onChange={setLocalThemes}
+          placeholder="Buscar o añadir tema…"
+        />
+
+        <div className="field">
+          <label>Valoración</label>
+          <StarRate value={rate} onChange={setRate} />
+        </div>
 
         <div className="field">
           <label htmlFor="course-instructor">Instructor</label>

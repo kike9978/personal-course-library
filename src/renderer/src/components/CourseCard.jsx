@@ -243,7 +243,14 @@ function CourseCard({
             />
           ) : null}
           {institution ? <span className="institution-name">{institution}</span> : null}
-          {showLearningMeta && typeof course.learning?.percent === 'number' && course.learning.playableCount > 0 ? (
+          {typeof course.rate === 'number' && course.rate > 0 ? (
+            <span className="course-card__rate" title={`${course.rate}/5`}>
+              {'★'.repeat(course.rate)}
+            </span>
+          ) : null}
+          {showLearningMeta &&
+          typeof course.learning?.percent === 'number' &&
+          course.learning.playableCount > 0 ? (
             <span className="course-card__percent">{course.learning.percent}%</span>
           ) : null}
         </div>
@@ -256,9 +263,16 @@ function CourseCard({
           </div>
         ) : null}
         <div className="chips-container">
-          {(programs || []).slice(0, 4).map((program, index) => (
+          {course.isNew ? <span className="badge badge--new">Nuevo</span> : null}
+          {course.missingProps ? <span className="badge badge--warn">Sin props</span> : null}
+          {(programs || []).slice(0, 3).map((program, index) => (
             <span key={`${program}-${index}`} className="badge badge--programs">
               {program}
+            </span>
+          ))}
+          {(course.theme || []).slice(0, 2).map((theme, index) => (
+            <span key={`theme-${theme}-${index}`} className="badge badge--theme">
+              {theme}
             </span>
           ))}
           {course.learning?.status === 'completed' ? (

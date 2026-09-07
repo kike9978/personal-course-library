@@ -43,6 +43,13 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
     }
   }, [])
 
+  useEffect(() => {
+    const unsub = window.api.onNotesChanged?.(() => {
+      refresh().catch(() => {})
+    })
+    return () => unsub?.()
+  }, [])
+
   const coursesWithNotes = useMemo(() => {
     const paths = new Set(items.map((n) => n.coursePath).filter(Boolean))
     return courses
@@ -64,9 +71,7 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
     )
     if (!stillVisible) {
       setSelectedId(
-        visibleItems[0]
-          ? { id: visibleItems[0].id, coursePath: visibleItems[0].coursePath }
-          : null
+        visibleItems[0] ? { id: visibleItems[0].id, coursePath: visibleItems[0].coursePath } : null
       )
     }
   }, [visibleItems, selectedId])
@@ -102,7 +107,8 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
     }
     onOpenCourse(course, {
       lessonRelativePath: item.lessonRelativePath || null,
-      timeSec: item.timeSec ?? null
+      timeSec: item.timeSec ?? null,
+      projectId: item.projectId || null
     })
   }
 
@@ -128,17 +134,20 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
       </div>
       <AnnotationsWorkspace
         title="Anotaciones"
-        subtitle={
-          courseFilter
-            ? titleByPath[courseFilter] || courseFilter
-            : 'Toda la biblioteca'
-        }
+        subtitle={courseFilter ? titleByPath[courseFilter] || courseFilter : 'Toda la biblioteca'}
         annotations={visibleItems}
         selectedId={selectedId}
         onSelect={(item) => setSelectedId({ id: item.id, coursePath: item.coursePath })}
         onSave={handleSave}
         onDelete={handleDelete}
         onJump={handleJump}
+        onOpenPopOut={() => {
+          window.api
+            .openAnnotationsWindow(courseFilter ? { coursePath: courseFilter } : {})
+            .catch((err) => {
+              toast.error(err.message || 'No se pudo abrir la ventana')
+            })
+        }}
         courseColumn
         courseTitleByPath={titleByPath}
         loading={loading}

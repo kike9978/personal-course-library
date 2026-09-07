@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle, useMemo } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+  useMemo
+} from 'react'
 import { formatTime } from './StudySidePanel'
 
 const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
@@ -328,10 +336,20 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           {lesson.title}
         </h2>
         <div className="lesson-player__controls">
-          <button type="button" className="icon-btn icon-btn--ghost" onClick={onPrev} disabled={!hasPrev}>
+          <button
+            type="button"
+            className="icon-btn icon-btn--ghost"
+            onClick={onPrev}
+            disabled={!hasPrev}
+          >
             Anterior
           </button>
-          <button type="button" className="icon-btn icon-btn--ghost" onClick={onNext} disabled={!hasNext}>
+          <button
+            type="button"
+            className="icon-btn icon-btn--ghost"
+            onClick={onNext}
+            disabled={!hasNext}
+          >
             Siguiente
           </button>
           <button
@@ -342,7 +360,12 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           >
             {isCompleted ? 'Completada' : 'Completar'}
           </button>
-          <button type="button" className="icon-btn icon-btn--ghost" onClick={cycleRate} title="Velocidad">
+          <button
+            type="button"
+            className="icon-btn icon-btn--ghost"
+            onClick={cycleRate}
+            title="Velocidad"
+          >
             {rate}×
           </button>
           {subtitleTracks.length > 0 ? (
@@ -358,13 +381,12 @@ const LessonPlayer = forwardRef(function LessonPlayer(
         </div>
       </div>
 
-      <div
-        className={`lesson-player__media${isFullscreen ? ' is-fullscreen' : ''}`}
-        ref={stageRef}
-      >
+      <div className={`lesson-player__media${isFullscreen ? ' is-fullscreen' : ''}`} ref={stageRef}>
         <div className="lesson-player__stage">
           {loading ? <div className="lesson-player__status">Cargando…</div> : null}
-          {error ? <div className="lesson-player__status lesson-player__status--error">{error}</div> : null}
+          {error ? (
+            <div className="lesson-player__status lesson-player__status--error">{error}</div>
+          ) : null}
           {src ? (
             <video
               key={src}

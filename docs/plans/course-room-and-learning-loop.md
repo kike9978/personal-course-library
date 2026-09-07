@@ -304,12 +304,13 @@ Creative courses often keep **watching** material under `_All Courses/…` and *
 
 **Outcome:** Finding and organizing matches a larger library.
 
-- [ ] Expose `rate` and `theme` in edit modal + filters/search
-- [ ] Search instructor, programs, themes, and note text
-- [ ] Surface courses missing `courseProps` (don’t silent-filter forever)
-- [ ] In-app generate/repair `courseProps` (port CLI)
-- [ ] Learning paths / tracks (ordered course sets) — optional
-- [ ] Favorites + “New” badge from folder mtime
+- [x] Expose `rate` and `theme` in edit modal + filters/search
+- [x] Search instructor, programs, themes, and note text
+- [x] Surface courses missing `courseProps` (don’t silent-filter forever)
+- [x] In-app generate/repair `courseProps` (port CLI)
+- [x] Learning paths / tracks (ordered course sets)
+- [x] “New” badge from folder mtime (14 days)
+- [ ] Favorites — skipped (not needed)
 
 **Exit criteria:** Metadata and search cover how users actually look for creative courses.
 

@@ -2,15 +2,19 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import CoursesGrid from './components/CoursesGrid'
 import CourseCard from './components/CourseCard'
 import CourseEditModal from './components/CourseEditModal'
+import ImportMissingPropsModal from './components/ImportMissingPropsModal'
 import CourseDetailPanel from './components/CourseDetailPanel'
 import CourseRoom from './components/CourseRoom'
 import LibraryStudyView from './components/LibraryStudyView'
+import AnnotationsPopoutView from './components/AnnotationsPopoutView'
 import ProjectsKanban from './components/ProjectsKanban'
+import LearningPathsView from './components/LearningPathsView'
 import AppNav from './components/AppNav'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
 import { Toaster, toast } from 'react-hot-toast'
 import brandMark from './assets/img/brand-mark.svg'
+import { getAnnotationsWindowMode } from './utils/annotationsWindow'
 
 function useDebouncedValue(value, delay = 200) {
   const [debounced, setDebounced] = useState(value)
@@ -58,6 +62,8 @@ function AppHeader({
   onCardLayoutChange,
   isInProcessOnly,
   onInProcessOnlyChange,
+  missingPropsOnly,
+  onMissingPropsOnlyChange,
   courseCount,
   isLoading,
   onRefresh,
@@ -65,10 +71,15 @@ function AppHeader({
   onNavigate,
   institutions,
   programs,
+  themes,
   institutionFilter,
   onInstitutionFilterChange,
   programFilter,
   onProgramFilterChange,
+  themeFilter,
+  onThemeFilterChange,
+  minRate,
+  onMinRateChange,
   sortMode,
   onSortModeChange
 }) {
@@ -86,13 +97,18 @@ function AppHeader({
         </div>
 
         <div className="search-field">
-          <svg className="search-field__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <svg
+            className="search-field__icon"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
             <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
           </svg>
           <input
             type="search"
             value={filterText}
-            placeholder="Buscar cursos o academias…"
+            placeholder="Buscar título, academia, instructor, temas, notas…"
             onChange={(e) => onFilterTextChange(e.target.value)}
             aria-label="Buscar"
           />
@@ -131,6 +147,15 @@ function AppHeader({
 
           <button
             type="button"
+            className="filter-pill"
+            aria-pressed={missingPropsOnly}
+            onClick={() => onMissingPropsOnlyChange(!missingPropsOnly)}
+          >
+            Sin props
+          </button>
+
+          <button
+            type="button"
             className="icon-btn"
             onClick={onRefresh}
             disabled={isLoading}
@@ -155,6 +180,8 @@ function AppHeader({
             <option value="az">A → Z</option>
             <option value="za">Z → A</option>
             <option value="recent">Recientes</option>
+            <option value="newest">Más nuevos</option>
+            <option value="rate">Mejor valorados</option>
             <option value="progress">Más progreso</option>
             <option value="inProgress">En curso primero</option>
           </select>
@@ -176,21 +203,49 @@ function AppHeader({
           </select>
         </div>
 
+        <div className="chip-select">
+          <label htmlFor="min-rate-filter">Mín. ★</label>
+          <select
+            id="min-rate-filter"
+            value={minRate}
+            onChange={(e) => onMinRateChange(Number(e.target.value))}
+          >
+            <option value={0}>Cualquiera</option>
+            <option value={3}>3+</option>
+            <option value={4}>4+</option>
+            <option value={5}>5</option>
+          </select>
+        </div>
+
         <div className="filter-chips" role="group" aria-label="Programas">
-          {programs.slice(0, 12).map((program) => (
+          {programs.slice(0, 10).map((program) => (
             <button
               key={program}
               type="button"
               className="filter-chip"
               aria-pressed={programFilter === program}
-              onClick={() =>
-                onProgramFilterChange(programFilter === program ? '' : program)
-              }
+              onClick={() => onProgramFilterChange(programFilter === program ? '' : program)}
             >
               {program}
             </button>
           ))}
         </div>
+
+        {themes.length > 0 ? (
+          <div className="filter-chips" role="group" aria-label="Temas">
+            {themes.slice(0, 8).map((theme) => (
+              <button
+                key={theme}
+                type="button"
+                className="filter-chip filter-chip--theme"
+                aria-pressed={themeFilter === theme}
+                onClick={() => onThemeFilterChange(themeFilter === theme ? '' : theme)}
+              >
+                {theme}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </header>
   )
@@ -203,7 +258,9 @@ function ContinueHub({ courses, onSelect, onOpenCourse, onOpenModal, onToggleInP
     <section className="continue-hub" aria-label="Continuar aprendiendo">
       <div className="section-heading">
         <h2>Continuar aprendiendo</h2>
-        <span>{courses.length} reciente{courses.length === 1 ? '' : 's'}</span>
+        <span>
+          {courses.length} reciente{courses.length === 1 ? '' : 's'}
+        </span>
       </div>
       <div className="continue-rail">
         {courses.slice(0, 12).map((course) => (
@@ -234,12 +291,16 @@ function FilterableCoursesGrid({
   const [filterText, setFilterText] = useState('')
   const [isCardLayout, setIsCardLayout] = useState(true)
   const [isInProcessOnly, setIsInProcessOnly] = useState(false)
+  const [missingPropsOnly, setMissingPropsOnly] = useState(false)
   const [institutionFilter, setInstitutionFilter] = useState('')
   const [programFilter, setProgramFilter] = useState('')
+  const [themeFilter, setThemeFilter] = useState('')
+  const [minRate, setMinRate] = useState(0)
   const [sortMode, setSortMode] = useState('az')
   const [selectedPath, setSelectedPath] = useState(null)
   const [focusIndex, setFocusIndex] = useState(-1)
   const [editingCourse, setEditingCourse] = useState(null)
+  const [importMissingOpen, setImportMissingOpen] = useState(false)
   const debouncedFilter = useDebouncedValue(filterText, 200)
 
   const institutions = useMemo(() => {
@@ -262,19 +323,33 @@ function FilterableCoursesGrid({
       .map(([name]) => name)
   }, [courses])
 
+  const themes = useMemo(() => {
+    const counts = new Map()
+    courses.forEach((c) => {
+      ;(c.theme || []).forEach((t) => {
+        counts.set(t, (counts.get(t) || 0) + 1)
+      })
+    })
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name]) => name)
+  }, [courses])
+
+  const missingPropsCourses = useMemo(() => courses.filter((c) => c.missingProps), [courses])
+
   const inProgressCourses = useMemo(
-    () => courses.filter((c) => !c.error && c.isInProcess),
+    () => courses.filter((c) => !c.missingProps && c.isInProcess),
     [courses]
   )
 
   const continueCourses = useMemo(() => {
     return courses
       .filter((c) => {
-        if (c.error) return false
+        if (c.missingProps) return false
         const learning = c.learning
         if (!learning?.lastOpenedAt) return false
         if (learning.status === 'completed') return false
-        return learning.status === 'in_progress' || c.isInProcess || learning.lastLessonRelativePath
+        return true
       })
       .sort((a, b) => (b.learning?.lastOpenedAt || 0) - (a.learning?.lastOpenedAt || 0))
   }, [courses])
@@ -282,33 +357,55 @@ function FilterableCoursesGrid({
   const sortedCourses = useMemo(() => {
     const searchLower = debouncedFilter.toLowerCase()
     const filtered = courses.filter((course) => {
-      if (course.error) return false
       const title = (course.title || '').toLowerCase()
       const institution = (course.institution || '').toLowerCase()
+      const instructor = (course.instructor || '').toLowerCase()
+      const programsText = (course.programs || []).join(' ').toLowerCase()
+      const themesText = (course.theme || []).join(' ').toLowerCase()
+      const notesText = (course.notesSearchText || '').toLowerCase()
       const matchesText =
-        !searchLower || title.includes(searchLower) || institution.includes(searchLower)
-      const processCheck = !isInProcessOnly || course.isInProcess || course.learning?.status === 'in_progress'
-      const institutionCheck =
-        !institutionFilter || course.institution === institutionFilter
-      const programCheck =
-        !programFilter || (course.programs || []).includes(programFilter)
-      return matchesText && processCheck && institutionCheck && programCheck
+        !searchLower ||
+        title.includes(searchLower) ||
+        institution.includes(searchLower) ||
+        instructor.includes(searchLower) ||
+        programsText.includes(searchLower) ||
+        themesText.includes(searchLower) ||
+        notesText.includes(searchLower) ||
+        (course.path || '').toLowerCase().includes(searchLower)
+      const processCheck = !isInProcessOnly || course.isInProcess
+      const missingCheck = !missingPropsOnly || course.missingProps
+      const institutionCheck = !institutionFilter || course.institution === institutionFilter
+      const programCheck = !programFilter || (course.programs || []).includes(programFilter)
+      const themeCheck = !themeFilter || (course.theme || []).includes(themeFilter)
+      const rateCheck = !minRate || (Number(course.rate) || 0) >= minRate
+      return (
+        matchesText &&
+        processCheck &&
+        missingCheck &&
+        institutionCheck &&
+        programCheck &&
+        themeCheck &&
+        rateCheck
+      )
     })
 
     return [...filtered].sort((a, b) => {
       if (sortMode === 'recent') {
         return (b.learning?.lastOpenedAt || 0) - (a.learning?.lastOpenedAt || 0)
       }
+      if (sortMode === 'newest') {
+        return (b.folderMtimeMs || 0) - (a.folderMtimeMs || 0)
+      }
+      if (sortMode === 'rate') {
+        const diff = (Number(b.rate) || 0) - (Number(a.rate) || 0)
+        if (diff !== 0) return diff
+      }
       if (sortMode === 'progress') {
         const diff = (b.learning?.percent || 0) - (a.learning?.percent || 0)
         if (diff !== 0) return diff
       }
       if (sortMode === 'inProgress') {
-        const aActive =
-          Number(Boolean(a.isInProcess)) || Number(a.learning?.status === 'in_progress')
-        const bActive =
-          Number(Boolean(b.isInProcess)) || Number(b.learning?.status === 'in_progress')
-        const diff = bActive - aActive
+        const diff = Number(Boolean(b.isInProcess)) - Number(Boolean(a.isInProcess))
         if (diff !== 0) return diff
       }
       const cmp = (a.title || '').localeCompare(b.title || '', undefined, {
@@ -320,8 +417,11 @@ function FilterableCoursesGrid({
     courses,
     debouncedFilter,
     isInProcessOnly,
+    missingPropsOnly,
     institutionFilter,
     programFilter,
+    themeFilter,
+    minRate,
     sortMode
   ])
 
@@ -330,7 +430,6 @@ function FilterableCoursesGrid({
       setSelectedPath(null)
       return
     }
-    // Update selection only — do not move keyboard focus (that jumps scroll).
     setSelectedPath(course.path)
   }, [])
 
@@ -353,6 +452,24 @@ function FilterableCoursesGrid({
     toast.success(newValue ? 'Marcado en curso' : 'Quitado de en curso')
   }, [])
 
+  const handleOpenImportMissing = useCallback(() => {
+    if (missingPropsCourses.length === 0) return
+    setImportMissingOpen(true)
+  }, [missingPropsCourses.length])
+
+  const handleGenerateOne = useCallback(
+    async (course) => {
+      try {
+        await window.api.generateCourseProps(course.path)
+        toast.success('Propiedades generadas')
+        onRefresh?.()
+      } catch (err) {
+        toast.error(err.message || 'Error')
+      }
+    },
+    [onRefresh]
+  )
+
   useEffect(() => {
     const onKeyDown = (e) => {
       const t = e.target
@@ -360,6 +477,10 @@ function FilterableCoursesGrid({
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (t?.isContentEditable || t?.closest?.('[contenteditable="true"], .note-editor')) return
       if (e.key === 'Escape') {
+        if (importMissingOpen) {
+          setImportMissingOpen(false)
+          return
+        }
         if (editingCourse) {
           setEditingCourse(null)
           return
@@ -395,7 +516,7 @@ function FilterableCoursesGrid({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sortedCourses, editingCourse, selectedPath, handleOpenCourse])
+  }, [sortedCourses, editingCourse, importMissingOpen, selectedPath, handleOpenCourse])
 
   const selectedCourse = useMemo(() => {
     if (!selectedPath) return null
@@ -415,6 +536,8 @@ function FilterableCoursesGrid({
         onCardLayoutChange={setIsCardLayout}
         isInProcessOnly={isInProcessOnly}
         onInProcessOnlyChange={setIsInProcessOnly}
+        missingPropsOnly={missingPropsOnly}
+        onMissingPropsOnlyChange={setMissingPropsOnly}
         courseCount={sortedCourses.length}
         isLoading={isLoading}
         onRefresh={onRefresh}
@@ -422,10 +545,15 @@ function FilterableCoursesGrid({
         onNavigate={onNavigate}
         institutions={institutions}
         programs={programs}
+        themes={themes}
         institutionFilter={institutionFilter}
         onInstitutionFilterChange={setInstitutionFilter}
         programFilter={programFilter}
         onProgramFilterChange={setProgramFilter}
+        themeFilter={themeFilter}
+        onThemeFilterChange={setThemeFilter}
+        minRate={minRate}
+        onMinRateChange={setMinRate}
         sortMode={sortMode}
         onSortModeChange={setSortMode}
       />
@@ -441,7 +569,7 @@ function FilterableCoursesGrid({
               <div className="stats-row">
                 <div className="stat-card">
                   <div>
-                    <div className="stat-card__value">{courses.filter((c) => !c.error).length}</div>
+                    <div className="stat-card__value">{courses.length}</div>
                     <div className="stat-card__label">Total</div>
                   </div>
                 </div>
@@ -457,17 +585,56 @@ function FilterableCoursesGrid({
                     <div className="stat-card__label">Academias</div>
                   </div>
                 </div>
+                {missingPropsCourses.length > 0 ? (
+                  <div className="stat-card">
+                    <div>
+                      <div className="stat-card__value">{missingPropsCourses.length}</div>
+                      <div className="stat-card__label">Sin props</div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
-              {!isInProcessOnly && !debouncedFilter && !institutionFilter && !programFilter && (
-                <ContinueHub
-                  courses={continueCourses}
-                  onSelect={handleSelectCourse}
-                  onOpenCourse={handleOpenCourse}
-                  onOpenModal={handleOpenEdit}
-                  onToggleInProcess={handleToggleInProcess}
-                />
-              )}
+              {missingPropsCourses.length > 0 && !missingPropsOnly ? (
+                <div className="catalog-banner">
+                  <div>
+                    <strong>{missingPropsCourses.length}</strong> curso
+                    {missingPropsCourses.length === 1 ? '' : 's'} sin <code>courseProps.json</code>
+                  </div>
+                  <div className="catalog-banner__actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => setMissingPropsOnly(true)}
+                    >
+                      Verlos
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      onClick={handleOpenImportMissing}
+                    >
+                      Elegir e importar
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {!isInProcessOnly &&
+                !missingPropsOnly &&
+                !debouncedFilter &&
+                !institutionFilter &&
+                !programFilter &&
+                !themeFilter &&
+                !minRate && (
+                  <ContinueHub
+                    courses={continueCourses}
+                    onSelect={handleSelectCourse}
+                    onOpenCourse={handleOpenCourse}
+                    onOpenModal={handleOpenEdit}
+                    onToggleInProcess={handleToggleInProcess}
+                  />
+                )}
 
               <div className="section-heading">
                 <h2>Biblioteca</h2>
@@ -475,6 +642,19 @@ function FilterableCoursesGrid({
                   {sortedCourses.length} resultado{sortedCourses.length === 1 ? '' : 's'}
                 </span>
               </div>
+
+              {missingPropsOnly && missingPropsCourses.length > 0 ? (
+                <div className="catalog-banner catalog-banner--compact">
+                  <span>Elige carpetas y genera propiedades desde el nombre.</span>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={handleOpenImportMissing}
+                  >
+                    Elegir e importar
+                  </button>
+                </div>
+              ) : null}
 
               <CoursesGrid
                 courses={sortedCourses}
@@ -491,8 +671,23 @@ function FilterableCoursesGrid({
                 <CourseEditModal
                   course={editingCourse}
                   programOptions={programs}
-                  onCourseUpdated={() => setEditingCourse(null)}
+                  themeOptions={themes}
+                  onCourseUpdated={() => {
+                    setEditingCourse(null)
+                    onRefresh?.()
+                  }}
                   onClose={() => setEditingCourse(null)}
+                />
+              )}
+
+              {importMissingOpen && (
+                <ImportMissingPropsModal
+                  courses={missingPropsCourses}
+                  onImported={() => {
+                    setImportMissingOpen(false)
+                    onRefresh?.()
+                  }}
+                  onClose={() => setImportMissingOpen(false)}
                 />
               )}
             </>
@@ -506,6 +701,9 @@ function FilterableCoursesGrid({
             onOpenCourse={handleOpenCourse}
             onEdit={handleOpenEdit}
             onToggleInProcess={handleToggleInProcess}
+            onGenerateProps={
+              selectedCourse.missingProps ? () => handleGenerateOne(selectedCourse) : null
+            }
           />
         )}
       </div>
@@ -514,24 +712,36 @@ function FilterableCoursesGrid({
 }
 
 function App() {
+  const annotationsWindowMode = useMemo(() => getAnnotationsWindowMode(), [])
   const [isLoading, setIsLoading] = useState(true)
   const [courses, setCourses] = useState([])
   const [libraryPath, setLibraryPath] = useState(null)
   const [needsSetup, setNeedsSetup] = useState(false)
   const [activeCoursePath, setActiveCoursePath] = useState(null)
   const [resumeTarget, setResumeTarget] = useState(null)
+  const [liveJump, setLiveJump] = useState(null)
   const [libraryStudyMode, setLibraryStudyMode] = useState(null)
   const loadingRef = useRef(false)
+  const activeCoursePathRef = useRef(null)
+  activeCoursePathRef.current = activeCoursePath
 
   const mergeLearning = useCallback(async (list) => {
     try {
-      const progressMap = await window.api.getAllCourseProgress()
+      const [progressMap, notesMap] = await Promise.all([
+        window.api.getAllCourseProgress(),
+        window.api.getNotesSearchByCourse()
+      ])
       return list.map((course) => ({
         ...course,
-        learning: progressMap[course.path] || null
+        learning: progressMap[course.path] || null,
+        notesSearchText: notesMap[course.path] || ''
       }))
     } catch {
-      return list.map((course) => ({ ...course, learning: null }))
+      return list.map((course) => ({
+        ...course,
+        learning: null,
+        notesSearchText: ''
+      }))
     }
   }, [])
 
@@ -580,9 +790,7 @@ function App() {
 
   const handleLearningProgressChange = useCallback((coursePath, learning) => {
     setCourses((prev) =>
-      prev.map((course) =>
-        course.path === coursePath ? { ...course, learning } : course
-      )
+      prev.map((course) => (course.path === coursePath ? { ...course, learning } : course))
     )
   }, [])
 
@@ -607,7 +815,16 @@ function App() {
       setCourses((prev) =>
         prev.map((course) => {
           if (course.path !== update.coursePath) return course
-          if (update.fullData) return { ...course, ...update.fullData, learning: course.learning }
+          if (update.fullData) {
+            return {
+              ...course,
+              ...update.fullData,
+              missingProps: update.fullData.missingProps ?? false,
+              hasProps: update.fullData.hasProps ?? true,
+              learning: course.learning,
+              notesSearchText: course.notesSearchText
+            }
+          }
           if (update.property) return { ...course, [update.property]: update.value }
           return course
         })
@@ -617,6 +834,24 @@ function App() {
     const unsubscribeLibrary = window.api.onLibraryChanged(() => {
       loadCourses()
     })
+
+    const unsubscribeJump = annotationsWindowMode
+      ? null
+      : window.api.onAnnotationsJump?.((payload) => {
+          if (!payload?.coursePath) return
+          setLibraryStudyMode(null)
+          const target = {
+            lessonRelativePath: payload.lessonRelativePath || null,
+            timeSec: payload.timeSec ?? null,
+            projectId: payload.projectId || null
+          }
+          if (activeCoursePathRef.current === payload.coursePath) {
+            setLiveJump({ ...target, coursePath: payload.coursePath, id: Date.now() })
+            return
+          }
+          setResumeTarget(target)
+          setActiveCoursePath(payload.coursePath)
+        })
 
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.key.toLowerCase() === 'r') {
@@ -629,19 +864,25 @@ function App() {
     return () => {
       unsubscribeUpdated()
       unsubscribeLibrary()
+      unsubscribeJump?.()
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [loadCourses, refreshCourses])
+  }, [loadCourses, refreshCourses, annotationsWindowMode])
 
   const activeCourse = useMemo(() => {
     if (!activeCoursePath) return null
-    return courses.find((c) => c.path === activeCoursePath) || { path: activeCoursePath, title: activeCoursePath }
+    return (
+      courses.find((c) => c.path === activeCoursePath) || {
+        path: activeCoursePath,
+        title: activeCoursePath
+      }
+    )
   }, [courses, activeCoursePath])
 
   const navigateApp = useCallback((section) => {
     setActiveCoursePath(null)
     setResumeTarget(null)
-    if (section === 'projects' || section === 'annotations') {
+    if (section === 'projects' || section === 'annotations' || section === 'paths') {
       setLibraryStudyMode(section)
       return
     }
@@ -662,12 +903,37 @@ function App() {
           }
         }}
       />
-      {needsSetup ? (
+      {annotationsWindowMode ? (
+        needsSetup ? (
+          <LibrarySetup
+            onPathSet={(path) => {
+              setLibraryPath(path)
+              setNeedsSetup(false)
+              loadCourses()
+            }}
+          />
+        ) : (
+          <AnnotationsPopoutView
+            coursePath={annotationsWindowMode.coursePath}
+            courses={courses}
+          />
+        )
+      ) : needsSetup ? (
         <LibrarySetup
           onPathSet={(path) => {
             setLibraryPath(path)
             setNeedsSetup(false)
             loadCourses()
+          }}
+        />
+      ) : libraryStudyMode === 'paths' ? (
+        <LearningPathsView
+          courses={courses}
+          onNavigate={navigateApp}
+          onOpenCourse={(course, target = null) => {
+            setLibraryStudyMode(null)
+            setResumeTarget(target)
+            setActiveCoursePath(course.path)
           }}
         />
       ) : libraryStudyMode === 'annotations' ? (
@@ -694,9 +960,11 @@ function App() {
         <CourseRoom
           course={activeCourse}
           resumeTarget={resumeTarget}
+          liveJump={liveJump}
           onBack={() => {
             setActiveCoursePath(null)
             setResumeTarget(null)
+            setLiveJump(null)
           }}
           onOpenExplorer={(c) => window.api.openCourseFolder(c.path)}
           onProgressChange={handleLearningProgressChange}

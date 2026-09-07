@@ -51,7 +51,9 @@ function ResourceViewer({ coursePath, resource }) {
 
   const ext = extOf(resource?.relativePath || resource?.name)
   const canPreview = isInlinePreview(resource)
-  const isImage = resource?.kind === 'image' || ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg'].includes(ext)
+  const isImage =
+    resource?.kind === 'image' ||
+    ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg'].includes(ext)
   const isPdf = ext === '.pdf'
   const isHtml = ext === '.html' || ext === '.htm'
   const isText = ['.txt', '.md', '.vtt', '.srt'].includes(ext)
@@ -135,7 +137,9 @@ function ResourceViewer({ coursePath, resource }) {
 
       <div className="resource-viewer__body">
         {loading ? <p className="resource-viewer__status">Cargando…</p> : null}
-        {error ? <p className="resource-viewer__status resource-viewer__status--error">{error}</p> : null}
+        {error ? (
+          <p className="resource-viewer__status resource-viewer__status--error">{error}</p>
+        ) : null}
 
         {!canPreview ? (
           <div className="resource-viewer__handoff">

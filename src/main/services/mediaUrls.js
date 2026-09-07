@@ -5,6 +5,10 @@ import path from 'path'
  */
 export function getLessonMediaUrl(courseDir, relativePath) {
   const course = encodeURIComponent(path.basename(courseDir))
-  const file = encodeURIComponent(String(relativePath || '').split('\\').join('/'))
+  const file = encodeURIComponent(
+    String(relativePath || '')
+      .split('\\')
+      .join('/')
+  )
   return `course-media://lesson/?course=${course}&file=${file}&t=${Date.now()}`
 }

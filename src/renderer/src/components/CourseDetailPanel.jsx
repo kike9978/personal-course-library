@@ -3,7 +3,14 @@ import { toast } from 'react-hot-toast'
 import { getCoverFallback, getInstitutionLogo, absoluteAssetUrl } from '../utils/images'
 import brandMark from '../assets/img/brand-mark.svg'
 
-function CourseDetailPanel({ course, onClose, onEdit, onOpenCourse, onToggleInProcess }) {
+function CourseDetailPanel({
+  course,
+  onClose,
+  onEdit,
+  onOpenCourse,
+  onToggleInProcess,
+  onGenerateProps
+}) {
   const fallbackCover = absoluteAssetUrl(getCoverFallback())
   const [coverImg, setCoverImg] = useState(fallbackCover)
   const institutionImg = absoluteAssetUrl(getInstitutionLogo(course.institution))
@@ -108,15 +115,37 @@ function CourseDetailPanel({ course, onClose, onEdit, onOpenCourse, onToggleInPr
             </div>
           </div>
           <div>
+            <strong>Temas</strong>
+            <div className="chips-container" style={{ marginTop: '0.35rem' }}>
+              {(course.theme || []).length ? (
+                course.theme.map((theme, index) => (
+                  <span key={`${theme}-${index}`} className="badge badge--theme">
+                    {theme}
+                  </span>
+                ))
+              ) : (
+                <span>—</span>
+              )}
+            </div>
+          </div>
+          <div>
+            <strong>Valoración</strong>
+            <div>
+              {course.rate > 0 ? `${'★'.repeat(course.rate)}${'☆'.repeat(5 - course.rate)}` : '—'}
+            </div>
+          </div>
+          <div>
             <strong>Estado</strong>
             <div>
-              {course.learning?.status === 'completed'
-                ? 'Completado'
-                : course.learning?.status === 'in_progress'
-                  ? `En progreso (${course.learning.percent || 0}%)`
-                  : course.isInProcess
-                    ? 'En curso'
-                    : 'Sin empezar / pausado'}
+              {course.missingProps
+                ? 'Sin courseProps.json'
+                : course.learning?.status === 'completed'
+                  ? 'Completado'
+                  : course.learning?.status === 'in_progress'
+                    ? `En progreso (${course.learning.percent || 0}%)`
+                    : course.isInProcess
+                      ? 'En curso'
+                      : 'Sin empezar / pausado'}
             </div>
           </div>
           {course.learning?.lastLessonTitle ? (
@@ -131,6 +160,11 @@ function CourseDetailPanel({ course, onClose, onEdit, onOpenCourse, onToggleInPr
           <button type="button" className="icon-btn" onClick={handleOpenCourse}>
             Abrir curso
           </button>
+          {onGenerateProps ? (
+            <button type="button" className="icon-btn icon-btn--teal" onClick={onGenerateProps}>
+              Generar propiedades
+            </button>
+          ) : null}
           <button
             type="button"
             className={`icon-btn ${course.isInProcess ? 'icon-btn--ghost' : 'icon-btn--teal'}`}

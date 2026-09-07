@@ -12,8 +12,10 @@ function CourseAnnotationsView({
   onBack,
   onJump,
   onChange,
-  currentLessonPath,
-  currentLessonTitle
+  onOpenPopOut,
+  currentTargetPath,
+  currentTargetTitle,
+  currentProjectId
 }) {
   const [selectedId, setSelectedId] = useState(null)
 
@@ -24,27 +26,44 @@ function CourseAnnotationsView({
     }
     if (!selectedId || !annotations.some((a) => a.id === selectedId)) {
       const prefer =
-        (currentLessonPath &&
-          annotations.find((a) => a.lessonRelativePath === currentLessonPath)) ||
+        (currentProjectId && annotations.find((a) => a.projectId === currentProjectId)) ||
+        (currentTargetPath &&
+          annotations.find((a) => a.lessonRelativePath === currentTargetPath)) ||
         annotations[0]
       setSelectedId(prefer?.id || null)
     }
-  }, [annotations, selectedId, currentLessonPath])
+  }, [annotations, selectedId, currentTargetPath, currentProjectId])
 
   const handleCreate = async () => {
     try {
-      const list = await window.api.upsertNote(coursePath, {
-        body: '',
-        bodyHtml: null,
-        bodyJson: null,
-        lessonRelativePath: currentLessonPath || null,
-        lessonTitle: currentLessonPath ? currentLessonTitle || null : null,
-        timeSec: null
-      })
+      const payload = currentProjectId
+        ? {
+            body: '',
+            bodyHtml: null,
+            bodyJson: null,
+            projectId: currentProjectId,
+            projectTitle: currentTargetTitle || null,
+            timeSec: null
+          }
+        : {
+            body: '',
+            bodyHtml: null,
+            bodyJson: null,
+            lessonRelativePath: currentTargetPath || null,
+            lessonTitle: currentTargetPath ? currentTargetTitle || null : null,
+            timeSec: null
+          }
+      const list = await window.api.upsertNote(coursePath, payload)
       onChange?.(list)
       const created = list[list.length - 1]
       if (created) setSelectedId(created.id)
-      toast.success('Anotación creada')
+      toast.success(
+        currentProjectId
+          ? 'Anotación creada en este proyecto'
+          : currentTargetPath
+            ? 'Anotación creada en este archivo'
+            : 'Anotación creada'
+      )
     } catch (err) {
       toast.error(err.message || 'No se pudo crear')
     }
@@ -82,6 +101,9 @@ function CourseAnnotationsView({
       onSave={handleSave}
       onDelete={handleDelete}
       onJump={onJump}
+      onOpenPopOut={onOpenPopOut}
+      preferGroupPath={currentTargetPath || null}
+      preferGroupProjectId={currentProjectId || null}
     />
   )
 }

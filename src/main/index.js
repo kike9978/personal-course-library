@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, protocol } from 'electron'
-import { join, extname } from 'path'
+import { join, extname, basename } from 'path'
 import fs from 'fs'
 import fsPromises from 'fs/promises'
 import { Readable } from 'stream'
@@ -18,15 +18,23 @@ import {
   revealCourseFile,
   openAbsolutePath,
   revealAbsolutePath,
-  clearCourseCache
+  clearCourseCache,
+  generateCourseProps,
+  repairCourseProps,
+  generateMissingCourseProps,
+  generateCoursePropsBatch
 } from './services/courses.js'
-import {
-  scanCourse,
-  resolveCourseFile,
-  getLessonMime,
-  srtToWebVtt
-} from './services/courseScan.js'
+import { scanCourse, resolveCourseFile, getLessonMime, srtToWebVtt } from './services/courseScan.js'
 import { getLessonMediaUrl } from './services/mediaUrls.js'
+import {
+  resolveNoteAttachmentPath,
+  getNoteAttachmentMime,
+  saveNoteAttachmentFromPath,
+  saveNoteAttachmentFromData,
+  saveNoteDrawing,
+  loadNoteDrawing,
+  resolveExistingNoteAttachments
+} from './services/noteAttachments.js'
 import {
   getCourseProgress,
   setLessonProgress,
@@ -45,7 +53,12 @@ import {
   listAllProjects,
   upsertProject,
   deleteProject,
-  getProjectLinkedPath
+  getProjectLinkedPath,
+  getNotesSearchByCourse,
+  listLearningPaths,
+  upsertLearningPath,
+  deleteLearningPath,
+  ensureLearningStoreFile
 } from './services/learningStore.js'
 
 protocol.registerSchemesAsPrivileged([
@@ -62,9 +75,41 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 let mainWindow = null
+let annotationsWindow = null
 let libraryWatcher = null
 let watchDebounceTimer = null
 const scanCache = new Map()
+
+function getRendererEntry(hash = '') {
+  const suffix = hash ? (hash.startsWith('#') ? hash : `#${hash}`) : ''
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    return { type: 'url', value: `${process.env['ELECTRON_RENDERER_URL']}${suffix}` }
+  }
+  return {
+    type: 'file',
+    value: join(__dirname, '../renderer/index.html'),
+    hash: suffix
+  }
+}
+
+function loadRenderer(win, hash = '') {
+  const entry = getRendererEntry(hash)
+  if (entry.type === 'url') {
+    win.loadURL(entry.value)
+  } else if (entry.hash) {
+    win.loadFile(entry.value, { hash: entry.hash.replace(/^#/, '') })
+  } else {
+    win.loadFile(entry.value)
+  }
+}
+
+function broadcastToWindows(channel, payload) {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, payload)
+    }
+  })
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -85,16 +130,76 @@ function createWindow() {
     mainWindow.show()
   })
 
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  loadRenderer(mainWindow)
+}
+
+function buildAnnotationsHash(options = {}) {
+  const params = new URLSearchParams()
+  if (options.coursePath) params.set('coursePath', options.coursePath)
+  const query = params.toString()
+  return query ? `annotations-window?${query}` : 'annotations-window'
+}
+
+function openAnnotationsWindow(options = {}) {
+  const hash = buildAnnotationsHash(options)
+
+  if (annotationsWindow && !annotationsWindow.isDestroyed()) {
+    loadRenderer(annotationsWindow, hash)
+    if (annotationsWindow.isMinimized()) annotationsWindow.restore()
+    annotationsWindow.show()
+    annotationsWindow.focus()
+    return { ok: true, focused: true }
   }
+
+  annotationsWindow = new BrowserWindow({
+    width: 1080,
+    height: 760,
+    minWidth: 640,
+    minHeight: 480,
+    show: false,
+    autoHideMenuBar: true,
+    title: 'Anotaciones',
+    icon,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  annotationsWindow.on('ready-to-show', () => {
+    annotationsWindow.show()
+  })
+
+  annotationsWindow.on('closed', () => {
+    annotationsWindow = null
+  })
+
+  annotationsWindow.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
+  loadRenderer(annotationsWindow, hash)
+  return { ok: true, focused: false }
+}
+
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return false
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+  return true
 }
 
 function notifyLibraryChanged() {
@@ -240,6 +345,23 @@ function registerCourseMediaProtocol() {
         return serveFileWithRanges(request, absolute, mime)
       }
 
+      if (url.hostname === 'note') {
+        const file = url.searchParams.get('file')
+        if (!file) return new Response('Not Found', { status: 404 })
+        const absolute = resolveNoteAttachmentPath(file)
+        if (!absolute || !fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
+          return new Response('Not Found', { status: 404 })
+        }
+        const data = await fsPromises.readFile(absolute)
+        const mime = getNoteAttachmentMime(absolute)
+        return new Response(data, {
+          headers: {
+            'Content-Type': mime,
+            'Cache-Control': 'public, max-age=31536000'
+          }
+        })
+      }
+
       return new Response('Not Found', { status: 404 })
     } catch (error) {
       console.error('course-media protocol error:', error)
@@ -314,6 +436,32 @@ function registerIpcHandlers() {
     return { success: true, data }
   })
 
+  ipcMain.handle('generate-course-props', async (_event, { coursePath, overwrite }) => {
+    const course = await generateCourseProps(coursePath, { overwrite: Boolean(overwrite) })
+    BrowserWindow.getAllWindows().forEach((win) => {
+      win.webContents.send('course-updated', { coursePath, fullData: course })
+    })
+    return { success: true, course }
+  })
+
+  ipcMain.handle('repair-course-props', async (_event, coursePath) => {
+    const course = await repairCourseProps(coursePath)
+    BrowserWindow.getAllWindows().forEach((win) => {
+      win.webContents.send('course-updated', { coursePath, fullData: course })
+    })
+    return { success: true, course }
+  })
+
+  ipcMain.handle('generate-missing-course-props', async () => {
+    const result = await generateMissingCourseProps()
+    return { success: true, ...result }
+  })
+
+  ipcMain.handle('generate-course-props-batch', async (_event, coursePaths) => {
+    const result = await generateCoursePropsBatch(coursePaths)
+    return { success: true, ...result }
+  })
+
   ipcMain.handle('open-course-folder', async (_event, courseDir) => {
     await openCourseFolder(courseDir)
     return { success: true }
@@ -377,10 +525,27 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('list-notes', (_event, coursePath) => listNotes(coursePath))
-  ipcMain.handle('upsert-note', (_event, { coursePath, note }) => upsertNote(coursePath, note))
-  ipcMain.handle('delete-note', (_event, { coursePath, noteId }) =>
-    deleteNote(coursePath, noteId)
+  ipcMain.handle('upsert-note', (_event, { coursePath, note }) => {
+    const list = upsertNote(coursePath, note)
+    broadcastToWindows('notes-changed', { coursePath })
+    return list
+  })
+  ipcMain.handle('delete-note', (_event, { coursePath, noteId }) => {
+    const list = deleteNote(coursePath, noteId)
+    broadcastToWindows('notes-changed', { coursePath })
+    return list
+  })
+  ipcMain.handle('open-annotations-window', (_event, options = {}) =>
+    openAnnotationsWindow(options || {})
   )
+  ipcMain.handle('focus-main-window', () => ({ ok: focusMainWindow() }))
+  ipcMain.handle('annotations-jump', (_event, payload = {}) => {
+    const focused = focusMainWindow()
+    if (focused && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('annotations-jump', payload)
+    }
+    return { ok: focused }
+  })
   ipcMain.handle('list-bookmarks', (_event, coursePath) => listBookmarks(coursePath))
   ipcMain.handle('upsert-bookmark', (_event, { coursePath, bookmark }) =>
     upsertBookmark(coursePath, bookmark)
@@ -390,6 +555,16 @@ function registerIpcHandlers() {
   )
   ipcMain.handle('list-all-notes', () => listAllNotes())
   ipcMain.handle('list-all-bookmarks', () => listAllBookmarks())
+  ipcMain.handle('get-notes-search-by-course', () => getNotesSearchByCourse())
+  ipcMain.handle('reveal-learning-store', () => {
+    const filePath = ensureLearningStoreFile()
+    revealAbsolutePath(filePath)
+    return filePath
+  })
+
+  ipcMain.handle('list-learning-paths', () => listLearningPaths())
+  ipcMain.handle('upsert-learning-path', (_event, pathPayload) => upsertLearningPath(pathPayload))
+  ipcMain.handle('delete-learning-path', (_event, pathId) => deleteLearningPath(pathId))
 
   ipcMain.handle('list-projects', (_event, coursePath) => listProjects(coursePath))
   ipcMain.handle('list-all-projects', () => listAllProjects())
@@ -408,7 +583,118 @@ function registerIpcHandlers() {
     if (result.canceled || !result.filePaths[0]) {
       return { canceled: true }
     }
-    return { canceled: false, path: result.filePaths[0] }
+    const folderPath = result.filePaths[0]
+    return { canceled: false, path: folderPath, name: basename(folderPath) }
+  })
+
+  ipcMain.handle('pick-note-image', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Adjuntar imagen a la nota',
+      properties: ['openFile'],
+      filters: [
+        {
+          name: 'Imágenes',
+          extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg']
+        }
+      ]
+    })
+    if (result.canceled || !result.filePaths[0]) {
+      return { canceled: true }
+    }
+    try {
+      const saved = saveNoteAttachmentFromPath(result.filePaths[0])
+      return { canceled: false, ...saved }
+    } catch (error) {
+      return { canceled: true, error: error.message }
+    }
+  })
+
+  ipcMain.handle('save-note-image', (_event, payload) => {
+    try {
+      return { ok: true, ...saveNoteAttachmentFromData(payload || {}) }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('save-note-drawing', (_event, payload) => {
+    try {
+      return { ok: true, ...saveNoteDrawing(payload || {}) }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('load-note-drawing', (_event, drawingId) => {
+    try {
+      return { ok: true, ...loadNoteDrawing(drawingId) }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('export-file', async (_event, payload = {}) => {
+    try {
+      const filters = Array.isArray(payload.filters) ? payload.filters : undefined
+      const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Exportar',
+        defaultPath: payload.defaultPath || undefined,
+        filters
+      })
+      if (result.canceled || !result.filePath) {
+        return { canceled: true }
+      }
+      if (payload.dataText != null) {
+        fs.writeFileSync(result.filePath, String(payload.dataText), 'utf8')
+      } else if (payload.dataBase64) {
+        fs.writeFileSync(result.filePath, Buffer.from(String(payload.dataBase64), 'base64'))
+      } else {
+        return { ok: false, error: 'Sin datos para exportar' }
+      }
+      return { ok: true, canceled: false, path: result.filePath }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('export-markdown-bundle', async (_event, payload = {}) => {
+    try {
+      const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Exportar anotación (Markdown)',
+        defaultPath: payload.defaultPath || 'anotacion.md',
+        filters: [
+          { name: 'Markdown', extensions: ['md'] },
+          { name: 'Todos', extensions: ['*'] }
+        ]
+      })
+      if (result.canceled || !result.filePath) {
+        return { canceled: true }
+      }
+
+      const mdPath = result.filePath.endsWith('.md') ? result.filePath : `${result.filePath}.md`
+      fs.writeFileSync(mdPath, String(payload.markdown || ''), 'utf8')
+
+      const assetFiles = Array.isArray(payload.assetFiles) ? payload.assetFiles : []
+      const resolved = resolveExistingNoteAttachments(assetFiles)
+      let assetsDir = null
+      if (resolved.length) {
+        assetsDir = mdPath.replace(/\.md$/i, '') + '.assets'
+        fs.mkdirSync(assetsDir, { recursive: true })
+        for (const item of resolved) {
+          fs.copyFileSync(item.absolutePath, join(assetsDir, item.fileName))
+        }
+      }
+
+      return {
+        ok: true,
+        canceled: false,
+        path: mdPath,
+        assetsDir,
+        assetCount: resolved.length
+      }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
   })
 
   ipcMain.handle('open-project-link', async (_event, { coursePath, projectId }) => {

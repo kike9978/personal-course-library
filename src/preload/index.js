@@ -37,6 +37,17 @@ const api = {
     ipcRenderer.invoke('delete-bookmark', { coursePath, bookmarkId }),
   listAllNotes: () => ipcRenderer.invoke('list-all-notes'),
   listAllBookmarks: () => ipcRenderer.invoke('list-all-bookmarks'),
+  getNotesSearchByCourse: () => ipcRenderer.invoke('get-notes-search-by-course'),
+  revealLearningStore: () => ipcRenderer.invoke('reveal-learning-store'),
+  listLearningPaths: () => ipcRenderer.invoke('list-learning-paths'),
+  upsertLearningPath: (pathPayload) => ipcRenderer.invoke('upsert-learning-path', pathPayload),
+  deleteLearningPath: (pathId) => ipcRenderer.invoke('delete-learning-path', pathId),
+  generateCourseProps: (coursePath, overwrite = false) =>
+    ipcRenderer.invoke('generate-course-props', { coursePath, overwrite }),
+  repairCourseProps: (coursePath) => ipcRenderer.invoke('repair-course-props', coursePath),
+  generateMissingCourseProps: () => ipcRenderer.invoke('generate-missing-course-props'),
+  generateCoursePropsBatch: (coursePaths) =>
+    ipcRenderer.invoke('generate-course-props-batch', coursePaths),
   listProjects: (coursePath) => ipcRenderer.invoke('list-projects', coursePath),
   listAllProjects: () => ipcRenderer.invoke('list-all-projects'),
   upsertProject: (coursePath, project) =>
@@ -44,10 +55,19 @@ const api = {
   deleteProject: (coursePath, projectId) =>
     ipcRenderer.invoke('delete-project', { coursePath, projectId }),
   pickProjectFolder: () => ipcRenderer.invoke('pick-project-folder'),
+  pickNoteImage: () => ipcRenderer.invoke('pick-note-image'),
+  saveNoteImage: (payload) => ipcRenderer.invoke('save-note-image', payload),
+  saveNoteDrawing: (payload) => ipcRenderer.invoke('save-note-drawing', payload),
+  loadNoteDrawing: (drawingId) => ipcRenderer.invoke('load-note-drawing', drawingId),
+  exportFile: (payload) => ipcRenderer.invoke('export-file', payload),
+  exportMarkdownBundle: (payload) => ipcRenderer.invoke('export-markdown-bundle', payload),
   openProjectLink: (coursePath, projectId) =>
     ipcRenderer.invoke('open-project-link', { coursePath, projectId }),
   revealProjectLink: (coursePath, projectId) =>
     ipcRenderer.invoke('reveal-project-link', { coursePath, projectId }),
+  openAnnotationsWindow: (options) => ipcRenderer.invoke('open-annotations-window', options || {}),
+  focusMainWindow: () => ipcRenderer.invoke('focus-main-window'),
+  annotationsJump: (payload) => ipcRenderer.invoke('annotations-jump', payload || {}),
   onCourseUpdated: (callback) => {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('course-updated', listener)
@@ -57,6 +77,16 @@ const api = {
     const listener = () => callback()
     ipcRenderer.on('library-changed', listener)
     return () => ipcRenderer.removeListener('library-changed', listener)
+  },
+  onNotesChanged: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('notes-changed', listener)
+    return () => ipcRenderer.removeListener('notes-changed', listener)
+  },
+  onAnnotationsJump: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('annotations-jump', listener)
+    return () => ipcRenderer.removeListener('annotations-jump', listener)
   }
 }
 

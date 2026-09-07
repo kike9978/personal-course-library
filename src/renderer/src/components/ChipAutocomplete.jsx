@@ -32,10 +32,7 @@ function ChipAutocomplete({
       })
   }, [values])
 
-  const selectedKeys = useMemo(
-    () => new Set(selected.map((v) => v.toLowerCase())),
-    [selected]
-  )
+  const selectedKeys = useMemo(() => new Set(selected.map((v) => v.toLowerCase())), [selected])
 
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -50,10 +47,7 @@ function ChipAutocomplete({
       return o.toLowerCase().includes(q)
     })
 
-    const canCreate =
-      q &&
-      !selectedKeys.has(q) &&
-      !base.some((o) => o.toLowerCase() === q)
+    const canCreate = q && !selectedKeys.has(q) && !base.some((o) => o.toLowerCase() === q)
 
     return {
       items: filtered.slice(0, 8),
@@ -199,7 +193,11 @@ function ChipAutocomplete({
             <li className="chip-autocomplete__empty">Sin coincidencias</li>
           ) : (
             flatItems.map((item, index) => (
-              <li key={`${item.type}-${item.label}`} role="option" aria-selected={index === activeIndex}>
+              <li
+                key={`${item.type}-${item.label}`}
+                role="option"
+                aria-selected={index === activeIndex}
+              >
                 <button
                   type="button"
                   className={`chip-autocomplete__option${index === activeIndex ? ' is-active' : ''}`}

@@ -11,17 +11,15 @@ function statusLabel(status) {
   return STATUS_OPTIONS.find((s) => s.value === status)?.label || status || 'Por hacer'
 }
 
+function folderNameFromPath(folderPath) {
+  if (!folderPath) return ''
+  return String(folderPath).replace(/[/\\]+$/, '').split(/[/\\]/).pop() || ''
+}
+
 /**
  * Detail / edit panel for a virtual project item (open-external only).
  */
-function ProjectPanel({
-  coursePath,
-  project,
-  sections = [],
-  onSaved,
-  onDeleted,
-  onCancelCreate
-}) {
+function ProjectPanel({ coursePath, project, sections = [], onSaved, onDeleted, onCancelCreate }) {
   const isNew = !project?.id
   const [title, setTitle] = useState(project?.title || '')
   const [notes, setNotes] = useState(project?.notes || '')
@@ -36,13 +34,25 @@ function ProjectPanel({
     setStatus(project?.status || 'todo')
     setSectionId(project?.sectionId || '')
     setLinkedFolderPath(project?.linkedFolderPath || '')
-  }, [project?.id, project?.title, project?.notes, project?.status, project?.sectionId, project?.linkedFolderPath])
+  }, [
+    project?.id,
+    project?.title,
+    project?.notes,
+    project?.status,
+    project?.sectionId,
+    project?.linkedFolderPath
+  ])
 
   const pickFolder = async () => {
     try {
       const result = await window.api.pickProjectFolder()
-      if (!result?.canceled && result.path) {
-        setLinkedFolderPath(result.path)
+      if (result?.canceled || !result?.path) return
+      const nextName = result.name || folderNameFromPath(result.path)
+      const previousName = folderNameFromPath(linkedFolderPath)
+      setLinkedFolderPath(result.path)
+      // Prefill title from folder when empty, or when it still matches the previous folder name.
+      if (!title.trim() || (previousName && title.trim() === previousName)) {
+        setTitle(nextName)
       }
     } catch (err) {
       toast.error(err.message || 'No se pudo elegir carpeta')
@@ -67,7 +77,9 @@ function ProjectPanel({
       })
       const saved =
         list.find((p) => p.id === project?.id) ||
-        list.find((p) => p.title === trimmed && p.linkedFolderPath === (linkedFolderPath.trim() || null)) ||
+        list.find(
+          (p) => p.title === trimmed && p.linkedFolderPath === (linkedFolderPath.trim() || null)
+        ) ||
         list[list.length - 1]
       toast.success(isNew ? 'Proyecto creado' : 'Proyecto guardado')
       onSaved?.(list, saved)
@@ -129,7 +141,9 @@ function ProjectPanel({
       onCancelCreate?.()
       return
     }
-    if (!window.confirm(`¿Borrar el proyecto “${project.title}”? No se borran archivos en disco.`)) {
+    if (
+      !window.confirm(`¿Borrar el proyecto “${project.title}”? No se borran archivos en disco.`)
+    ) {
       return
     }
     try {
@@ -167,6 +181,25 @@ function ProjectPanel({
           </div>
         ) : null}
 
+        <div className="project-panel__field">
+          <span>Carpeta vinculada</span>
+          <div className="project-panel__path-row">
+            <input
+              type="text"
+              value={linkedFolderPath}
+              onChange={(e) => setLinkedFolderPath(e.target.value)}
+              placeholder="Elige una carpeta fuera del curso…"
+              spellCheck={false}
+            />
+            <button type="button" className="btn btn--ghost" onClick={pickFolder}>
+              Elegir…
+            </button>
+          </div>
+          <p className="project-panel__hint">
+            Puede estar en cualquier disco. No se mueve ni se copia nada del curso.
+          </p>
+        </div>
+
         <label className="project-panel__field">
           <span>Título</span>
           <input
@@ -201,25 +234,6 @@ function ProjectPanel({
               ))}
           </select>
         </label>
-
-        <div className="project-panel__field">
-          <span>Carpeta vinculada</span>
-          <div className="project-panel__path-row">
-            <input
-              type="text"
-              value={linkedFolderPath}
-              onChange={(e) => setLinkedFolderPath(e.target.value)}
-              placeholder="Elige una carpeta fuera del curso…"
-              spellCheck={false}
-            />
-            <button type="button" className="btn btn--ghost" onClick={pickFolder}>
-              Elegir…
-            </button>
-          </div>
-          <p className="project-panel__hint">
-            Puede estar en cualquier disco. No se mueve ni se copia nada del curso.
-          </p>
-        </div>
 
         <label className="project-panel__field">
           <span>Notas</span>

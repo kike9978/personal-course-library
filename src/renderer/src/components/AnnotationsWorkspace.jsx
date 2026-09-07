@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Fragment } from 'react'
 import { toast } from 'react-hot-toast'
 import NoteEditor from './NoteEditor'
 import { formatTime } from './StudySidePanel'
+import { groupAnnotationsByTarget } from '../utils/annotationGroups'
 
 function noteTitleFallback(item) {
   if (!item) return 'Sin título'
@@ -13,6 +14,7 @@ function noteTitleFallback(item) {
   if (typeof item.timeSec === 'number') {
     return `${item.lessonTitle || 'Marca'} · ${formatTime(item.timeSec)}`
   }
+  if (item.projectTitle) return item.projectTitle
   if (item.lessonTitle) return item.lessonTitle
   return 'Nota del curso'
 }
@@ -38,6 +40,13 @@ function formatDateTime(ts) {
   }
 }
 
+function contextLabel(item) {
+  if (typeof item.timeSec === 'number') return formatTime(item.timeSec)
+  if (item.projectId) return 'Proyecto'
+  if (item.lessonRelativePath) return 'Sin tiempo'
+  return 'Curso'
+}
+
 /**
  * Notion-like annotations workspace: table + document pane with Lexical.
  */
@@ -52,27 +61,34 @@ function AnnotationsWorkspace({
   onSave,
   onDelete,
   onJump,
+  onOpenPopOut,
   courseColumn = false,
   courseTitleByPath = {},
+  preferGroupPath = null,
+  preferGroupProjectId = null,
   loading = false
 }) {
   const [query, setQuery] = useState('')
   const [listCollapsed, setListCollapsed] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
-  const [draft, setDraft] = useState({ text: '', html: '', json: null })
+  const [draft, setDraft] = useState({ text: '', markdown: '', json: null })
   const [editorKey, setEditorKey] = useState(0)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const list = [...annotations].sort(
-      (a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)
-    )
-    if (!q) return list
-    return list.filter((item) => {
+    if (!q) return annotations
+    return annotations.filter((item) => {
       const course = (courseTitleByPath[item.coursePath] || item.coursePath || '').toLowerCase()
-      const hay = [item.title, item.body, item.lessonTitle, course, noteTitle(item)]
+      const hay = [
+        item.title,
+        item.body,
+        item.lessonTitle,
+        item.projectTitle,
+        course,
+        noteTitle(item)
+      ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
@@ -80,17 +96,55 @@ function AnnotationsWorkspace({
     })
   }, [annotations, query, courseTitleByPath])
 
+  const groups = useMemo(
+    () =>
+      groupAnnotationsByTarget(filtered, {
+        preferPath: preferGroupPath,
+        preferProjectId: preferGroupProjectId,
+        includeCourseKey: courseColumn
+      }),
+    [filtered, preferGroupPath, preferGroupProjectId, courseColumn]
+  )
+
   const selected = useMemo(() => {
     if (!selectedId) return null
     if (typeof selectedId === 'object' && selectedId.coursePath) {
       return (
-        annotations.find(
-          (a) => a.id === selectedId.id && a.coursePath === selectedId.coursePath
-        ) || null
+        annotations.find((a) => a.id === selectedId.id && a.coursePath === selectedId.coursePath) ||
+        null
       )
     }
     return annotations.find((a) => a.id === selectedId) || null
   }, [annotations, selectedId])
+
+  const mentionItems = useMemo(() => {
+    const map = new Map()
+    for (const item of annotations) {
+      if (item.lessonRelativePath) {
+        const key = `lesson:${item.lessonRelativePath}`
+        if (!map.has(key)) {
+          map.set(key, {
+            type: 'lesson',
+            id: item.lessonRelativePath,
+            title: item.lessonTitle || item.lessonRelativePath,
+            subtitle: 'Lección'
+          })
+        }
+      }
+      if (item.projectId) {
+        const key = `project:${item.projectId}`
+        if (!map.has(key)) {
+          map.set(key, {
+            type: 'project',
+            id: item.projectId,
+            title: item.projectTitle || item.projectId,
+            subtitle: 'Proyecto'
+          })
+        }
+      }
+    }
+    return [...map.values()]
+  }, [annotations])
 
   const isRowActive = (item) => {
     if (!selectedId) return false
@@ -103,14 +157,14 @@ function AnnotationsWorkspace({
   useEffect(() => {
     if (!selected) {
       setDraftTitle('')
-      setDraft({ text: '', html: '', json: null })
+      setDraft({ text: '', markdown: '', json: null })
       setDirty(false)
       return
     }
     setDraftTitle(selected.title || '')
     setDraft({
       text: selected.body || '',
-      html: selected.bodyHtml || '',
+      markdown: selected.body || '',
       json: selected.bodyJson || null
     })
     setEditorKey((k) => k + 1)
@@ -119,7 +173,11 @@ function AnnotationsWorkspace({
   }, [selected?.id])
 
   const handleDraftChange = (next) => {
-    setDraft(next)
+    setDraft({
+      text: next.markdown || next.text || '',
+      markdown: next.markdown || next.text || '',
+      json: null
+    })
     setDirty(true)
   }
 
@@ -142,9 +200,9 @@ function AnnotationsWorkspace({
     try {
       await onSave?.(selected, {
         title: draftTitle.trim() || null,
-        body: (draft.text || '').trim(),
-        bodyHtml: draft.html || null,
-        bodyJson: draft.json || null
+        body: (draft.markdown || draft.text || '').trim(),
+        bodyHtml: null,
+        bodyJson: null
       })
       setDirty(false)
       toast.success('Guardado')
@@ -153,6 +211,105 @@ function AnnotationsWorkspace({
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleExport = async () => {
+    if (!selected) return
+    try {
+      const {
+        buildNoteMarkdownDocument,
+        noteExportBasename,
+        listMarkdownNoteAssets,
+        rewriteMarkdownAssetLinks
+      } = await import('../utils/exportHelpers')
+
+      const titleText = draftTitle.trim() || noteTitle(selected)
+      const bodyMarkdown = draft.text || selected.body || ''
+      const base = noteExportBasename(titleText)
+      const assetDirName = `${base}.assets`
+
+      const assetFiles = new Set(listMarkdownNoteAssets(bodyMarkdown).map((a) => a.file))
+      const excalidrawRe = /!\[excalidraw:([^\]]*)\]/gi
+      let m
+      while ((m = excalidrawRe.exec(bodyMarkdown))) {
+        const id = (m[1] || '').trim()
+        if (id) {
+          assetFiles.add(`${id}.png`)
+          assetFiles.add(`${id}.excalidraw`)
+        }
+      }
+
+      const portableBody = rewriteMarkdownAssetLinks(bodyMarkdown, assetDirName)
+      const markdown = buildNoteMarkdownDocument({
+        title: titleText,
+        bodyMarkdown: portableBody,
+        meta: {
+          curso: courseTitleByPath[selected.coursePath] || selected.coursePath || null,
+          archivo: selected.lessonTitle || selected.projectTitle || 'Del curso',
+          proyecto: selected.projectTitle || null,
+          tiempo:
+            typeof selected.timeSec === 'number' ? formatTime(selected.timeSec) : null,
+          creado: formatDateTime(selected.createdAt),
+          actualizado:
+            selected.updatedAt && selected.updatedAt !== selected.createdAt
+              ? formatDateTime(selected.updatedAt)
+              : null
+        }
+      })
+
+      const result = await window.api.exportMarkdownBundle({
+        defaultPath: `${base}.md`,
+        markdown,
+        assetFiles: [...assetFiles]
+      })
+      if (!result?.canceled) {
+        toast.success(
+          result.assetCount
+            ? `Exportado (.md + ${result.assetCount} adjuntos)`
+            : 'Anotación exportada (.md)'
+        )
+      }
+    } catch (err) {
+      toast.error(err.message || 'No se pudo exportar')
+    }
+  }
+
+  const showRowDelete = typeof onDelete === 'function'
+  const colSpan = (courseColumn ? 4 : 3) + (showRowDelete ? 1 : 0)
+
+  const handleRowDelete = (event, item) => {
+    event.stopPropagation()
+    onDelete?.(item)
+  }
+
+  const groupHeading = (group) => {
+    if (courseColumn && group.coursePath) {
+      const courseName = courseTitleByPath[group.coursePath] || group.coursePath
+      if (group.projectId) return `${courseName} · ${group.title}`
+      if (!group.path) return `${courseName} · Del curso`
+      return `${courseName} · ${group.title}`
+    }
+    return group.title
+  }
+
+  const jumpLabel = (item) => {
+    if (typeof item.timeSec === 'number') {
+      return `Ir al video · ${formatTime(item.timeSec)}`
+    }
+    if (item.projectId) return 'Abrir proyecto'
+    if (item.lessonRelativePath) return 'Abrir archivo'
+    return 'Abrir en curso'
+  }
+
+  const targetPropLabel = (item) => {
+    if (item.projectId) return 'Proyecto'
+    if (item.lessonRelativePath) return 'Archivo'
+    return 'Archivo'
+  }
+
+  const targetPropValue = (item) => {
+    if (item.projectId) return item.projectTitle || 'Proyecto'
+    return item.lessonTitle || 'Del curso'
   }
 
   return (
@@ -179,6 +336,30 @@ function AnnotationsWorkspace({
               aria-label="Buscar anotaciones"
             />
           </div>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            title="Mostrar learning-store.json en el explorador"
+            onClick={async () => {
+              try {
+                await window.api.revealLearningStore()
+              } catch (err) {
+                toast.error(err.message || 'No se pudo abrir la ubicación')
+              }
+            }}
+          >
+            Abrir ubicación
+          </button>
+          {onOpenPopOut ? (
+            <button
+              type="button"
+              className="btn btn--ghost"
+              title="Abrir anotaciones en una ventana aparte"
+              onClick={onOpenPopOut}
+            >
+              Ventana
+            </button>
+          ) : null}
           {onCreate ? (
             <button type="button" className="btn btn--primary" onClick={onCreate}>
               Nueva
@@ -211,49 +392,69 @@ function AnnotationsWorkspace({
                     {courseColumn ? <th>Curso</th> : null}
                     <th>Contexto</th>
                     <th>Fecha de creación</th>
+                    {showRowDelete ? <th className="annotations-table__actions-col"> </th> : null}
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={courseColumn ? 4 : 3}>Cargando…</td>
+                      <td colSpan={colSpan}>Cargando…</td>
                     </tr>
                   ) : filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={courseColumn ? 4 : 3}>
-                        {annotations.length === 0
-                          ? 'Aún no hay anotaciones.'
-                          : 'Ningún resultado.'}
+                      <td colSpan={colSpan}>
+                        {annotations.length === 0 ? 'Aún no hay anotaciones.' : 'Ningún resultado.'}
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((item) => {
-                      const active = isRowActive(item)
-                      return (
-                        <tr
-                          key={`${item.coursePath || 'local'}-${item.id}`}
-                          className={active ? 'is-active' : ''}
-                          onClick={() => onSelect?.(item)}
-                        >
-                          <td>
-                            <span className="annotations-table__name">{displayName(item)}</span>
-                          </td>
-                          {courseColumn ? (
-                            <td className="annotations-table__muted">
-                              {courseTitleByPath[item.coursePath] || item.coursePath}
-                            </td>
-                          ) : null}
-                          <td className="annotations-table__muted">
-                            {typeof item.timeSec === 'number'
-                              ? formatTime(item.timeSec)
-                              : item.lessonTitle || 'Curso'}
-                          </td>
-                          <td className="annotations-table__muted">
-                            {formatDateTime(item.createdAt)}
+                    groups.map((group) => (
+                      <Fragment key={group.key}>
+                        <tr className="annotations-table__group">
+                          <td colSpan={colSpan}>
+                            <span className="annotations-table__group-title">
+                              {groupHeading(group)}
+                            </span>
+                            <span className="annotations-table__group-count">{group.items.length}</span>
                           </td>
                         </tr>
-                      )
-                    })
+                        {group.items.map((item) => {
+                          const active = isRowActive(item)
+                          return (
+                            <tr
+                              key={`${item.coursePath || 'local'}-${item.id}`}
+                              className={active ? 'is-active' : ''}
+                              onClick={() => onSelect?.(item)}
+                            >
+                              <td>
+                                <span className="annotations-table__name">{displayName(item)}</span>
+                              </td>
+                              {courseColumn ? (
+                                <td className="annotations-table__muted">
+                                  {courseTitleByPath[item.coursePath] || item.coursePath}
+                                </td>
+                              ) : null}
+                              <td className="annotations-table__muted">{contextLabel(item)}</td>
+                              <td className="annotations-table__muted">
+                                {formatDateTime(item.createdAt)}
+                              </td>
+                              {showRowDelete ? (
+                                <td className="annotations-table__actions">
+                                  <button
+                                    type="button"
+                                    className="annotations-table__delete"
+                                    title="Borrar anotación"
+                                    aria-label={`Borrar ${displayName(item)}`}
+                                    onClick={(event) => handleRowDelete(event, item)}
+                                  >
+                                    Borrar
+                                  </button>
+                                </td>
+                              ) : null}
+                            </tr>
+                          )
+                        })}
+                      </Fragment>
+                    ))
                   )}
                 </tbody>
               </table>
@@ -277,9 +478,7 @@ function AnnotationsWorkspace({
                       className="btn btn--ghost"
                       onClick={() => onJump(selected)}
                     >
-                      {typeof selected.timeSec === 'number'
-                        ? `Ir al video · ${formatTime(selected.timeSec)}`
-                        : 'Abrir en curso'}
+                      {jumpLabel(selected)}
                     </button>
                   ) : null}
                 </div>
@@ -294,6 +493,9 @@ function AnnotationsWorkspace({
                       {saving ? 'Guardando…' : 'Guardar'}
                     </button>
                   ) : null}
+                  <button type="button" className="btn btn--ghost" onClick={handleExport}>
+                    Exportar
+                  </button>
                   <button
                     type="button"
                     className="btn btn--ghost"
@@ -328,8 +530,8 @@ function AnnotationsWorkspace({
                   </div>
                 ) : null}
                 <div className="annotations-doc__prop">
-                  <span className="annotations-doc__prop-label">Lección</span>
-                  <span>{selected.lessonTitle || 'Del curso'}</span>
+                  <span className="annotations-doc__prop-label">{targetPropLabel(selected)}</span>
+                  <span>{targetPropValue(selected)}</span>
                 </div>
                 {typeof selected.timeSec === 'number' ? (
                   <div className="annotations-doc__prop">
@@ -354,6 +556,16 @@ function AnnotationsWorkspace({
                   bodyJson={draft.json}
                   placeholder="Escribe tu anotación…"
                   onChange={handleDraftChange}
+                  enableTimestamp={typeof selected.timeSec === 'number'}
+                  currentTimeSec={
+                    typeof selected.timeSec === 'number' ? selected.timeSec : 0
+                  }
+                  onSeekTimestamp={
+                    onJump
+                      ? (timeSec) => onJump({ ...selected, timeSec })
+                      : null
+                  }
+                  mentionItems={mentionItems}
                 />
               </div>
             </div>

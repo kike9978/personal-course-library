@@ -11,8 +11,9 @@ function getStorePath() {
 
 function emptyStore() {
   return {
-    version: 3,
-    courses: {}
+    version: 4,
+    courses: {},
+    paths: []
   }
 }
 
@@ -92,6 +93,7 @@ function readStore() {
     const raw = fs.readFileSync(filePath, 'utf8')
     const data = JSON.parse(raw)
     if (!data || typeof data !== 'object' || !data.courses) return emptyStore()
+    if (!Array.isArray(data.paths)) data.paths = []
     return data
   } catch {
     return emptyStore()
@@ -154,9 +156,7 @@ export function summarizeCourseState(courseState) {
   const lastPath = state.lastLessonRelativePath
   const lastMeta = playable.find((l) => l.relativePath === lastPath)
   const lastLessonTitle =
-    state.lastLessonTitle ||
-    lastMeta?.title ||
-    (lastPath ? lessonTitleFromPath(lastPath) : null)
+    state.lastLessonTitle || lastMeta?.title || (lastPath ? lessonTitleFromPath(lastPath) : null)
 
   return {
     ...state,
@@ -218,17 +218,14 @@ export function setLessonProgress(coursePath, update) {
   }
 
   let positionSec =
-    typeof update.positionSec === 'number'
-      ? Math.max(0, update.positionSec)
-      : existing.positionSec
+    typeof update.positionSec === 'number' ? Math.max(0, update.positionSec) : existing.positionSec
 
   let durationSec =
     typeof update.durationSec === 'number' && update.durationSec > 0
       ? update.durationSec
       : existing.durationSec || 0
 
-  let completed =
-    typeof update.completed === 'boolean' ? update.completed : existing.completed
+  let completed = typeof update.completed === 'boolean' ? update.completed : existing.completed
 
   // Auto-complete near the end
   if (
@@ -324,11 +321,27 @@ export function listNotes(coursePath) {
 function compareStudyItems(a, b) {
   const aLesson = a.lessonRelativePath || ''
   const bLesson = b.lessonRelativePath || ''
-  const aIsCourseWide = !aLesson && (a.timeSec == null || a.timeSec === undefined)
-  const bIsCourseWide = !bLesson && (b.timeSec == null || b.timeSec === undefined)
+  const aProject = a.projectId || ''
+  const bProject = b.projectId || ''
+  const aIsCourseWide =
+    !aLesson && !aProject && (a.timeSec == null || a.timeSec === undefined)
+  const bIsCourseWide =
+    !bLesson && !bProject && (b.timeSec == null || b.timeSec === undefined)
 
-  // Course-wide notes after everything lesson-scoped
+  // Course-wide notes after everything scoped
   if (aIsCourseWide !== bIsCourseWide) return aIsCourseWide ? 1 : -1
+
+  // Project notes after file/lesson notes, grouped by project
+  const aIsProject = Boolean(aProject) && !aLesson
+  const bIsProject = Boolean(bProject) && !bLesson
+  if (aIsProject !== bIsProject) return aIsProject ? 1 : -1
+  if (aIsProject && bIsProject) {
+    const projectCmp = String(aProject).localeCompare(String(bProject), undefined, {
+      sensitivity: 'base'
+    })
+    if (projectCmp !== 0) return projectCmp
+    return (a.createdAt || a.updatedAt || 0) - (b.createdAt || b.updatedAt || 0)
+  }
 
   const lessonCmp = String(aLesson).localeCompare(String(bLesson), undefined, {
     numeric: true,
@@ -354,7 +367,9 @@ export function listBookmarks(coursePath) {
 
 /**
  * @param {string} coursePath
- * @param {{ id?: string, title?: string|null, body?: string, bodyHtml?: string|null, bodyJson?: string|null, lessonRelativePath?: string|null, lessonTitle?: string|null, timeSec?: number|null, color?: string|null }} payload
+ * @param {{ id?: string, title?: string|null, body?: string, bodyHtml?: string|null, bodyJson?: string|null, lessonRelativePath?: string|null, lessonTitle?: string|null, projectId?: string|null, projectTitle?: string|null, timeSec?: number|null, color?: string|null }} payload
+ * `body` is markdown (canonical). `bodyHtml` / `bodyJson` are legacy and cleared on new saves.
+ * Project notes use `projectId` (no path/time). File notes use `lessonRelativePath`.
  */
 export function upsertNote(coursePath, payload) {
   const store = readStore()
@@ -362,52 +377,73 @@ export function upsertNote(coursePath, payload) {
   const now = Date.now()
   // Empty body allowed = pin on timeline / lesson without text yet
   const body = String(payload.body ?? '').trim()
-  const title =
-    payload.title === undefined
-      ? undefined
-      : String(payload.title ?? '').trim() || null
+  const title = payload.title === undefined ? undefined : String(payload.title ?? '').trim() || null
   const bodyHtml =
-    payload.bodyHtml === undefined
-      ? undefined
-      : payload.bodyHtml
-        ? String(payload.bodyHtml)
-        : null
+    payload.bodyHtml === undefined ? undefined : payload.bodyHtml ? String(payload.bodyHtml) : null
   const bodyJson =
-    payload.bodyJson === undefined
-      ? undefined
-      : payload.bodyJson
-        ? String(payload.bodyJson)
-        : null
+    payload.bodyJson === undefined ? undefined : payload.bodyJson ? String(payload.bodyJson) : null
+
+  const resolveTargets = (base = {}) => {
+    const next = {
+      lessonRelativePath:
+        payload.lessonRelativePath !== undefined
+          ? payload.lessonRelativePath
+          : (base.lessonRelativePath ?? null),
+      lessonTitle:
+        payload.lessonTitle !== undefined ? payload.lessonTitle : (base.lessonTitle ?? null),
+      projectId: payload.projectId !== undefined ? payload.projectId : (base.projectId ?? null),
+      projectTitle:
+        payload.projectTitle !== undefined ? payload.projectTitle : (base.projectTitle ?? null),
+      timeSec:
+        payload.timeSec !== undefined
+          ? typeof payload.timeSec === 'number'
+            ? Math.max(0, payload.timeSec)
+            : null
+          : (base.timeSec ?? null)
+    }
+
+    // Mutual exclusion: project notes vs file/video notes
+    if (payload.projectId) {
+      next.projectId = payload.projectId
+      next.projectTitle = payload.projectTitle ?? next.projectTitle ?? null
+      next.lessonRelativePath = null
+      next.lessonTitle = null
+      next.timeSec = null
+    } else if (payload.lessonRelativePath !== undefined || payload.timeSec !== undefined) {
+      next.projectId = null
+      next.projectTitle = null
+    }
+
+    return next
+  }
 
   if (payload.id) {
     const idx = course.notes.findIndex((n) => n.id === payload.id)
     if (idx === -1) throw new Error('Anotación no encontrada')
+    const targets = resolveTargets(course.notes[idx])
     course.notes[idx] = {
       ...course.notes[idx],
-      title: title !== undefined ? title : course.notes[idx].title ?? null,
+      title: title !== undefined ? title : (course.notes[idx].title ?? null),
       body: payload.body !== undefined ? body : course.notes[idx].body,
-      bodyHtml: bodyHtml !== undefined ? bodyHtml : course.notes[idx].bodyHtml ?? null,
-      bodyJson: bodyJson !== undefined ? bodyJson : course.notes[idx].bodyJson ?? null,
-      lessonRelativePath:
-        payload.lessonRelativePath !== undefined
-          ? payload.lessonRelativePath
-          : course.notes[idx].lessonRelativePath,
-      lessonTitle:
-        payload.lessonTitle !== undefined ? payload.lessonTitle : course.notes[idx].lessonTitle,
-      timeSec: payload.timeSec !== undefined ? payload.timeSec : course.notes[idx].timeSec,
+      bodyHtml: bodyHtml !== undefined ? bodyHtml : (course.notes[idx].bodyHtml ?? null),
+      bodyJson: bodyJson !== undefined ? bodyJson : (course.notes[idx].bodyJson ?? null),
+      ...targets,
       color: payload.color !== undefined ? payload.color : course.notes[idx].color,
       updatedAt: now
     }
   } else {
+    const targets = resolveTargets({})
     course.notes.push({
       id: makeId(),
       title: title ?? null,
       body,
       bodyHtml: bodyHtml ?? null,
       bodyJson: bodyJson ?? null,
-      lessonRelativePath: payload.lessonRelativePath ?? null,
-      lessonTitle: payload.lessonTitle ?? null,
-      timeSec: typeof payload.timeSec === 'number' ? Math.max(0, payload.timeSec) : null,
+      lessonRelativePath: targets.lessonRelativePath,
+      lessonTitle: targets.lessonTitle,
+      projectId: targets.projectId,
+      projectTitle: targets.projectTitle,
+      timeSec: targets.timeSec,
       color: payload.color ?? null,
       createdAt: now,
       updatedAt: now
@@ -513,10 +549,12 @@ export function listProjects(coursePath) {
   const store = readStore()
   const { course } = getMutableCourse(store, coursePath)
   return [...course.projects]
-    .sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), undefined, {
-      numeric: true,
-      sensitivity: 'base'
-    }))
+    .sort((a, b) =>
+      String(a.title || '').localeCompare(String(b.title || ''), undefined, {
+        numeric: true,
+        sensitivity: 'base'
+      })
+    )
     .map(decorateProject)
 }
 
@@ -582,7 +620,10 @@ export function upsertProject(coursePath, payload) {
     if (idx === -1) throw new Error('Proyecto no encontrado')
     course.projects[idx] = {
       ...course.projects[idx],
-      title: payload.title !== undefined ? title || course.projects[idx].title : course.projects[idx].title,
+      title:
+        payload.title !== undefined
+          ? title || course.projects[idx].title
+          : course.projects[idx].title,
       linkedFolderPath:
         linkedFolderPath !== undefined ? linkedFolderPath : course.projects[idx].linkedFolderPath,
       notes:
@@ -629,6 +670,98 @@ export function getProjectLinkedPath(coursePath, projectId) {
   if (!project) throw new Error('Proyecto no encontrado')
   if (!project.linkedFolderPath) throw new Error('Este proyecto no tiene carpeta vinculada')
   return project.linkedFolderPath
+}
+
+/**
+ * Lowercased note title+body text keyed by course path — for library search.
+ * @returns {Record<string, string>}
+ */
+export function getNotesSearchByCourse() {
+  const store = readStore()
+  const map = {}
+  for (const [coursePath, value] of Object.entries(store.courses || {})) {
+    const course = ensureArrays(value)
+    const chunks = []
+    for (const note of course.notes) {
+      if (note.title) chunks.push(String(note.title))
+      if (note.body) chunks.push(String(note.body))
+    }
+    map[coursePath] = chunks.join('\n').toLowerCase()
+  }
+  return map
+}
+
+function normalizePathCourseList(list) {
+  if (!Array.isArray(list)) return []
+  const seen = new Set()
+  const out = []
+  for (const item of list) {
+    const key = path.basename(String(item || ''))
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push(key)
+  }
+  return out
+}
+
+export function listLearningPaths() {
+  const store = readStore()
+  return [...(store.paths || [])].sort(
+    (a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)
+  )
+}
+
+/**
+ * @param {{ id?: string, title?: string, coursePaths?: string[] }} payload
+ */
+export function upsertLearningPath(payload = {}) {
+  const store = readStore()
+  if (!Array.isArray(store.paths)) store.paths = []
+  const now = Date.now()
+  const title = String(payload.title ?? '').trim()
+  const coursePaths = normalizePathCourseList(payload.coursePaths)
+
+  if (payload.id) {
+    const idx = store.paths.findIndex((p) => p.id === payload.id)
+    if (idx === -1) throw new Error('Ruta no encontrada')
+    store.paths[idx] = {
+      ...store.paths[idx],
+      title: payload.title !== undefined ? title || store.paths[idx].title : store.paths[idx].title,
+      coursePaths:
+        payload.coursePaths !== undefined ? coursePaths : store.paths[idx].coursePaths || [],
+      updatedAt: now
+    }
+  } else {
+    if (!title) throw new Error('El título de la ruta es obligatorio')
+    store.paths.push({
+      id: makeId(),
+      title,
+      coursePaths,
+      createdAt: now,
+      updatedAt: now
+    })
+  }
+
+  writeStore(store)
+  return listLearningPaths()
+}
+
+export function deleteLearningPath(pathId) {
+  const store = readStore()
+  store.paths = (store.paths || []).filter((p) => p.id !== pathId)
+  writeStore(store)
+  return listLearningPaths()
+}
+
+/** Absolute path to learning-store.json (notes, projects, progress). */
+export function getLearningStorePath() {
+  return getStorePath()
+}
+
+/** Ensure the store file exists on disk, then return its path. */
+export function ensureLearningStoreFile() {
+  writeStore(readStore())
+  return getStorePath()
 }
 
 export { COMPLETE_THRESHOLD }

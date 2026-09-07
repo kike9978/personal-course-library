@@ -98,11 +98,13 @@ function classifyFile(name) {
 
 function prettyTitle(filename) {
   const base = path.basename(filename, path.extname(filename))
-  return base
-    .replace(/^[\[\(]?\d+[\]\)]?[.\-_\s]+/g, '')
-    .replace(/^(\d+[.\-_])+/g, '')
-    .replace(/\s+/g, ' ')
-    .trim() || base
+  return (
+    base
+      .replace(/^[\[\(]?\d+[\]\)]?[.\-_\s]+/g, '')
+      .replace(/^(\d+[.\-_])+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim() || base
+  )
 }
 
 function toPosixRelative(courseRoot, absolutePath) {
@@ -251,7 +253,9 @@ export async function scanCourse(courseDir) {
     if (kind === 'video' || kind === 'audio') {
       rootLessons.push(makeLesson(courseRoot, abs, kind, '__root__'))
     } else {
-      rootResources.push(makeResource(courseRoot, abs, kind === 'other' ? classifyFile(entry.name) : kind))
+      rootResources.push(
+        makeResource(courseRoot, abs, kind === 'other' ? classifyFile(entry.name) : kind)
+      )
     }
   }
 
@@ -332,10 +336,7 @@ export function srtToWebVtt(srtText) {
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .trim()
-  const converted = body.replace(
-    /(\d{1,2}:\d{2}:\d{2}),(\d{3})/g,
-    '$1.$2'
-  )
+  const converted = body.replace(/(\d{1,2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
   return `WEBVTT\n\n${converted}\n`
 }
 
