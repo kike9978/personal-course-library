@@ -62,6 +62,10 @@ function AppHeader({
   onCardLayoutChange,
   isInProcessOnly,
   onInProcessOnlyChange,
+  isNewOnly,
+  onNewOnlyChange,
+  recentlyViewedOnly,
+  onRecentlyViewedOnlyChange,
   missingPropsOnly,
   onMissingPropsOnlyChange,
   courseCount,
@@ -148,6 +152,26 @@ function AppHeader({
           <button
             type="button"
             className="filter-pill"
+            aria-pressed={isNewOnly}
+            onClick={() => onNewOnlyChange(!isNewOnly)}
+            title="Carpetas añadidas en los últimos 14 días"
+          >
+            Nuevos
+          </button>
+
+          <button
+            type="button"
+            className="filter-pill"
+            aria-pressed={recentlyViewedOnly}
+            onClick={() => onRecentlyViewedOnlyChange(!recentlyViewedOnly)}
+            title="Cursos abiertos en los últimos 14 días"
+          >
+            Recientes
+          </button>
+
+          <button
+            type="button"
+            className="filter-pill"
             aria-pressed={missingPropsOnly}
             onClick={() => onMissingPropsOnlyChange(!missingPropsOnly)}
           >
@@ -180,7 +204,9 @@ function AppHeader({
             <option value="az">A → Z</option>
             <option value="za">Z → A</option>
             <option value="recent">Recientes</option>
-            <option value="newest">Más nuevos</option>
+            <option value="added">Fecha de añadido</option>
+            <option value="addedOldest">Añadidos primero</option>
+            <option value="newest">Última modificación</option>
             <option value="rate">Mejor valorados</option>
             <option value="progress">Más progreso</option>
             <option value="inProgress">En curso primero</option>
@@ -291,6 +317,8 @@ function FilterableCoursesGrid({
   const [filterText, setFilterText] = useState('')
   const [isCardLayout, setIsCardLayout] = useState(true)
   const [isInProcessOnly, setIsInProcessOnly] = useState(false)
+  const [isNewOnly, setIsNewOnly] = useState(false)
+  const [recentlyViewedOnly, setRecentlyViewedOnly] = useState(false)
   const [missingPropsOnly, setMissingPropsOnly] = useState(false)
   const [institutionFilter, setInstitutionFilter] = useState('')
   const [programFilter, setProgramFilter] = useState('')
@@ -373,6 +401,8 @@ function FilterableCoursesGrid({
         notesText.includes(searchLower) ||
         (course.path || '').toLowerCase().includes(searchLower)
       const processCheck = !isInProcessOnly || course.isInProcess
+      const newCheck = !isNewOnly || course.isNew
+      const recentCheck = !recentlyViewedOnly || course.learning?.isRecentlyViewed
       const missingCheck = !missingPropsOnly || course.missingProps
       const institutionCheck = !institutionFilter || course.institution === institutionFilter
       const programCheck = !programFilter || (course.programs || []).includes(programFilter)
@@ -381,6 +411,8 @@ function FilterableCoursesGrid({
       return (
         matchesText &&
         processCheck &&
+        newCheck &&
+        recentCheck &&
         missingCheck &&
         institutionCheck &&
         programCheck &&
@@ -391,7 +423,13 @@ function FilterableCoursesGrid({
 
     return [...filtered].sort((a, b) => {
       if (sortMode === 'recent') {
-        return (b.learning?.lastOpenedAt || 0) - (a.learning?.lastOpenedAt || 0)
+        const viewed = (course) =>
+          Math.max(course.learning?.lastViewedAt || 0, course.learning?.lastOpenedAt || 0)
+        return viewed(b) - viewed(a)
+      }
+      if (sortMode === 'added' || sortMode === 'addedOldest') {
+        const diff = (b.addedAt || 0) - (a.addedAt || 0)
+        if (diff !== 0) return sortMode === 'addedOldest' ? -diff : diff
       }
       if (sortMode === 'newest') {
         return (b.folderMtimeMs || 0) - (a.folderMtimeMs || 0)
@@ -417,6 +455,8 @@ function FilterableCoursesGrid({
     courses,
     debouncedFilter,
     isInProcessOnly,
+    isNewOnly,
+    recentlyViewedOnly,
     missingPropsOnly,
     institutionFilter,
     programFilter,
@@ -536,6 +576,10 @@ function FilterableCoursesGrid({
         onCardLayoutChange={setIsCardLayout}
         isInProcessOnly={isInProcessOnly}
         onInProcessOnlyChange={setIsInProcessOnly}
+        isNewOnly={isNewOnly}
+        onNewOnlyChange={setIsNewOnly}
+        recentlyViewedOnly={recentlyViewedOnly}
+        onRecentlyViewedOnlyChange={setRecentlyViewedOnly}
         missingPropsOnly={missingPropsOnly}
         onMissingPropsOnlyChange={setMissingPropsOnly}
         courseCount={sortedCourses.length}
@@ -621,6 +665,8 @@ function FilterableCoursesGrid({
               ) : null}
 
               {!isInProcessOnly &&
+                !isNewOnly &&
+                !recentlyViewedOnly &&
                 !missingPropsOnly &&
                 !debouncedFilter &&
                 !institutionFilter &&
@@ -794,6 +840,41 @@ function App() {
     )
   }, [])
 
+  const recordView = useCallback((coursePath) => {
+    if (!coursePath) return
+    window.api
+      .recordCourseView(coursePath)
+      .then((learning) => {
+        if (!learning) return
+        setCourses((prev) =>
+          prev.map((course) => {
+            if (course.path !== coursePath) return course
+            if (!course.learning) return { ...course, learning }
+            return {
+              ...course,
+              learning: {
+                ...course.learning,
+                lastViewedAt: learning.lastViewedAt,
+                isRecentlyViewed: Boolean(learning.isRecentlyViewed)
+              }
+            }
+          })
+        )
+      })
+      .catch(() => {})
+  }, [])
+
+  const openCourse = useCallback(
+    (course, target = null) => {
+      if (!course?.path) return
+      setLibraryStudyMode(null)
+      setResumeTarget(target)
+      setActiveCoursePath(course.path)
+      recordView(course.path)
+    },
+    [recordView]
+  )
+
   const handleChangeLibrary = useCallback(async () => {
     try {
       const result = await window.api.pickLibraryFolder()
@@ -821,6 +902,9 @@ function App() {
               ...update.fullData,
               missingProps: update.fullData.missingProps ?? false,
               hasProps: update.fullData.hasProps ?? true,
+              addedAt: update.fullData.addedAt ?? course.addedAt,
+              isNew:
+                typeof update.fullData.addedAt === 'number' ? update.fullData.isNew : course.isNew,
               learning: course.learning,
               notesSearchText: course.notesSearchText
             }
@@ -847,10 +931,12 @@ function App() {
           }
           if (activeCoursePathRef.current === payload.coursePath) {
             setLiveJump({ ...target, coursePath: payload.coursePath, id: Date.now() })
+            recordView(payload.coursePath)
             return
           }
           setResumeTarget(target)
           setActiveCoursePath(payload.coursePath)
+          recordView(payload.coursePath)
         })
 
     const handleKeyDown = (e) => {
@@ -867,7 +953,7 @@ function App() {
       unsubscribeJump?.()
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [loadCourses, refreshCourses, annotationsWindowMode])
+  }, [loadCourses, refreshCourses, annotationsWindowMode, recordView])
 
   const activeCourse = useMemo(() => {
     if (!activeCoursePath) return null
@@ -927,35 +1013,11 @@ function App() {
           }}
         />
       ) : libraryStudyMode === 'paths' ? (
-        <LearningPathsView
-          courses={courses}
-          onNavigate={navigateApp}
-          onOpenCourse={(course, target = null) => {
-            setLibraryStudyMode(null)
-            setResumeTarget(target)
-            setActiveCoursePath(course.path)
-          }}
-        />
+        <LearningPathsView courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'annotations' ? (
-        <LibraryStudyView
-          courses={courses}
-          onNavigate={navigateApp}
-          onOpenCourse={(course, target = null) => {
-            setLibraryStudyMode(null)
-            setResumeTarget(target)
-            setActiveCoursePath(course.path)
-          }}
-        />
+        <LibraryStudyView courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'projects' ? (
-        <ProjectsKanban
-          courses={courses}
-          onNavigate={navigateApp}
-          onOpenCourse={(course, target = null) => {
-            setLibraryStudyMode(null)
-            setResumeTarget(target)
-            setActiveCoursePath(course.path)
-          }}
-        />
+        <ProjectsKanban courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : activeCourse ? (
         <CourseRoom
           course={activeCourse}
@@ -977,10 +1039,7 @@ function App() {
           libraryPath={libraryPath}
           onChangeLibrary={handleChangeLibrary}
           onNavigate={navigateApp}
-          onOpenCourse={(course, target = null) => {
-            setResumeTarget(target)
-            setActiveCoursePath(course.path)
-          }}
+          onOpenCourse={openCourse}
         />
       )}
     </ErrorBoundary>

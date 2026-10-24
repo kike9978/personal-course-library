@@ -219,12 +219,12 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     }
   }
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     const el = videoRef.current
     if (!el) return
     if (el.paused) el.play().catch(() => {})
     else el.pause()
-  }
+  }, [])
 
   const seekFromClientX = (clientX) => {
     const el = videoRef.current
@@ -237,12 +237,35 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     persist(el.currentTime)
   }
 
-  const cycleRate = () => {
-    const idx = RATES.indexOf(rate)
-    const next = RATES[(idx + 1) % RATES.length]
+  const seekBy = useCallback((deltaSec) => {
+    const el = videoRef.current
+    if (!el || !Number.isFinite(el.duration) || el.duration <= 0) return
+    el.currentTime = Math.min(el.duration, Math.max(0, el.currentTime + deltaSec))
+    setCurrentTime(el.currentTime)
+  }, [])
+
+  const seekToSec = useCallback((sec) => {
+    const el = videoRef.current
+    if (!el || !Number.isFinite(el.duration) || el.duration <= 0) return
+    el.currentTime = Math.min(Math.max(0, el.duration - 0.05), Math.max(0, sec))
+    setCurrentTime(el.currentTime)
+  }, [])
+
+  const applyRate = useCallback((next) => {
     setRate(next)
     if (videoRef.current) videoRef.current.playbackRate = next
-  }
+  }, [])
+
+  const stepRate = useCallback(
+    (direction) => {
+      const idx = RATES.indexOf(rate)
+      const safe = idx >= 0 ? idx : RATES.indexOf(1)
+      applyRate(RATES[(safe + direction + RATES.length) % RATES.length])
+    },
+    [applyRate, rate]
+  )
+
+  const cycleRate = () => stepRate(1)
 
   useEffect(() => {
     const el = videoRef.current
@@ -260,29 +283,40 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     return () => document.removeEventListener('fullscreenchange', onFs)
   }, [])
 
-  const toggleMute = () => {
-    if (muted || volume === 0) {
-      const restore = volumeBeforeMute.current > 0 ? volumeBeforeMute.current : 1
-      setVolume(restore)
-      setMuted(false)
-    } else {
-      volumeBeforeMute.current = volume
-      setMuted(true)
-    }
-  }
+  const volumeRef = useRef(volume)
+  const mutedRef = useRef(muted)
+  volumeRef.current = volume
+  mutedRef.current = muted
 
-  const handleVolumeChange = (value) => {
+  const handleVolumeChange = useCallback((value) => {
     const next = Math.min(1, Math.max(0, Number(value)))
+    volumeRef.current = next
     setVolume(next)
     if (next > 0) {
       volumeBeforeMute.current = next
+      mutedRef.current = false
       setMuted(false)
     } else {
+      mutedRef.current = true
       setMuted(true)
     }
-  }
+  }, [])
 
-  const toggleFullscreen = async () => {
+  const toggleMute = useCallback(() => {
+    if (mutedRef.current || volumeRef.current === 0) {
+      const restore = volumeBeforeMute.current > 0 ? volumeBeforeMute.current : 1
+      volumeRef.current = restore
+      mutedRef.current = false
+      setVolume(restore)
+      setMuted(false)
+    } else {
+      volumeBeforeMute.current = volumeRef.current
+      mutedRef.current = true
+      setMuted(true)
+    }
+  }, [])
+
+  const toggleFullscreen = useCallback(async () => {
     const shell = stageRef.current
     if (!shell) return
     try {
@@ -294,14 +328,123 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     } catch (err) {
       console.error(err)
     }
-  }
+  }, [])
 
-  const seekBy = (deltaSec) => {
-    const el = videoRef.current
-    if (!el || !duration) return
-    el.currentTime = Math.min(duration, Math.max(0, el.currentTime + deltaSec))
-    setCurrentTime(el.currentTime)
-  }
+  const bumpVolume = useCallback(
+    (delta) => {
+      const base = mutedRef.current ? 0 : volumeRef.current
+      handleVolumeChange(Math.round((base + delta) * 20) / 20)
+    },
+    [handleVolumeChange]
+  )
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (
+        target?.isContentEditable ||
+        target?.closest?.('[contenteditable="true"], .note-editor')
+      ) {
+        return
+      }
+      if (!videoRef.current) return
+
+      const key = e.key
+      const lower = key.toLowerCase()
+      const onControl = Boolean(target?.closest?.('button, a, [role="button"]'))
+
+      if (key === ' ' || lower === 'k') {
+        if (e.repeat || onControl) return
+        e.preventDefault()
+        togglePlay()
+        return
+      }
+      if (key === 'ArrowLeft' || lower === 'j') {
+        e.preventDefault()
+        seekBy(key === 'ArrowLeft' && !e.shiftKey ? -5 : -10)
+        return
+      }
+      if (key === 'ArrowRight' || lower === 'l') {
+        e.preventDefault()
+        seekBy(key === 'ArrowRight' && !e.shiftKey ? 5 : 10)
+        return
+      }
+      if (key === 'ArrowUp' || key === 'AudioVolumeUp') {
+        e.preventDefault()
+        bumpVolume(0.05)
+        return
+      }
+      if (key === 'ArrowDown' || key === 'AudioVolumeDown') {
+        e.preventDefault()
+        bumpVolume(-0.05)
+        return
+      }
+      if (lower === 's' || key === 'AudioVolumeMute') {
+        if (e.repeat) return
+        e.preventDefault()
+        toggleMute()
+        return
+      }
+      if (lower === 'f' || key === 'MediaPlayPause') {
+        if (e.repeat) return
+        e.preventDefault()
+        if (lower === 'f') toggleFullscreen()
+        else togglePlay()
+        return
+      }
+      if (lower === 'c') {
+        if (e.repeat || !subtitleTracks.length) return
+        e.preventDefault()
+        setSubsEnabled((v) => !v)
+        return
+      }
+      if (key === 'Home') {
+        if (e.repeat) return
+        e.preventDefault()
+        seekToSec(0)
+        return
+      }
+      if (key === 'End') {
+        if (e.repeat) return
+        e.preventDefault()
+        const dur = videoRef.current?.duration
+        if (Number.isFinite(dur)) seekToSec(dur)
+        return
+      }
+      if (/^[0-9]$/.test(key)) {
+        if (e.repeat) return
+        e.preventDefault()
+        const dur = videoRef.current?.duration
+        if (Number.isFinite(dur)) seekToSec((Number(key) / 10) * dur)
+        return
+      }
+      if (key === ',' || key === '<') {
+        if (e.repeat) return
+        e.preventDefault()
+        stepRate(-1)
+        return
+      }
+      if (key === '.' || key === '>') {
+        if (e.repeat) return
+        e.preventDefault()
+        stepRate(1)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [
+    bumpVolume,
+    seekBy,
+    seekToSec,
+    stepRate,
+    subtitleTracks.length,
+    toggleFullscreen,
+    toggleMute,
+    togglePlay
+  ])
 
   const marksOnLesson = useMemo(() => {
     if (!lesson?.relativePath || !duration) return []
@@ -364,7 +507,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             type="button"
             className="icon-btn icon-btn--ghost"
             onClick={cycleRate}
-            title="Velocidad"
+            title="Velocidad (, .)"
           >
             {rate}×
           </button>
@@ -373,7 +516,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
               type="button"
               className={`icon-btn ${subsEnabled ? 'icon-btn--teal' : 'icon-btn--ghost'}`}
               onClick={() => setSubsEnabled((v) => !v)}
-              title="Subtítulos"
+              title={subsEnabled ? 'Ocultar subtítulos (C)' : 'Subtítulos (C)'}
             >
               CC
             </button>
@@ -433,6 +576,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             className="playhead__play"
             onClick={togglePlay}
             aria-label={playing ? 'Pausar' : 'Reproducir'}
+            title={playing ? 'Pausar (Espacio)' : 'Reproducir (Espacio)'}
           >
             {playing ? '❚❚' : '▶'}
           </button>
@@ -448,17 +592,10 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             aria-valuemin={0}
             aria-valuemax={Math.floor(duration || 0)}
             aria-valuenow={Math.floor(currentTime || 0)}
+            aria-label="Posición"
+            aria-keyshortcuts="ArrowLeft ArrowRight"
             tabIndex={0}
             onClick={(e) => seekFromClientX(e.clientX)}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowRight') {
-                e.preventDefault()
-                seekBy(5)
-              } else if (e.key === 'ArrowLeft') {
-                e.preventDefault()
-                seekBy(-5)
-              }
-            }}
           >
             <div className="playhead__fill" style={{ width: `${progressPct}%` }} />
             <div className="playhead__thumb" style={{ left: `${progressPct}%` }} />
@@ -494,7 +631,11 @@ const LessonPlayer = forwardRef(function LessonPlayer(
               className="playhead__icon-btn"
               onClick={toggleMute}
               aria-label={muted || volume === 0 ? 'Activar sonido' : 'Silenciar'}
-              title={muted || volume === 0 ? 'Activar sonido' : 'Silenciar'}
+              title={
+                muted || volume === 0
+                  ? 'Activar sonido (S)'
+                  : 'Silenciar (S). Flechas arriba y abajo cambian el volumen'
+              }
             >
               {volumeLabel}
             </button>
@@ -515,7 +656,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             className="playhead__icon-btn"
             onClick={toggleFullscreen}
             aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-            title={isFullscreen ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'}
+            title={isFullscreen ? 'Salir de pantalla completa (F o Esc)' : 'Pantalla completa (F)'}
           >
             {isFullscreen ? 'Salir' : 'Pantalla'}
           </button>

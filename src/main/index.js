@@ -8,6 +8,7 @@ import icon from '../../resources/icon.png?asset'
 import { getLibraryPath, setLibraryPath, isLibraryPathValid } from './services/config.js'
 import {
   listCourses,
+  NEW_COURSE_MS,
   getCourse,
   updateCourse,
   updateCourseProperty,
@@ -38,9 +39,11 @@ import {
 import {
   getCourseProgress,
   setLessonProgress,
+  recordCourseView,
   getLessonProgress,
   setCourseCurriculum,
   getAllCourseProgress,
+  withAddedDates,
   listNotes,
   upsertNote,
   deleteNote,
@@ -408,7 +411,7 @@ function registerIpcHandlers() {
     if (!isLibraryPathValid()) {
       return []
     }
-    return listCourses()
+    return withAddedDates(await listCourses(), NEW_COURSE_MS)
   })
 
   ipcMain.handle('get-course', async (_event, courseDir) => {
@@ -487,7 +490,7 @@ function registerIpcHandlers() {
     if (!isLibraryPathValid()) {
       return []
     }
-    return listCourses()
+    return withAddedDates(await listCourses(), NEW_COURSE_MS)
   })
 
   ipcMain.handle('scan-course', async (_event, { coursePath, force }) => {
@@ -522,6 +525,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle('set-lesson-progress', (_event, { coursePath, ...update }) => {
     return setLessonProgress(coursePath, update)
+  })
+
+  ipcMain.handle('record-course-view', (_event, coursePath) => {
+    return recordCourseView(coursePath)
   })
 
   ipcMain.handle('list-notes', (_event, coursePath) => listNotes(coursePath))

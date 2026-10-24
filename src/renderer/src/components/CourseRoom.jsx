@@ -17,7 +17,7 @@ function collectAllResources(tree) {
       list.push(...(lesson.resources || []))
     }
   }
-  return list
+  return list.filter((res) => res.kind !== 'subtitle')
 }
 
 function CourseRoom({

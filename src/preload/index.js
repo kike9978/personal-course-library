@@ -27,6 +27,7 @@ const api = {
     ipcRenderer.invoke('get-lesson-progress', { coursePath, relativePath }),
   setLessonProgress: (coursePath, update) =>
     ipcRenderer.invoke('set-lesson-progress', { coursePath, ...update }),
+  recordCourseView: (coursePath) => ipcRenderer.invoke('record-course-view', coursePath),
   listNotes: (coursePath) => ipcRenderer.invoke('list-notes', coursePath),
   upsertNote: (coursePath, note) => ipcRenderer.invoke('upsert-note', { coursePath, note }),
   deleteNote: (coursePath, noteId) => ipcRenderer.invoke('delete-note', { coursePath, noteId }),

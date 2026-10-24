@@ -7,7 +7,7 @@ import { resolveCourseFile } from './courseScan.js'
 
 const COVER_FORMATS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
 const READ_CONCURRENCY = 12
-const NEW_COURSE_MS = 14 * 24 * 60 * 60 * 1000
+export const NEW_COURSE_MS = 14 * 24 * 60 * 60 * 1000
 
 export const PROGRAM_SUGGESTIONS = [
   'Photoshop',
@@ -143,16 +143,26 @@ function normalizeCourseRecord(courseDir, data, meta = {}) {
     hasProps: meta.hasProps !== false,
     missingProps: Boolean(meta.missingProps),
     folderMtimeMs,
+    folderBirthtimeMs: meta.folderBirthtimeMs ?? null,
     isNew: typeof folderMtimeMs === 'number' && Date.now() - folderMtimeMs < NEW_COURSE_MS
   }
 }
 
-function folderMtimeMsSync(courseDir) {
+function folderTimesSync(courseDir) {
   try {
-    return fsSync.statSync(courseFolderPath(courseDir)).mtimeMs
+    const stat = fsSync.statSync(courseFolderPath(courseDir))
+    const birth = stat.birthtimeMs
+    return {
+      folderMtimeMs: Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : null,
+      folderBirthtimeMs: typeof birth === 'number' && birth > 86400000 ? birth : null
+    }
   } catch {
-    return null
+    return { folderMtimeMs: null, folderBirthtimeMs: null }
   }
+}
+
+function folderMtimeMsSync(courseDir) {
+  return folderTimesSync(courseDir).folderMtimeMs
 }
 
 export async function listCourseDirs() {
@@ -180,19 +190,19 @@ export async function getCourse(courseDir) {
 export async function listCourses() {
   const dirs = await listCourseDirs()
   const courses = await mapWithConcurrency(dirs, READ_CONCURRENCY, async (courseDir) => {
-    const folderMtimeMs = folderMtimeMsSync(courseDir)
+    const times = folderTimesSync(courseDir)
     const hasCover = Boolean(findCoverImagePathSync(courseDir))
     try {
       const data = await getCourse(courseDir)
       return normalizeCourseRecord(courseDir, data, {
-        folderMtimeMs,
+        ...times,
         hasCover,
         hasProps: true,
         missingProps: false
       })
     } catch {
       return normalizeCourseRecord(courseDir, buildCoursePropsFromFolderName(courseDir), {
-        folderMtimeMs,
+        ...times,
         hasCover,
         hasProps: false,
         missingProps: true

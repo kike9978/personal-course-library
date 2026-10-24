@@ -143,6 +143,11 @@ function CourseRow({
           </span>
         ) : null}
         {isInProcess ? <span className="status-ribbon status-ribbon--inline">En curso</span> : null}
+        {course.learning?.isRecentlyViewed ? (
+          <span className="status-ribbon status-ribbon--inline status-ribbon--recent">
+            Reciente
+          </span>
+        ) : null}
         {course.learning?.status === 'completed' ? (
           <span className="badge badge--done">Completado</span>
         ) : null}

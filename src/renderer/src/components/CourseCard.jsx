@@ -81,6 +81,7 @@ function CourseCard({
   } = course
 
   const [isInProcess, setIsInProcess] = useState(Boolean(initialInProcess))
+  const isRecentlyViewed = Boolean(course.learning?.isRecentlyViewed)
   const [institutionImg, setInstitutionImg] = useState(() =>
     absoluteAssetUrl(getInstitutionLogo(institution))
   )
@@ -172,15 +173,20 @@ function CourseCard({
           </div>
         )}
 
-        <button
-          type="button"
-          className={`status-ribbon${isInProcess ? '' : ' status-ribbon--off'}`}
-          onMouseDown={stopCardEvent}
-          onClick={toggleInProcess}
-          title={isInProcess ? 'Quitar de en curso' : 'Marcar en curso'}
-        >
-          {isInProcess ? 'En curso' : '+ En curso'}
-        </button>
+        <div className="course-card__marks">
+          <button
+            type="button"
+            className={`status-ribbon${isInProcess ? '' : ' status-ribbon--off'}`}
+            onMouseDown={stopCardEvent}
+            onClick={toggleInProcess}
+            title={isInProcess ? 'Quitar de en curso' : 'Marcar en curso'}
+          >
+            {isInProcess ? 'En curso' : '+ En curso'}
+          </button>
+          {isRecentlyViewed ? (
+            <span className="status-ribbon status-ribbon--recent">Reciente</span>
+          ) : null}
+        </div>
 
         <div className="course-card__actions">
           <button

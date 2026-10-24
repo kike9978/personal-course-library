@@ -85,6 +85,19 @@ function CourseDetailPanel({
 
       <div className="detail-panel__body">
         <h2 className="detail-panel__title">{course.title}</h2>
+        {course.isNew || course.learning?.isRecentlyViewed || course.isInProcess ? (
+          <div className="chips-container">
+            {course.isInProcess ? (
+              <span className="status-ribbon status-ribbon--inline">En curso</span>
+            ) : null}
+            {course.learning?.isRecentlyViewed ? (
+              <span className="status-ribbon status-ribbon--inline status-ribbon--recent">
+                Reciente
+              </span>
+            ) : null}
+            {course.isNew ? <span className="badge badge--new">Nuevo</span> : null}
+          </div>
+        ) : null}
 
         <div className="detail-meta">
           <div>

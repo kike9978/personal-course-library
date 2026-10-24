@@ -4,6 +4,7 @@ import { app } from 'electron'
 
 const STORE_FILE = 'learning-store.json'
 const COMPLETE_THRESHOLD = 0.95
+const RECENTLY_VIEWED_MS = 14 * 24 * 60 * 60 * 1000
 
 function getStorePath() {
   return path.join(app.getPath('userData'), STORE_FILE)
@@ -23,6 +24,7 @@ function emptyCourseState() {
     lastLessonTitle: null,
     lastPositionSec: 0,
     lastOpenedAt: null,
+    lastViewedAt: null,
     playableLessons: [],
     lessons: {},
     notes: [],
@@ -86,6 +88,52 @@ function migrateBookmarksIntoNotes(course) {
   course.bookmarksMigrated = true
 }
 
+function validTimestamp(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 86400000 ? value : null
+}
+
+/**
+ * Stable "date added" for each course. The first time a course is seen, the
+ * folder creation time is kept (or its modification time when creation time
+ * is unavailable). Later edits do not move that date.
+ * @param {Array<{ path: string, folderBirthtimeMs?: number|null, folderMtimeMs?: number|null, isNew?: boolean }>} courses
+ * @param {number} [recentMs]
+ */
+export function withAddedDates(courses, recentMs = RECENTLY_VIEWED_MS) {
+  const store = readStore()
+  if (!store.addedAt || typeof store.addedAt !== 'object') store.addedAt = {}
+  const now = Date.now()
+  let dirty = false
+  const seen = new Set()
+
+  const next = (courses || []).map((course) => {
+    const key = courseKey(course.path)
+    seen.add(key)
+    let addedAt = validTimestamp(store.addedAt[key])
+    if (addedAt == null) {
+      addedAt =
+        validTimestamp(course.folderBirthtimeMs) || validTimestamp(course.folderMtimeMs) || now
+      store.addedAt[key] = addedAt
+      dirty = true
+    }
+    return {
+      ...course,
+      addedAt,
+      isNew: now - addedAt < recentMs
+    }
+  })
+
+  for (const key of Object.keys(store.addedAt)) {
+    if (!seen.has(key)) {
+      delete store.addedAt[key]
+      dirty = true
+    }
+  }
+
+  if (dirty) writeStore(store)
+  return next
+}
+
 function readStore() {
   try {
     const filePath = getStorePath()
@@ -108,6 +156,15 @@ function writeStore(store) {
 
 function courseKey(coursePath) {
   return path.basename(coursePath)
+}
+
+function resolveViewedAt(state) {
+  const viewed = state?.lastViewedAt
+  const opened = state?.lastOpenedAt
+  if (typeof viewed === 'number' && typeof opened === 'number') return Math.max(viewed, opened)
+  if (typeof viewed === 'number') return viewed
+  if (typeof opened === 'number') return opened
+  return null
 }
 
 function lessonTitleFromPath(relativePath) {
@@ -157,6 +214,7 @@ export function summarizeCourseState(courseState) {
   const lastMeta = playable.find((l) => l.relativePath === lastPath)
   const lastLessonTitle =
     state.lastLessonTitle || lastMeta?.title || (lastPath ? lessonTitleFromPath(lastPath) : null)
+  const viewedAt = resolveViewedAt(state)
 
   return {
     ...state,
@@ -168,7 +226,8 @@ export function summarizeCourseState(courseState) {
     completedCount,
     percent,
     status,
-    lastLessonTitle
+    lastLessonTitle,
+    isRecentlyViewed: typeof viewedAt === 'number' && Date.now() - viewedAt < RECENTLY_VIEWED_MS
   }
 }
 
@@ -256,11 +315,14 @@ export function setLessonProgress(coursePath, update) {
 
   course.lessons[relativePath] = next
 
+  const now = Date.now()
+  course.lastViewedAt = now
+
   if (update.setAsLast !== false) {
     course.lastLessonRelativePath = relativePath
     course.lastLessonTitle = title
     course.lastPositionSec = next.positionSec
-    course.lastOpenedAt = Date.now()
+    course.lastOpenedAt = now
   }
 
   // Ensure curriculum knows about this lesson
@@ -270,6 +332,18 @@ export function setLessonProgress(coursePath, update) {
   }
 
   store.courses[key] = course
+  writeStore(store)
+  return summarizeCourseState(course)
+}
+
+/**
+ * Remember that the course was opened, without changing lesson progress.
+ * @param {string} coursePath
+ */
+export function recordCourseView(coursePath) {
+  const store = readStore()
+  const { course } = getMutableCourse(store, coursePath)
+  course.lastViewedAt = Date.now()
   writeStore(store)
   return summarizeCourseState(course)
 }

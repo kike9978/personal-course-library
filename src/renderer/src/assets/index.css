@@ -611,10 +611,20 @@ select {
   color: white;
 }
 
-.status-ribbon {
+.course-card__marks {
   position: absolute;
   top: 0.65rem;
   left: 0.65rem;
+  right: 7.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.35rem;
+  z-index: 2;
+}
+
+.status-ribbon {
+  position: static;
   padding: 0.28rem 0.65rem;
   border-radius: var(--radius-pill);
   border: 1px solid var(--clr-chip-status-border);
@@ -624,7 +634,12 @@ select {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  z-index: 2;
+}
+
+.status-ribbon--recent {
+  background: var(--clr-chip-programs-bg);
+  border-color: var(--clr-chip-programs-border);
+  color: var(--clr-chip-programs-text);
 }
 
 .status-ribbon--inline {
@@ -633,15 +648,15 @@ select {
 }
 
 .status-ribbon--off {
+  display: none;
   background: rgba(255, 255, 255, 0.9);
   border-color: var(--clr-ink);
   color: var(--clr-ink-soft);
-  opacity: 0;
 }
 
 .course-card:hover .status-ribbon--off,
 .course-card:focus-within .status-ribbon--off {
-  opacity: 1;
+  display: inline-flex;
 }
 
 .course-card__body {

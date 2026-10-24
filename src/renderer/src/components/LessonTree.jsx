@@ -10,6 +10,10 @@ const KIND_LABEL = {
   audio: '♪'
 }
 
+function visibleResources(resources) {
+  return (resources || []).filter((res) => res.kind !== 'subtitle')
+}
+
 function ResourceRow({ res, selectedPath, onSelectResource }) {
   const isActive = selectedPath === res.relativePath
   return (
@@ -67,9 +71,10 @@ function LessonTree({
   onToggleLessonComplete,
   progressByLesson = {}
 }) {
+  const visibleCourseResources = visibleResources(courseResources)
   const hasLessons = sections.some((s) => s.lessons?.length)
-  const hasSectionResources = sections.some((s) => s.resources?.length)
-  const hasCourseResources = courseResources.length > 0
+  const hasSectionResources = sections.some((s) => visibleResources(s.resources).length)
+  const hasCourseResources = visibleCourseResources.length > 0
   const hasProjects = projects.length > 0
   const hasContent = hasLessons || hasSectionResources || hasCourseResources || hasProjects
 
@@ -126,7 +131,7 @@ function LessonTree({
 
       {sections.map((section) => {
         const lessons = section.lessons || []
-        const resources = section.resources || []
+        const resources = visibleResources(section.resources)
         const sectionProjects = projectsBySection.get(section.id) || []
         if (!lessons.length && !resources.length && !sectionProjects.length) return null
 
@@ -148,7 +153,7 @@ function LessonTree({
                 const prog = progressByLesson[lesson.relativePath]
                 const isActive = selectedPath === lesson.relativePath
                 const isDone = Boolean(prog?.completed)
-                const sidecars = lesson.resources || []
+                const sidecars = visibleResources(lesson.resources)
                 return (
                   <li key={lesson.id || lesson.relativePath} className="lesson-tree__block">
                     <div className="lesson-tree__row">
@@ -209,11 +214,11 @@ function LessonTree({
         )
       })}
 
-      {courseResources.length > 0 ? (
+      {visibleCourseResources.length > 0 ? (
         <div className="lesson-tree__section">
           <h3 className="lesson-tree__section-title">Recursos del curso</h3>
           <ul className="lesson-tree__list lesson-tree__list--resources">
-            {courseResources.map((res) => (
+            {visibleCourseResources.map((res) => (
               <ResourceRow
                 key={res.relativePath}
                 res={res}
