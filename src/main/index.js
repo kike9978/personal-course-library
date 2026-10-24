@@ -25,7 +25,11 @@ import {
   generateMissingCourseProps,
   generateCoursePropsBatch
 } from './services/courses.js'
-import { searchCoverCandidates, saveCourseCover } from './services/coverSearch.js'
+import {
+  searchCoverCandidates,
+  saveCourseCover,
+  saveCourseCoverBuffer
+} from './services/coverSearch.js'
 import { scanCourse, resolveCourseFile, getLessonMime, srtToWebVtt } from './services/courseScan.js'
 import { getLessonMediaUrl } from './services/mediaUrls.js'
 import {
@@ -62,6 +66,10 @@ import {
   listLearningPaths,
   upsertLearningPath,
   deleteLearningPath,
+  getCourseBriefs,
+  saveCourseBriefs,
+  getLearnerGoals,
+  saveLearnerGoals,
   ensureLearningStoreFile
 } from './services/learningStore.js'
 
@@ -489,10 +497,32 @@ function registerIpcHandlers() {
     return searchCoverCandidates(payload || {})
   })
 
+  const broadcastSavedCover = (course) => {
+    const fullData = { ...course, coverStamp: Date.now() }
+    broadcastToWindows('course-updated', { coursePath: course.path, fullData })
+    return fullData
+  }
+
   ipcMain.handle('save-course-cover', async (_event, { coursePath, imageUrl, thumbUrl } = {}) => {
     const course = await saveCourseCover(coursePath, imageUrl, thumbUrl)
-    broadcastToWindows('course-updated', { coursePath: course.path, fullData: course })
-    return { success: true, course }
+    const fullData = broadcastSavedCover(course)
+    return { success: true, course: fullData }
+  })
+
+  ipcMain.handle('save-course-cover-from-data', async (_event, { coursePath, data } = {}) => {
+    const course = await saveCourseCoverBuffer(coursePath, data)
+    const fullData = broadcastSavedCover(course)
+    return { success: true, course: fullData }
+  })
+
+  ipcMain.handle('open-google-image-search', async (_event, query) => {
+    const q = String(query || '').trim()
+    if (!q) throw new Error('Sin búsqueda')
+    const url = new URL('https://www.google.com/search')
+    url.searchParams.set('tbm', 'isch')
+    url.searchParams.set('q', q)
+    await shell.openExternal(url.href)
+    return { success: true }
   })
 
   ipcMain.handle('refresh-courses', async () => {
@@ -583,6 +613,10 @@ function registerIpcHandlers() {
   ipcMain.handle('list-learning-paths', () => listLearningPaths())
   ipcMain.handle('upsert-learning-path', (_event, pathPayload) => upsertLearningPath(pathPayload))
   ipcMain.handle('delete-learning-path', (_event, pathId) => deleteLearningPath(pathId))
+  ipcMain.handle('get-course-briefs', () => getCourseBriefs())
+  ipcMain.handle('save-course-briefs', (_event, entries) => saveCourseBriefs(entries))
+  ipcMain.handle('get-learner-goals', () => getLearnerGoals())
+  ipcMain.handle('save-learner-goals', (_event, goals) => saveLearnerGoals(goals))
 
   ipcMain.handle('list-projects', (_event, coursePath) => listProjects(coursePath))
   ipcMain.handle('list-all-projects', () => listAllProjects())

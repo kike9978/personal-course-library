@@ -23,6 +23,46 @@ function errorText(err, fallback) {
   return message || fallback
 }
 
+function imageUrlFromDrop(dataTransfer) {
+  const uriList = String(dataTransfer?.getData('text/uri-list') || '')
+  const fromList = uriList
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('https://') || line.startsWith('data:image/'))
+  if (fromList) return fromList
+
+  const plain = String(dataTransfer?.getData('text/plain') || '').trim()
+  if (plain.startsWith('https://') || plain.startsWith('data:image/')) return plain
+
+  const html = String(dataTransfer?.getData('text/html') || '')
+  const src = html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1]
+  if (src && (src.startsWith('https://') || src.startsWith('data:image/'))) return src
+
+  const downloadUrl = String(dataTransfer?.getData('DownloadURL') || '')
+  const fromDownload = downloadUrl.split(':').slice(2).join(':')
+  if (fromDownload.startsWith('https://')) return fromDownload
+  return ''
+}
+
+function dataUrlToBytes(dataUrl) {
+  const match = String(dataUrl).match(
+    /^data:image\/(?:jpeg|jpg|png|webp);base64,([a-z0-9+/=\s]+)$/i
+  )
+  if (!match) throw new Error('El archivo no es una imagen JPG, PNG o WebP')
+  const binary = atob(match[1].replace(/\s/g, ''))
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
+function droppedImageFile(dataTransfer) {
+  return [...(dataTransfer?.files || [])].find((file) => {
+    const type = String(file.type || '').toLowerCase()
+    if (type === 'image/jpeg' || type === 'image/png' || type === 'image/webp') return true
+    return /\.(jpe?g|png|webp)$/i.test(file.name || '')
+  })
+}
+
 function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
   const dialogRef = useRef(null)
   const runId = useRef(0)
@@ -30,20 +70,22 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
   const savedCount = useRef(0)
   const toasted = useRef(false)
   const closed = useRef(false)
-  const runSearchRef = useRef(null)
-  const coursesRef = useRef(courses)
-  coursesRef.current = courses
-
-  const [step, setStep] = useState(initialStep === 'search' ? 'searching' : 'select')
+  const [step, setStep] = useState(
+    initialStep === 'choose' || initialStep === 'search' ? 'choose' : 'select'
+  )
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(() => new Set(courses.map((course) => course.path)))
   const [progress, setProgress] = useState({ done: 0, total: courses.length, title: '' })
   const [items, setItems] = useState([])
   const [reviewIndex, setReviewIndex] = useState(0)
-  const [queryDraft, setQueryDraft] = useState('')
+  const [queryDraft, setQueryDraft] = useState(() =>
+    initialStep === 'choose' || initialStep === 'search' ? coverQueryFor(courses[0]) : ''
+  )
   const [selectedId, setSelectedId] = useState(null)
   const [researching, setResearching] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const dropHandlerRef = useRef(null)
 
   const finishToast = () => {
     if (toasted.current || savedCount.current === 0) return
@@ -88,7 +130,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
     setStep('review')
   }
 
-  const runSearch = async (list, signal, id) => {
+  const runSearch = async (list, signal, id, queryOverride = '') => {
     setStep('searching')
     setProgress({
       done: 0,
@@ -99,7 +141,8 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
     for (let i = 0; i < list.length; i++) {
       if (signal?.aborted || runId.current !== id) return
       const course = list[i]
-      const courseQuery = coverQueryFor(course)
+      const override = list.length === 1 ? String(queryOverride || '').trim() : ''
+      const courseQuery = override || coverQueryFor(course)
       setProgress({
         done: i,
         total: list.length,
@@ -136,17 +179,6 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
     setProgress({ done: list.length, total: list.length, title: '' })
     showItem(0, next)
   }
-
-  runSearchRef.current = runSearch
-
-  useEffect(() => {
-    if (initialStep !== 'search') return undefined
-    const controller = new AbortController()
-    searchAbort.current = controller
-    const id = ++runId.current
-    runSearchRef.current(coursesRef.current, controller.signal, id)
-    return () => controller.abort()
-  }, [initialStep])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -188,6 +220,17 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
     runSearch(chosen, controller.signal, id)
   }
 
+  const startChosenSearch = () => {
+    const course = courses[0]
+    const nextQuery = queryDraft.trim()
+    if (!course || !nextQuery || saving) return
+    searchAbort.current?.abort()
+    const controller = new AbortController()
+    searchAbort.current = controller
+    const id = ++runId.current
+    runSearch([course], controller.signal, id, nextQuery)
+  }
+
   const handleResearch = async () => {
     if (!current || researching || saving) return
     const nextQuery = queryDraft.trim()
@@ -225,6 +268,16 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
     showItem(nextIndex, items)
   }
 
+  const advanceAfterSave = () => {
+    savedCount.current += 1
+    const nextIndex = reviewIndex + 1
+    if (items.length === 0 || nextIndex >= items.length) {
+      handleClose()
+      return
+    }
+    showItem(nextIndex, items)
+  }
+
   const handleUse = async () => {
     if (!current || !selectedCandidate || saving) return
     setSaving(true)
@@ -235,13 +288,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
         thumbUrl: selectedCandidate.thumbUrl
       })
       if (!result?.success) throw new Error(result?.error || 'No se pudo guardar la portada')
-      savedCount.current += 1
-      const nextIndex = reviewIndex + 1
-      if (nextIndex >= items.length) {
-        handleClose()
-        return
-      }
-      showItem(nextIndex, items)
+      advanceAfterSave()
     } catch (err) {
       toast.error(errorText(err, 'No se pudo guardar la portada'))
     } finally {
@@ -249,12 +296,87 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
     }
   }
 
+  const handleOpenGoogle = async () => {
+    const nextQuery = queryDraft.trim()
+    if (!nextQuery) return
+    try {
+      await window.api.openGoogleImageSearch(nextQuery)
+    } catch (err) {
+      toast.error(errorText(err, 'No se pudo abrir el navegador'))
+    }
+  }
+
+  const handleDrop = async (event) => {
+    const course = step === 'choose' ? courses[0] : current?.course
+    if (!course || saving || researching) return
+    setSaving(true)
+    try {
+      const file = droppedImageFile(event.dataTransfer)
+      let result
+      if (file) {
+        const data = new Uint8Array(await file.arrayBuffer())
+        result = await window.api.saveCourseCoverFromData({
+          coursePath: course.path,
+          data
+        })
+      } else {
+        const imageUrl = imageUrlFromDrop(event.dataTransfer)
+        if (!imageUrl) throw new Error('Arrastra una imagen JPG, PNG o WebP')
+        if (imageUrl.startsWith('data:')) {
+          result = await window.api.saveCourseCoverFromData({
+            coursePath: course.path,
+            data: dataUrlToBytes(imageUrl)
+          })
+        } else {
+          result = await window.api.saveCourseCover({
+            coursePath: course.path,
+            imageUrl
+          })
+        }
+      }
+      if (!result?.success) throw new Error(result?.error || 'No se pudo guardar la portada')
+      advanceAfterSave()
+    } catch (err) {
+      toast.error(errorText(err, 'No se pudo usar esa imagen'))
+    } finally {
+      if (!closed.current) setSaving(false)
+    }
+  }
+
+  dropHandlerRef.current = handleDrop
+
+  useEffect(() => {
+    if (step !== 'review' && step !== 'choose') return undefined
+    let timer
+    const onDragOver = (event) => {
+      event.preventDefault()
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+      setDragOver(true)
+      clearTimeout(timer)
+      timer = setTimeout(() => setDragOver(false), 120)
+    }
+    const onDrop = (event) => {
+      event.preventDefault()
+      clearTimeout(timer)
+      setDragOver(false)
+      dropHandlerRef.current?.(event)
+    }
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      clearTimeout(timer)
+      setDragOver(false)
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('drop', onDrop)
+    }
+  }, [step])
+
   const progressPct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0
 
   return (
     <dialog
       ref={dialogRef}
-      className="dialog dialog--covers"
+      className={`dialog dialog--covers${dragOver ? ' is-dragover' : ''}`}
       onClose={handleClose}
       onClick={handleBackdropClick}
     >
@@ -365,6 +487,67 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
         </>
       ) : null}
 
+      {step === 'choose' && courses[0] ? (
+        <>
+          <div className="dialog__preview">
+            <div>
+              <h3>{courses[0].hasCover ? 'Reemplazar portada' : 'Buscar portada'}</h3>
+              <p className="dialog__lead">
+                {courses[0].institution ? `${courses[0].institution} · ` : ''}
+                {courses[0].hasCover
+                  ? 'La imagen actual se sustituye cuando guardes otra.'
+                  : 'Elige cómo conseguir la imagen. La búsqueda web no empieza sola.'}
+              </p>
+              <p className="cover-search__course">{courses[0].title || courses[0].path}</p>
+            </div>
+          </div>
+          <div className="dialog__form">
+            <div className="field">
+              <label htmlFor="cover-query">Búsqueda</label>
+              <input
+                id="cover-query"
+                type="text"
+                value={queryDraft}
+                onChange={(e) => setQueryDraft(e.target.value)}
+              />
+            </div>
+            <div className="cover-search__query">
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={handleOpenGoogle}
+                disabled={saving || !queryDraft.trim()}
+              >
+                Google Imágenes
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={startChosenSearch}
+                disabled={saving || !queryDraft.trim()}
+              >
+                Buscar en la web
+              </button>
+            </div>
+            <p className={`cover-search__drop-hint${dragOver ? ' is-active' : ''}`}>
+              {dragOver
+                ? 'Suelta para usar esta imagen'
+                : 'Arrastra una imagen desde el navegador a esta ventana.'}
+            </p>
+            <div className="dialog__actions">
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={handleClose}
+                disabled={saving}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
       {step === 'searching' ? (
         <>
           <div className="dialog__preview">
@@ -433,8 +616,21 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                 >
                   {researching ? 'Buscando…' : 'Buscar de nuevo'}
                 </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={handleOpenGoogle}
+                  disabled={saving || !queryDraft.trim()}
+                >
+                  Google Imágenes
+                </button>
               </div>
             </div>
+            <p className={`cover-search__drop-hint${dragOver ? ' is-active' : ''}`}>
+              {dragOver
+                ? 'Suelta para usar esta imagen'
+                : 'O abre Google Imágenes y arrastra una foto a esta ventana.'}
+            </p>
 
             {current.error ? <p className="cover-search__error">{current.error}</p> : null}
 

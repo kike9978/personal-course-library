@@ -33,7 +33,7 @@ function CourseDetailPanel({
     return () => {
       cancelled = true
     }
-  }, [course.path, course.hasCover, fallbackCover])
+  }, [course.path, course.hasCover, course.coverStamp, fallbackCover])
 
   const handleOpenCourse = () => {
     onOpenCourse?.(course)
@@ -176,7 +176,7 @@ function CourseDetailPanel({
           </button>
           {onSearchCover ? (
             <button type="button" className="icon-btn" onClick={() => onSearchCover(course)}>
-              Buscar portada
+              {course.hasCover ? 'Reemplazar portada' : 'Buscar portada'}
             </button>
           ) : null}
           {onGenerateProps ? (

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import CourseRow from './CourseRow'
 import CourseCard from './CourseCard'
+import CourseTable from './CourseTable'
 import ErrorDisplay from './ErrorDisplay'
 
 export default function CoursesGrid({
@@ -11,7 +11,14 @@ export default function CoursesGrid({
   onOpenCourse,
   onOpenModal,
   onToggleInProcess,
-  focusIndex
+  focusIndex,
+  columnSort,
+  onColumnSort,
+  columnFilters,
+  onColumnFilter,
+  institutions,
+  programs,
+  themes
 }) {
   const [error, setError] = useState(null)
   const gridRef = useRef(null)
@@ -30,7 +37,7 @@ export default function CoursesGrid({
     }
   }, [focusIndex, courses, isCardLayout])
 
-  if (!courses.length) {
+  if (!courses.length && isCardLayout) {
     return (
       <div className="empty-state">
         <h3>Ningún curso coincide</h3>
@@ -45,36 +52,42 @@ export default function CoursesGrid({
       <div
         ref={gridRef}
         className={`courses-grid${!isCardLayout ? ' courses-grid--table' : ''}`}
-        role="listbox"
+        role={isCardLayout ? 'listbox' : undefined}
         aria-label="Lista de cursos"
       >
-        {isCardLayout
-          ? courses.map((course, index) => (
-              <CourseCard
-                key={course.path}
-                course={course}
-                onOpenCourse={onOpenCourse}
-                onOpenModalClick={onOpenModal}
-                onSelect={onSelectCourse}
-                onToggleInProcess={onToggleInProcess}
-                isSelected={selectedPath === course.path}
-                tabIndex={focusIndex === index ? 0 : -1}
-                onError={setError}
-              />
-            ))
-          : courses.map((course, index) => (
-              <CourseRow
-                key={course.path}
-                course={course}
-                onOpenCourse={onOpenCourse}
-                onOpenModalClick={onOpenModal}
-                onSelect={onSelectCourse}
-                onToggleInProcess={onToggleInProcess}
-                isSelected={selectedPath === course.path}
-                tabIndex={focusIndex === index ? 0 : -1}
-                onError={setError}
-              />
-            ))}
+        {isCardLayout ? (
+          courses.map((course, index) => (
+            <CourseCard
+              key={course.path}
+              course={course}
+              onOpenCourse={onOpenCourse}
+              onOpenModalClick={onOpenModal}
+              onSelect={onSelectCourse}
+              onToggleInProcess={onToggleInProcess}
+              isSelected={selectedPath === course.path}
+              tabIndex={focusIndex === index ? 0 : -1}
+              onError={setError}
+            />
+          ))
+        ) : (
+          <CourseTable
+            courses={courses}
+            selectedPath={selectedPath}
+            onSelectCourse={onSelectCourse}
+            onOpenCourse={onOpenCourse}
+            onOpenModal={onOpenModal}
+            onToggleInProcess={onToggleInProcess}
+            focusIndex={focusIndex}
+            onError={setError}
+            columnSort={columnSort}
+            onColumnSort={onColumnSort}
+            columnFilters={columnFilters}
+            onColumnFilter={onColumnFilter}
+            institutions={institutions}
+            programs={programs}
+            themes={themes}
+          />
+        )}
       </div>
     </>
   )

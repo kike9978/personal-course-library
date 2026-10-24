@@ -438,7 +438,7 @@ async function removeExistingCovers(folder) {
 }
 
 export async function saveCourseCover(coursePath, imageUrl, thumbUrl) {
-  const folder = requireCourseFolder(coursePath)
+  requireCourseFolder(coursePath)
   const attempts = []
   const seen = new Set()
   const addAttempt = (url, referer) => {
@@ -467,8 +467,23 @@ export async function saveCourseCover(coursePath, imageUrl, thumbUrl) {
     if (saved) break
   }
   if (!saved) throw new Error('No se pudo descargar la imagen')
+  return writeCoverBuffer(coursePath, saved.buffer)
+}
 
+async function writeCoverBuffer(coursePath, buffer) {
+  const folder = requireCourseFolder(coursePath)
+  if (!buffer || buffer.length === 0) throw new Error('No se pudo descargar la imagen')
+  if (buffer.length > IMAGE_MAX_BYTES) throw new Error('Imagen demasiado grande')
+  const kind = sniffRaster(buffer)
+  if (!kind || kind.ext === 'gif') {
+    throw new Error('El archivo no es una imagen JPG, PNG o WebP')
+  }
   await removeExistingCovers(folder)
-  await fs.writeFile(path.join(folder, `cover-image.${saved.kind.ext}`), saved.buffer)
+  await fs.writeFile(path.join(folder, `cover-image.${kind.ext}`), buffer)
   return loadCourseRecord(coursePath)
+}
+
+export async function saveCourseCoverBuffer(coursePath, data) {
+  const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data || [])
+  return writeCoverBuffer(coursePath, buffer)
 }

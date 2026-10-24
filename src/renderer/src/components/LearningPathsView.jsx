@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import AppNav from './AppNav'
+import CourseCard from './CourseCard'
 
 /**
  * Ordered sets of courses (learning paths / tracks).
@@ -13,14 +14,6 @@ function LearningPathsView({ courses = [], onNavigate, onOpenCourse }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  const titleByPath = useMemo(() => {
-    const map = {}
-    courses.forEach((c) => {
-      map[c.path] = c.title || c.path
-    })
-    return map
-  }, [courses])
-
   const sortedCourses = useMemo(
     () =>
       [...courses]
@@ -31,18 +24,16 @@ function LearningPathsView({ courses = [], onNavigate, onOpenCourse }) {
     [courses]
   )
 
-  const refresh = async () => {
-    const list = await window.api.listLearningPaths()
-    setPaths(list || [])
-    return list || []
-  }
-
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    refresh()
+    window.api
+      .listLearningPaths()
       .then((list) => {
-        if (!cancelled && list[0]) setSelectedId(list[0].id)
+        if (cancelled) return
+        const pathsList = list || []
+        setPaths(pathsList)
+        if (pathsList[0]) setSelectedId(pathsList[0].id)
       })
       .catch((err) => {
         if (!cancelled) toast.error(err.message || 'No se pudieron cargar las rutas')
@@ -230,6 +221,11 @@ function LearningPathsView({ courses = [], onNavigate, onOpenCourse }) {
                 </div>
               </div>
 
+              {selected.why ? <p className="learning-paths__why">{selected.why}</p> : null}
+              {selected.pace ? (
+                <p className="learning-paths__pace">Ritmo: {selected.pace}</p>
+              ) : null}
+
               <div className="learning-paths__add">
                 <select
                   value={addCoursePath}
@@ -257,51 +253,32 @@ function LearningPathsView({ courses = [], onNavigate, onOpenCourse }) {
                 {(selected.coursePaths || []).length === 0 ? (
                   <li className="learning-paths__empty">Aún no hay cursos en esta ruta.</li>
                 ) : (
-                  (selected.coursePaths || []).map((coursePath, index) => {
-                    const course = courses.find((c) => c.path === coursePath)
+                  (selected.coursePaths || []).map((coursePath, index, list) => {
+                    const course = courses.find((c) => c.path === coursePath) || {
+                      path: coursePath,
+                      title: coursePath,
+                      institution: '',
+                      programs: [],
+                      theme: [],
+                      hasCover: false,
+                      missingProps: true
+                    }
                     return (
-                      <li key={`${coursePath}-${index}`} className="learning-paths__course">
-                        <span className="learning-paths__step">{index + 1}</span>
-                        <div className="learning-paths__course-body">
-                          <strong>{titleByPath[coursePath] || coursePath}</strong>
-                          {course?.institution ? <span>{course.institution}</span> : null}
-                        </div>
-                        <div className="learning-paths__course-actions">
-                          <button
-                            type="button"
-                            className="btn btn--ghost"
-                            onClick={() => handleMove(index, -1)}
-                            disabled={index === 0}
-                            title="Subir"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn--ghost"
-                            onClick={() => handleMove(index, 1)}
-                            disabled={index === (selected.coursePaths || []).length - 1}
-                            title="Bajar"
-                          >
-                            ↓
-                          </button>
-                          {course ? (
-                            <button
-                              type="button"
-                              className="btn btn--primary"
-                              onClick={() => onOpenCourse?.(course)}
-                            >
-                              Abrir
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="btn btn--ghost"
-                            onClick={() => handleRemove(coursePath)}
-                          >
-                            Quitar
-                          </button>
-                        </div>
+                      <li key={`${coursePath}-${index}`}>
+                        <CourseCard
+                          course={course}
+                          onOpenCourse={onOpenCourse}
+                          onError={(error) => toast.error(error.message || 'Error')}
+                          listActions={{
+                            step: index + 1,
+                            canMoveUp: index > 0,
+                            canMoveDown: index < list.length - 1,
+                            onMoveUp: () => handleMove(index, -1),
+                            onMoveDown: () => handleMove(index, 1),
+                            onRemove: () => handleRemove(coursePath),
+                            isStart: selected.startId === coursePath
+                          }}
+                        />
                       </li>
                     )
                   })

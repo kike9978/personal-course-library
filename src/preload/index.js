@@ -18,6 +18,8 @@ const api = {
   getCoverImageUrl: (coursePath) => ipcRenderer.invoke('get-cover-image-url', coursePath),
   searchCoverCandidates: (payload) => ipcRenderer.invoke('search-cover-candidates', payload),
   saveCourseCover: (payload) => ipcRenderer.invoke('save-course-cover', payload),
+  saveCourseCoverFromData: (payload) => ipcRenderer.invoke('save-course-cover-from-data', payload),
+  openGoogleImageSearch: (query) => ipcRenderer.invoke('open-google-image-search', query),
   refreshCourses: () => ipcRenderer.invoke('refresh-courses'),
   scanCourse: (coursePath, force = false) =>
     ipcRenderer.invoke('scan-course', { coursePath, force }),
@@ -45,6 +47,10 @@ const api = {
   listLearningPaths: () => ipcRenderer.invoke('list-learning-paths'),
   upsertLearningPath: (pathPayload) => ipcRenderer.invoke('upsert-learning-path', pathPayload),
   deleteLearningPath: (pathId) => ipcRenderer.invoke('delete-learning-path', pathId),
+  getCourseBriefs: () => ipcRenderer.invoke('get-course-briefs'),
+  saveCourseBriefs: (entries) => ipcRenderer.invoke('save-course-briefs', entries),
+  getLearnerGoals: () => ipcRenderer.invoke('get-learner-goals'),
+  saveLearnerGoals: (goals) => ipcRenderer.invoke('save-learner-goals', goals),
   generateCourseProps: (coursePath, overwrite = false) =>
     ipcRenderer.invoke('generate-course-props', { coursePath, overwrite }),
   repairCourseProps: (coursePath) => ipcRenderer.invoke('repair-course-props', coursePath),

@@ -10,12 +10,20 @@ import LibraryStudyView from './components/LibraryStudyView'
 import AnnotationsPopoutView from './components/AnnotationsPopoutView'
 import ProjectsKanban from './components/ProjectsKanban'
 import LearningPathsView from './components/LearningPathsView'
+import GuideView from './components/GuideView'
 import AppNav from './components/AppNav'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
 import { Toaster, toast } from 'react-hot-toast'
 import brandMark from './assets/img/brand-mark.svg'
 import { getAnnotationsWindowMode } from './utils/annotationsWindow'
+import {
+  EMPTY_COLUMN_FILTERS,
+  compareCourses,
+  hasColumnFilters,
+  matchesColumnFilters,
+  nextColumnSort
+} from './utils/courseTable'
 
 function useDebouncedValue(value, delay = 200) {
   const [debounced, setDebounced] = useState(value)
@@ -326,6 +334,8 @@ function FilterableCoursesGrid({
   const [themeFilter, setThemeFilter] = useState('')
   const [minRate, setMinRate] = useState(0)
   const [sortMode, setSortMode] = useState('az')
+  const [columnSort, setColumnSort] = useState(null)
+  const [columnFilters, setColumnFilters] = useState(EMPTY_COLUMN_FILTERS)
   const [selectedPath, setSelectedPath] = useState(null)
   const [focusIndex, setFocusIndex] = useState(-1)
   const [editingCourse, setEditingCourse] = useState(null)
@@ -411,6 +421,7 @@ function FilterableCoursesGrid({
       const programCheck = !programFilter || (course.programs || []).includes(programFilter)
       const themeCheck = !themeFilter || (course.theme || []).includes(themeFilter)
       const rateCheck = !minRate || (Number(course.rate) || 0) >= minRate
+      const columnCheck = isCardLayout || matchesColumnFilters(course, columnFilters)
       return (
         matchesText &&
         processCheck &&
@@ -420,11 +431,15 @@ function FilterableCoursesGrid({
         institutionCheck &&
         programCheck &&
         themeCheck &&
-        rateCheck
+        rateCheck &&
+        columnCheck
       )
     })
 
     return [...filtered].sort((a, b) => {
+      if (!isCardLayout && columnSort) {
+        return compareCourses(a, b, columnSort.key, columnSort.dir)
+      }
       if (sortMode === 'recent') {
         const viewed = (course) =>
           Math.max(course.learning?.lastViewedAt || 0, course.learning?.lastOpenedAt || 0)
@@ -465,7 +480,10 @@ function FilterableCoursesGrid({
     programFilter,
     themeFilter,
     minRate,
-    sortMode
+    sortMode,
+    isCardLayout,
+    columnSort,
+    columnFilters
   ])
 
   const handleSelectCourse = useCallback((course) => {
@@ -607,7 +625,10 @@ function FilterableCoursesGrid({
         minRate={minRate}
         onMinRateChange={setMinRate}
         sortMode={sortMode}
-        onSortModeChange={setSortMode}
+        onSortModeChange={(value) => {
+          setColumnSort(null)
+          setSortMode(value)
+        }}
       />
 
       <div className={`app-main${selectedCourse ? ' app-main--with-detail' : ''}`}>
@@ -698,7 +719,8 @@ function FilterableCoursesGrid({
                 !institutionFilter &&
                 !programFilter &&
                 !themeFilter &&
-                !minRate && (
+                !minRate &&
+                !hasColumnFilters(columnFilters) && (
                   <ContinueHub
                     courses={continueCourses}
                     onSelect={handleSelectCourse}
@@ -713,6 +735,15 @@ function FilterableCoursesGrid({
                 <span>
                   {sortedCourses.length} resultado{sortedCourses.length === 1 ? '' : 's'}
                 </span>
+                {!isCardLayout && hasColumnFilters(columnFilters) ? (
+                  <button
+                    type="button"
+                    className="btn btn--ghost course-table__clear"
+                    onClick={() => setColumnFilters(EMPTY_COLUMN_FILTERS)}
+                  >
+                    Limpiar columnas
+                  </button>
+                ) : null}
               </div>
 
               {missingPropsOnly && missingPropsCourses.length > 0 ? (
@@ -737,6 +768,17 @@ function FilterableCoursesGrid({
                 onOpenModal={handleOpenEdit}
                 onToggleInProcess={handleToggleInProcess}
                 focusIndex={focusIndex}
+                columnSort={columnSort}
+                onColumnSort={(key, kind) =>
+                  setColumnSort((current) => nextColumnSort(current, key, kind))
+                }
+                columnFilters={columnFilters}
+                onColumnFilter={(key, value) =>
+                  setColumnFilters((current) => ({ ...current, [key]: value }))
+                }
+                institutions={institutions}
+                programs={programs}
+                themes={themes}
               />
 
               {editingCourse && (
@@ -784,14 +826,11 @@ function FilterableCoursesGrid({
             onGenerateProps={
               selectedCourse.missingProps ? () => handleGenerateOne(selectedCourse) : null
             }
-            onSearchCover={
-              selectedCourse.hasCover
-                ? null
-                : () =>
-                    setCoverSearch({
-                      courses: [selectedCourse],
-                      initialStep: 'search'
-                    })
+            onSearchCover={() =>
+              setCoverSearch({
+                courses: [selectedCourse],
+                initialStep: 'choose'
+              })
             }
           />
         )}
@@ -1011,7 +1050,12 @@ function App() {
   const navigateApp = useCallback((section) => {
     setActiveCoursePath(null)
     setResumeTarget(null)
-    if (section === 'projects' || section === 'annotations' || section === 'paths') {
+    if (
+      section === 'projects' ||
+      section === 'annotations' ||
+      section === 'paths' ||
+      section === 'guide'
+    ) {
       setLibraryStudyMode(section)
       return
     }
@@ -1054,6 +1098,8 @@ function App() {
         />
       ) : libraryStudyMode === 'paths' ? (
         <LearningPathsView courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
+      ) : libraryStudyMode === 'guide' ? (
+        <GuideView courses={courses} onNavigate={navigateApp} />
       ) : libraryStudyMode === 'annotations' ? (
         <LibraryStudyView courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'projects' ? (
