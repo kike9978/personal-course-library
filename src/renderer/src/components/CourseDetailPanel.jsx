@@ -9,7 +9,8 @@ function CourseDetailPanel({
   onEdit,
   onOpenCourse,
   onToggleInProcess,
-  onGenerateProps
+  onGenerateProps,
+  onSearchCover
 }) {
   const fallbackCover = absoluteAssetUrl(getCoverFallback())
   const [coverImg, setCoverImg] = useState(fallbackCover)
@@ -173,6 +174,11 @@ function CourseDetailPanel({
           <button type="button" className="icon-btn" onClick={handleOpenCourse}>
             Abrir curso
           </button>
+          {onSearchCover ? (
+            <button type="button" className="icon-btn" onClick={() => onSearchCover(course)}>
+              Buscar portada
+            </button>
+          ) : null}
           {onGenerateProps ? (
             <button type="button" className="icon-btn icon-btn--teal" onClick={onGenerateProps}>
               Generar propiedades

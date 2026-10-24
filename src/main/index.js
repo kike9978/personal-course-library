@@ -25,6 +25,7 @@ import {
   generateMissingCourseProps,
   generateCoursePropsBatch
 } from './services/courses.js'
+import { searchCoverCandidates, saveCourseCover } from './services/coverSearch.js'
 import { scanCourse, resolveCourseFile, getLessonMime, srtToWebVtt } from './services/courseScan.js'
 import { getLessonMediaUrl } from './services/mediaUrls.js'
 import {
@@ -482,6 +483,16 @@ function registerIpcHandlers() {
 
   ipcMain.handle('get-cover-image-url', (_event, courseDir) => {
     return getCoverImageUrl(courseDir)
+  })
+
+  ipcMain.handle('search-cover-candidates', async (_event, payload) => {
+    return searchCoverCandidates(payload || {})
+  })
+
+  ipcMain.handle('save-course-cover', async (_event, { coursePath, imageUrl, thumbUrl } = {}) => {
+    const course = await saveCourseCover(coursePath, imageUrl, thumbUrl)
+    broadcastToWindows('course-updated', { coursePath: course.path, fullData: course })
+    return { success: true, course }
   })
 
   ipcMain.handle('refresh-courses', async () => {

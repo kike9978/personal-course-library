@@ -187,6 +187,40 @@ export async function getCourse(courseDir) {
   }
 }
 
+/** Fresh catalog record, including whether a cover file is present. */
+export async function loadCourseRecord(courseDir) {
+  const name = path.basename(String(courseDir || '').trim())
+  if (!name || name === '.' || name === '..') {
+    throw new Error('Carpeta de curso no encontrada')
+  }
+  const folder = courseFolderPath(name)
+  if (!fsSync.existsSync(folder) || !fsSync.statSync(folder).isDirectory()) {
+    throw new Error('Carpeta de curso no encontrada')
+  }
+
+  invalidateCache(name)
+  const times = folderTimesSync(name)
+  const hasCover = Boolean(findCoverImagePathSync(name))
+  const filePath = coursePropsPath(name)
+  let data = buildCoursePropsFromFolderName(name)
+  let hasProps = false
+  if (fsSync.existsSync(filePath)) {
+    try {
+      data = await getCourse(name)
+      hasProps = true
+    } catch {
+      data = buildCoursePropsFromFolderName(name)
+    }
+  }
+
+  return normalizeCourseRecord(name, data, {
+    ...times,
+    hasCover,
+    hasProps,
+    missingProps: !hasProps
+  })
+}
+
 export async function listCourses() {
   const dirs = await listCourseDirs()
   const courses = await mapWithConcurrency(dirs, READ_CONCURRENCY, async (courseDir) => {

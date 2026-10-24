@@ -16,6 +16,8 @@ const api = {
   revealCourseFile: (coursePath, relativePath) =>
     ipcRenderer.invoke('reveal-course-file', { coursePath, relativePath }),
   getCoverImageUrl: (coursePath) => ipcRenderer.invoke('get-cover-image-url', coursePath),
+  searchCoverCandidates: (payload) => ipcRenderer.invoke('search-cover-candidates', payload),
+  saveCourseCover: (payload) => ipcRenderer.invoke('save-course-cover', payload),
   refreshCourses: () => ipcRenderer.invoke('refresh-courses'),
   scanCourse: (coursePath, force = false) =>
     ipcRenderer.invoke('scan-course', { coursePath, force }),

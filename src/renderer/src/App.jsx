@@ -3,6 +3,7 @@ import CoursesGrid from './components/CoursesGrid'
 import CourseCard from './components/CourseCard'
 import CourseEditModal from './components/CourseEditModal'
 import ImportMissingPropsModal from './components/ImportMissingPropsModal'
+import CoverSearchModal from './components/CoverSearchModal'
 import CourseDetailPanel from './components/CourseDetailPanel'
 import CourseRoom from './components/CourseRoom'
 import LibraryStudyView from './components/LibraryStudyView'
@@ -329,6 +330,7 @@ function FilterableCoursesGrid({
   const [focusIndex, setFocusIndex] = useState(-1)
   const [editingCourse, setEditingCourse] = useState(null)
   const [importMissingOpen, setImportMissingOpen] = useState(false)
+  const [coverSearch, setCoverSearch] = useState(null)
   const debouncedFilter = useDebouncedValue(filterText, 200)
 
   const institutions = useMemo(() => {
@@ -364,6 +366,7 @@ function FilterableCoursesGrid({
   }, [courses])
 
   const missingPropsCourses = useMemo(() => courses.filter((c) => c.missingProps), [courses])
+  const missingCoverCourses = useMemo(() => courses.filter((c) => !c.hasCover), [courses])
 
   const inProgressCourses = useMemo(
     () => courses.filter((c) => !c.missingProps && c.isInProcess),
@@ -496,6 +499,11 @@ function FilterableCoursesGrid({
     if (missingPropsCourses.length === 0) return
     setImportMissingOpen(true)
   }, [missingPropsCourses.length])
+
+  const handleOpenCoverSearch = useCallback(() => {
+    if (missingCoverCourses.length === 0) return
+    setCoverSearch({ courses: missingCoverCourses, initialStep: 'select' })
+  }, [missingCoverCourses])
 
   const handleGenerateOne = useCallback(
     async (course) => {
@@ -664,6 +672,24 @@ function FilterableCoursesGrid({
                 </div>
               ) : null}
 
+              {missingCoverCourses.length > 0 ? (
+                <div className="catalog-banner">
+                  <div>
+                    <strong>{missingCoverCourses.length}</strong> curso
+                    {missingCoverCourses.length === 1 ? '' : 's'} sin portada
+                  </div>
+                  <div className="catalog-banner__actions">
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      onClick={handleOpenCoverSearch}
+                    >
+                      Buscar portadas
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               {!isInProcessOnly &&
                 !isNewOnly &&
                 !recentlyViewedOnly &&
@@ -736,6 +762,14 @@ function FilterableCoursesGrid({
                   onClose={() => setImportMissingOpen(false)}
                 />
               )}
+
+              {coverSearch ? (
+                <CoverSearchModal
+                  courses={coverSearch.courses}
+                  initialStep={coverSearch.initialStep}
+                  onClose={() => setCoverSearch(null)}
+                />
+              ) : null}
             </>
           )}
         </div>
@@ -749,6 +783,15 @@ function FilterableCoursesGrid({
             onToggleInProcess={handleToggleInProcess}
             onGenerateProps={
               selectedCourse.missingProps ? () => handleGenerateOne(selectedCourse) : null
+            }
+            onSearchCover={
+              selectedCourse.hasCover
+                ? null
+                : () =>
+                    setCoverSearch({
+                      courses: [selectedCourse],
+                      initialStep: 'search'
+                    })
             }
           />
         )}
@@ -999,10 +1042,7 @@ function App() {
             }}
           />
         ) : (
-          <AnnotationsPopoutView
-            coursePath={annotationsWindowMode.coursePath}
-            courses={courses}
-          />
+          <AnnotationsPopoutView coursePath={annotationsWindowMode.coursePath} courses={courses} />
         )
       ) : needsSetup ? (
         <LibrarySetup
