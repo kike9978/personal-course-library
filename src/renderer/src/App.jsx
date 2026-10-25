@@ -9,8 +9,6 @@ import CourseRoom from './components/CourseRoom'
 import LibraryStudyView from './components/LibraryStudyView'
 import AnnotationsPopoutView from './components/AnnotationsPopoutView'
 import ProjectsKanban from './components/ProjectsKanban'
-import LearningPathsView from './components/LearningPathsView'
-import GuideView from './components/GuideView'
 import AppNav from './components/AppNav'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
@@ -24,6 +22,8 @@ import {
   matchesColumnFilters,
   nextColumnSort
 } from './utils/courseTable'
+import { exportViaDialog } from './utils/exportHelpers'
+import { stringifyCourseCatalog } from './utils/courseExport'
 
 function useDebouncedValue(value, delay = 200) {
   const [debounced, setDebounced] = useState(value)
@@ -94,7 +94,10 @@ function AppHeader({
   minRate,
   onMinRateChange,
   sortMode,
-  onSortModeChange
+  onSortModeChange,
+  onExportCourses,
+  isExporting,
+  canExport
 }) {
   return (
     <header className="app-header">
@@ -187,6 +190,15 @@ function AppHeader({
             Sin props
           </button>
 
+          <button
+            type="button"
+            className="icon-btn icon-btn--ghost"
+            onClick={onExportCourses}
+            disabled={isLoading || isExporting || !canExport}
+            title="Exportar cursos y metadatos a JSON"
+          >
+            {isExporting ? '…' : 'Exportar'}
+          </button>
           <button
             type="button"
             className="icon-btn"
@@ -339,6 +351,7 @@ function FilterableCoursesGrid({
   const [selectedPath, setSelectedPath] = useState(null)
   const [focusIndex, setFocusIndex] = useState(-1)
   const [editingCourse, setEditingCourse] = useState(null)
+  const [isExporting, setIsExporting] = useState(false)
   const [importMissingOpen, setImportMissingOpen] = useState(false)
   const [coverSearch, setCoverSearch] = useState(null)
   const debouncedFilter = useDebouncedValue(filterText, 200)
@@ -513,6 +526,30 @@ function FilterableCoursesGrid({
     toast.success(newValue ? 'Marcado en curso' : 'Quitado de en curso')
   }, [])
 
+  const handleExportCourses = useCallback(async () => {
+    if (!courses.length || isExporting) return
+    setIsExporting(true)
+    try {
+      const stamp = new Date().toISOString().slice(0, 10)
+      const result = await exportViaDialog({
+        defaultPath: `cursos-${stamp}.json`,
+        filters: [
+          { name: 'JSON', extensions: ['json'] },
+          { name: 'Todos', extensions: ['*'] }
+        ],
+        dataText: stringifyCourseCatalog(courses)
+      })
+      if (!result.canceled) {
+        const n = courses.length
+        toast.success(`${n} curso${n === 1 ? '' : 's'} exportado${n === 1 ? '' : 's'}`)
+      }
+    } catch (err) {
+      toast.error(err.message || 'No se pudo exportar')
+    } finally {
+      setIsExporting(false)
+    }
+  }, [courses, isExporting])
+
   const handleOpenImportMissing = useCallback(() => {
     if (missingPropsCourses.length === 0) return
     setImportMissingOpen(true)
@@ -629,6 +666,9 @@ function FilterableCoursesGrid({
           setColumnSort(null)
           setSortMode(value)
         }}
+        onExportCourses={handleExportCourses}
+        isExporting={isExporting}
+        canExport={courses.length > 0}
       />
 
       <div className={`app-main${selectedCourse ? ' app-main--with-detail' : ''}`}>
@@ -949,8 +989,8 @@ function App() {
   const openCourse = useCallback(
     (course, target = null) => {
       if (!course?.path) return
-      setLibraryStudyMode(null)
       setResumeTarget(target)
+      setLibraryStudyMode(null)
       setActiveCoursePath(course.path)
       recordView(course.path)
     },
@@ -1050,12 +1090,7 @@ function App() {
   const navigateApp = useCallback((section) => {
     setActiveCoursePath(null)
     setResumeTarget(null)
-    if (
-      section === 'projects' ||
-      section === 'annotations' ||
-      section === 'paths' ||
-      section === 'guide'
-    ) {
+    if (section === 'projects' || section === 'annotations') {
       setLibraryStudyMode(section)
       return
     }
@@ -1096,10 +1131,6 @@ function App() {
             loadCourses()
           }}
         />
-      ) : libraryStudyMode === 'paths' ? (
-        <LearningPathsView courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
-      ) : libraryStudyMode === 'guide' ? (
-        <GuideView courses={courses} onNavigate={navigateApp} />
       ) : libraryStudyMode === 'annotations' ? (
         <LibraryStudyView courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'projects' ? (

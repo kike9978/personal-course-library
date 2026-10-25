@@ -114,9 +114,7 @@ function CourseRoom({
           const last = resumePath || courseProgress?.lastLessonRelativePath
           const lastLesson = flat.find((l) => l.relativePath === last)
           const lastResource =
-            !lastLesson && last
-              ? resources.find((r) => r.relativePath === last)
-              : null
+            !lastLesson && last ? resources.find((r) => r.relativePath === last) : null
 
           if (lastLesson) {
             setSelectedPath(lastLesson.relativePath)
@@ -319,7 +317,13 @@ function CourseRoom({
     try {
       const result = await window.api.pickProjectFolder()
       if (result?.canceled || !result?.path) return
-      const folderName = result.name || result.path.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || ''
+      const folderName =
+        result.name ||
+        result.path
+          .replace(/[/\\]+$/, '')
+          .split(/[/\\]/)
+          .pop() ||
+        ''
       setSelectedProjectId(null)
       setProjectDraft({
         title: folderName,
@@ -409,9 +413,7 @@ function CourseRoom({
       const path = item.lessonRelativePath
       const isLesson = flatLessons.some((l) => l.relativePath === path)
       const resource =
-        !isLesson && tree
-          ? collectAllResources(tree).find((r) => r.relativePath === path)
-          : null
+        !isLesson && tree ? collectAllResources(tree).find((r) => r.relativePath === path) : null
 
       setSelectedProjectId(null)
       setCreatingProject(false)

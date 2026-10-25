@@ -69,8 +69,7 @@ function CourseCard({
   isSelected,
   tabIndex,
   onError,
-  showLearningMeta = true,
-  listActions = null
+  showLearningMeta = true
 }) {
   const {
     path: coursePath,
@@ -155,7 +154,7 @@ function CourseCard({
   return (
     <article
       ref={ref}
-      className={`course-card${isSelected ? ' is-selected' : ''}${listActions ? ' course-card--path' : ''}`}
+      className={`course-card${isSelected ? ' is-selected' : ''}`}
       onClick={handleSelect}
       onDoubleClick={(e) => {
         e.preventDefault()
@@ -190,52 +189,6 @@ function CourseCard({
         </div>
 
         <div className="course-card__actions">
-          {listActions ? (
-            <>
-              <button
-                type="button"
-                className="card-action"
-                onMouseDown={stopCardEvent}
-                onClick={(e) => {
-                  stopCardEvent(e)
-                  listActions.onMoveUp?.()
-                }}
-                disabled={!listActions.canMoveUp}
-                title="Subir"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                className="card-action"
-                onMouseDown={stopCardEvent}
-                onClick={(e) => {
-                  stopCardEvent(e)
-                  listActions.onMoveDown?.()
-                }}
-                disabled={!listActions.canMoveDown}
-                title="Bajar"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
-                </svg>
-              </button>
-            </>
-          ) : null}
           <button
             type="button"
             className="card-action"
@@ -247,78 +200,32 @@ function CourseCard({
               <path d="M8 5v14l11-7z" />
             </svg>
           </button>
-          {listActions ? (
-            <button
-              type="button"
-              className="card-action"
-              onMouseDown={stopCardEvent}
-              onClick={(e) => {
-                stopCardEvent(e)
-                listActions.onRemove?.()
-              }}
-              title="Quitar de la ruta"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-              </svg>
-            </button>
-          ) : null}
-          {listActions ? null : (
-            <>
-              <button
-                type="button"
-                className="card-action"
-                onMouseDown={stopCardEvent}
-                onClick={handleOpenFolder}
-                title="Abrir en explorador"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                className="card-action"
-                onMouseDown={stopCardEvent}
-                onClick={handleEdit}
-                title="Editar"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" />
-                </svg>
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            className="card-action"
+            onMouseDown={stopCardEvent}
+            onClick={handleOpenFolder}
+            title="Abrir en explorador"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="card-action"
+            onMouseDown={stopCardEvent}
+            onClick={handleEdit}
+            title="Editar"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" />
+            </svg>
+          </button>
         </div>
       </div>
 
       <div className="course-card__body">
-        {listActions ? (
-          <div className="course-card__path">
-            <span className="course-card__step">{listActions.step}</span>
-            {listActions.isStart ? (
-              <span className="learning-paths__start">Empieza aquí</span>
-            ) : null}
-          </div>
-        ) : null}
         <h3 className="course-card__title" title={courseTitle}>
           {courseTitle}
         </h3>

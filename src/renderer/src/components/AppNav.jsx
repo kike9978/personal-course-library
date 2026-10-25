@@ -4,8 +4,6 @@
 function AppNav({ active = 'library', onSelect }) {
   const items = [
     { id: 'library', label: 'Biblioteca' },
-    { id: 'paths', label: 'Rutas' },
-    { id: 'guide', label: 'Guía' },
     { id: 'annotations', label: 'Anotaciones' },
     { id: 'projects', label: 'Proyectos' }
   ]

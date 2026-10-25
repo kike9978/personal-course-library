@@ -12,11 +12,8 @@ function getStorePath() {
 
 function emptyStore() {
   return {
-    version: 4,
-    courses: {},
-    paths: [],
-    courseBriefs: {},
-    learnerGoals: null
+    version: 5,
+    courses: {}
   }
 }
 
@@ -143,15 +140,14 @@ function readStore() {
     const raw = fs.readFileSync(filePath, 'utf8')
     const data = JSON.parse(raw)
     if (!data || typeof data !== 'object' || !data.courses) return emptyStore()
-    if (!Array.isArray(data.paths)) data.paths = []
-    if (
-      !data.courseBriefs ||
-      typeof data.courseBriefs !== 'object' ||
-      Array.isArray(data.courseBriefs)
-    ) {
-      data.courseBriefs = {}
+    let dirty = false
+    for (const key of ['paths', 'courseBriefs', 'learnerGoals', 'activePathId']) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        delete data[key]
+        dirty = true
+      }
     }
-    if (!Object.prototype.hasOwnProperty.call(data, 'learnerGoals')) data.learnerGoals = null
+    if (dirty) writeStore(data)
     return data
   } catch {
     return emptyStore()
@@ -407,10 +403,8 @@ function compareStudyItems(a, b) {
   const bLesson = b.lessonRelativePath || ''
   const aProject = a.projectId || ''
   const bProject = b.projectId || ''
-  const aIsCourseWide =
-    !aLesson && !aProject && (a.timeSec == null || a.timeSec === undefined)
-  const bIsCourseWide =
-    !bLesson && !bProject && (b.timeSec == null || b.timeSec === undefined)
+  const aIsCourseWide = !aLesson && !aProject && (a.timeSec == null || a.timeSec === undefined)
+  const bIsCourseWide = !bLesson && !bProject && (b.timeSec == null || b.timeSec === undefined)
 
   // Course-wide notes after everything scoped
   if (aIsCourseWide !== bIsCourseWide) return aIsCourseWide ? 1 : -1
@@ -773,154 +767,6 @@ export function getNotesSearchByCourse() {
     map[coursePath] = chunks.join('\n').toLowerCase()
   }
   return map
-}
-
-function normalizePathCourseList(list) {
-  if (!Array.isArray(list)) return []
-  const seen = new Set()
-  const out = []
-  for (const item of list) {
-    const key = path.basename(String(item || ''))
-    if (!key || seen.has(key)) continue
-    seen.add(key)
-    out.push(key)
-  }
-  return out
-}
-
-function clipText(value, max) {
-  return String(value ?? '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, max)
-}
-
-function assignCoachFields(target, payload, coursePaths) {
-  if (payload.why !== undefined) target.why = clipText(payload.why, 400)
-  if (payload.pace !== undefined) target.pace = clipText(payload.pace, 240)
-  if (payload.source !== undefined) {
-    if (payload.source === 'coach') target.source = 'coach'
-    else delete target.source
-  }
-  if (payload.coachKind !== undefined) {
-    if (payload.coachKind === 'playlist' || payload.coachKind === 'curriculum') {
-      target.coachKind = payload.coachKind
-    } else {
-      delete target.coachKind
-    }
-  }
-  if (payload.startId !== undefined) {
-    const start = path.basename(String(payload.startId || ''))
-    if (start && coursePaths.includes(start)) target.startId = start
-    else delete target.startId
-  } else if (target.startId && !coursePaths.includes(target.startId)) {
-    delete target.startId
-  }
-}
-
-export function listLearningPaths() {
-  const store = readStore()
-  return [...(store.paths || [])].sort(
-    (a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)
-  )
-}
-
-/**
- * @param {{ id?: string, title?: string, coursePaths?: string[], why?: string, pace?: string, source?: string, coachKind?: string, startId?: string }} payload
- */
-export function upsertLearningPath(payload = {}) {
-  const store = readStore()
-  if (!Array.isArray(store.paths)) store.paths = []
-  const now = Date.now()
-  const title = String(payload.title ?? '').trim()
-
-  if (payload.id) {
-    const idx = store.paths.findIndex((p) => p.id === payload.id)
-    if (idx === -1) throw new Error('Ruta no encontrada')
-    const prev = store.paths[idx]
-    const coursePaths =
-      payload.coursePaths !== undefined
-        ? normalizePathCourseList(payload.coursePaths)
-        : prev.coursePaths || []
-    const next = {
-      ...prev,
-      title: payload.title !== undefined ? title || prev.title : prev.title,
-      coursePaths,
-      updatedAt: now
-    }
-    assignCoachFields(next, payload, coursePaths)
-    store.paths[idx] = next
-  } else {
-    if (!title) throw new Error('El título de la ruta es obligatorio')
-    const coursePaths = normalizePathCourseList(payload.coursePaths)
-    const next = {
-      id: makeId(),
-      title,
-      coursePaths,
-      createdAt: now,
-      updatedAt: now
-    }
-    assignCoachFields(next, payload, coursePaths)
-    store.paths.push(next)
-  }
-
-  writeStore(store)
-  return listLearningPaths()
-}
-
-export function getCourseBriefs() {
-  const store = readStore()
-  return { ...(store.courseBriefs || {}) }
-}
-
-/** Merge research notes. Does not touch lesson progress. */
-export function saveCourseBriefs(entries = []) {
-  const store = readStore()
-  if (!store.courseBriefs || typeof store.courseBriefs !== 'object') store.courseBriefs = {}
-  const now = Date.now()
-  for (const entry of entries) {
-    const id = path.basename(String(entry?.id || ''))
-    const summary = clipText(entry?.summary, 500)
-    if (!id || !summary) continue
-    store.courseBriefs[id] = {
-      summary,
-      unverified: Boolean(entry?.unverified),
-      updatedAt: now
-    }
-  }
-  writeStore(store)
-  return { ...store.courseBriefs }
-}
-
-export function getLearnerGoals() {
-  const store = readStore()
-  return store.learnerGoals || null
-}
-
-/** Replace the goal profile. Does not create a path or change course progress. */
-export function saveLearnerGoals(goals = {}) {
-  const goal = clipText(goals.goal, 300)
-  if (!goal) throw new Error('Ese pegado no tiene una meta. No se importó nada.')
-  const hours = goals.hoursPerWeek
-  const store = readStore()
-  store.learnerGoals = {
-    goal,
-    level: clipText(goals.level, 120),
-    hoursPerWeek: typeof hours === 'number' && Number.isFinite(hours) ? hours : clipText(hours, 40),
-    already: clipText(goals.already, 400),
-    avoid: clipText(goals.avoid, 400),
-    notes: clipText(goals.notes, 400),
-    updatedAt: Date.now()
-  }
-  writeStore(store)
-  return store.learnerGoals
-}
-
-export function deleteLearningPath(pathId) {
-  const store = readStore()
-  store.paths = (store.paths || []).filter((p) => p.id !== pathId)
-  writeStore(store)
-  return listLearningPaths()
 }
 
 /** Absolute path to learning-store.json (notes, projects, progress). */

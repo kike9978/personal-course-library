@@ -44,13 +44,6 @@ const api = {
   listAllBookmarks: () => ipcRenderer.invoke('list-all-bookmarks'),
   getNotesSearchByCourse: () => ipcRenderer.invoke('get-notes-search-by-course'),
   revealLearningStore: () => ipcRenderer.invoke('reveal-learning-store'),
-  listLearningPaths: () => ipcRenderer.invoke('list-learning-paths'),
-  upsertLearningPath: (pathPayload) => ipcRenderer.invoke('upsert-learning-path', pathPayload),
-  deleteLearningPath: (pathId) => ipcRenderer.invoke('delete-learning-path', pathId),
-  getCourseBriefs: () => ipcRenderer.invoke('get-course-briefs'),
-  saveCourseBriefs: (entries) => ipcRenderer.invoke('save-course-briefs', entries),
-  getLearnerGoals: () => ipcRenderer.invoke('get-learner-goals'),
-  saveLearnerGoals: (goals) => ipcRenderer.invoke('save-learner-goals', goals),
   generateCourseProps: (coursePath, overwrite = false) =>
     ipcRenderer.invoke('generate-course-props', { coursePath, overwrite }),
   repairCourseProps: (coursePath) => ipcRenderer.invoke('repair-course-props', coursePath),

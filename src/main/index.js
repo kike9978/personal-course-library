@@ -63,13 +63,6 @@ import {
   deleteProject,
   getProjectLinkedPath,
   getNotesSearchByCourse,
-  listLearningPaths,
-  upsertLearningPath,
-  deleteLearningPath,
-  getCourseBriefs,
-  saveCourseBriefs,
-  getLearnerGoals,
-  saveLearnerGoals,
   ensureLearningStoreFile
 } from './services/learningStore.js'
 
@@ -609,14 +602,6 @@ function registerIpcHandlers() {
     revealAbsolutePath(filePath)
     return filePath
   })
-
-  ipcMain.handle('list-learning-paths', () => listLearningPaths())
-  ipcMain.handle('upsert-learning-path', (_event, pathPayload) => upsertLearningPath(pathPayload))
-  ipcMain.handle('delete-learning-path', (_event, pathId) => deleteLearningPath(pathId))
-  ipcMain.handle('get-course-briefs', () => getCourseBriefs())
-  ipcMain.handle('save-course-briefs', (_event, entries) => saveCourseBriefs(entries))
-  ipcMain.handle('get-learner-goals', () => getLearnerGoals())
-  ipcMain.handle('save-learner-goals', (_event, goals) => saveLearnerGoals(goals))
 
   ipcMain.handle('list-projects', (_event, coursePath) => listProjects(coursePath))
   ipcMain.handle('list-all-projects', () => listAllProjects())
