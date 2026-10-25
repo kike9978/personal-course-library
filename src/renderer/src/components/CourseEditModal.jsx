@@ -3,6 +3,7 @@ import { toast } from 'react-hot-toast'
 import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import brandMark from '../assets/img/brand-mark.svg'
 import ChipAutocomplete from './ChipAutocomplete'
+import { CourseDescriptionDialog } from './CourseDescription'
 
 function StarRate({ value, onChange }) {
   return (
@@ -46,6 +47,8 @@ function CourseEditModal({
   const [rate, setRate] = useState(Number(course.rate) || 0)
   const [isSaving, setIsSaving] = useState(false)
   const [coverImg, setCoverImg] = useState(absoluteAssetUrl(getCoverFallback()))
+  const [writingDescription, setWritingDescription] = useState(false)
+  const [localDescription, setLocalDescription] = useState(null)
 
   useEffect(() => {
     setLocalCourseTitle(course.title || '')
@@ -54,6 +57,8 @@ function CourseEditModal({
     setInstructor(course.instructor || '')
     setInstitution(course.institution || '')
     setRate(Number(course.rate) || 0)
+    setWritingDescription(false)
+    setLocalDescription(null)
 
     let cancelled = false
     if (course.hasCover) {
@@ -146,101 +151,133 @@ function CourseEditModal({
     }
   }
 
+  const description = localDescription || (course.description?.summary ? course.description : null)
+
   return (
-    <dialog ref={dialogRef} className="dialog" onClose={onClose} onClick={handleBackdropClick}>
-      <div className="dialog__preview">
-        <div className="dialog__preview-cover">
-          {course.hasCover ? (
-            <img
-              src={coverImg}
-              alt=""
-              onError={(e) => {
-                e.currentTarget.src = brandMark
-              }}
+    <>
+      <dialog ref={dialogRef} className="dialog" onClose={onClose} onClick={handleBackdropClick}>
+        <div className="dialog__preview">
+          <div className="dialog__preview-cover">
+            {course.hasCover ? (
+              <img
+                src={coverImg}
+                alt=""
+                onError={(e) => {
+                  e.currentTarget.src = brandMark
+                }}
+              />
+            ) : (
+              <div className="cover-placeholder">
+                <img src={brandMark} alt="" width={36} height={36} />
+              </div>
+            )}
+          </div>
+          <div>
+            <h3>Editar propiedades</h3>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--clr-ink-soft)' }}>
+              {course.title}
+              {course.missingProps ? ' · Sin courseProps (se creará al guardar)' : ''}
+            </p>
+          </div>
+        </div>
+
+        <div className="dialog__form">
+          <div className="field">
+            <label htmlFor="course-title">Nombre de curso</label>
+            <textarea
+              id="course-title"
+              value={localCourseTitle}
+              onChange={(e) => setLocalCourseTitle(e.target.value)}
             />
-          ) : (
-            <div className="cover-placeholder">
-              <img src={brandMark} alt="" width={36} height={36} />
+          </div>
+
+          <ChipAutocomplete
+            id="course-programs"
+            label="Programas"
+            values={localProgramsList}
+            options={programOptions}
+            onChange={setLocalProgramsList}
+            placeholder="Buscar o añadir programa…"
+          />
+
+          <ChipAutocomplete
+            id="course-themes"
+            label="Temas"
+            values={localThemes}
+            options={themeOptions}
+            onChange={setLocalThemes}
+            placeholder="Buscar o añadir tema…"
+          />
+
+          <div className="field">
+            <label>Valoración</label>
+            <StarRate value={rate} onChange={setRate} />
+          </div>
+
+          <div className="field">
+            <label htmlFor="course-instructor">Instructor</label>
+            <input
+              id="course-instructor"
+              type="text"
+              value={instructor}
+              onChange={(e) => setInstructor(e.target.value)}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="course-institution">Academia</label>
+            <input
+              id="course-institution"
+              type="text"
+              value={institution}
+              onChange={(e) => setInstitution(e.target.value)}
+            />
+          </div>
+
+          <div className="field">
+            <div className="course-edit__description">
+              <span>Descripción</span>
+              <button
+                type="button"
+                className="course-edit__write"
+                onClick={() => setWritingDescription(true)}
+              >
+                {description ? 'Reescribir' : 'Escribir'}
+              </button>
             </div>
-          )}
-        </div>
-        <div>
-          <h3>Editar propiedades</h3>
-          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--clr-ink-soft)' }}>
-            {course.title}
-            {course.missingProps ? ' · Sin courseProps (se creará al guardar)' : ''}
-          </p>
-        </div>
-      </div>
+            <p className={`course-edit__description-preview${description ? '' : ' is-empty'}`}>
+              {description
+                ? description.summary
+                : 'Sin descripción. El encargo usa la ficha, el temario y una búsqueda en tu chat.'}
+            </p>
+          </div>
 
-      <div className="dialog__form">
-        <div className="field">
-          <label htmlFor="course-title">Nombre de curso</label>
-          <textarea
-            id="course-title"
-            value={localCourseTitle}
-            onChange={(e) => setLocalCourseTitle(e.target.value)}
-          />
+          <div className="dialog__actions">
+            <button type="button" className="btn btn--ghost" onClick={handleClose}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={handleSaveAll}
+              disabled={isSaving}
+            >
+              {isSaving ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
         </div>
-
-        <ChipAutocomplete
-          id="course-programs"
-          label="Programas"
-          values={localProgramsList}
-          options={programOptions}
-          onChange={setLocalProgramsList}
-          placeholder="Buscar o añadir programa…"
+      </dialog>
+      {writingDescription ? (
+        <CourseDescriptionDialog
+          course={course}
+          description={description}
+          onClose={() => setWritingDescription(false)}
+          onSaved={(saved) => {
+            if (saved?.summary) setLocalDescription(saved)
+          }}
         />
-
-        <ChipAutocomplete
-          id="course-themes"
-          label="Temas"
-          values={localThemes}
-          options={themeOptions}
-          onChange={setLocalThemes}
-          placeholder="Buscar o añadir tema…"
-        />
-
-        <div className="field">
-          <label>Valoración</label>
-          <StarRate value={rate} onChange={setRate} />
-        </div>
-
-        <div className="field">
-          <label htmlFor="course-instructor">Instructor</label>
-          <input
-            id="course-instructor"
-            type="text"
-            value={instructor}
-            onChange={(e) => setInstructor(e.target.value)}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="course-institution">Academia</label>
-          <input
-            id="course-institution"
-            type="text"
-            value={institution}
-            onChange={(e) => setInstitution(e.target.value)}
-          />
-        </div>
-
-        <div className="dialog__actions">
-          <button type="button" className="btn btn--ghost" onClick={handleClose}>
-            Cancelar
-          </button>
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={handleSaveAll}
-            disabled={isSaving}
-          >
-            {isSaving ? 'Guardando…' : 'Guardar'}
-          </button>
-        </div>
-      </div>
-    </dialog>
+      ) : null}
+    </>
   )
 }
 

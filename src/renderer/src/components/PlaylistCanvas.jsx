@@ -17,6 +17,9 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import AppNav from './AppNav'
+import CourseDetailPanel from './CourseDetailPanel'
+import CourseEditModal from './CourseEditModal'
+import CoverSearchModal from './CoverSearchModal'
 import brandMark from '../assets/img/brand-mark.svg'
 import {
   PLAYLIST_CARD_H,
@@ -178,7 +181,7 @@ function CourseNode({ data }) {
 
   return (
     <article
-      className={`playlist-course${data.missing ? ' is-missing' : ''}${data.inProcess ? ' is-active' : ''}${data.continues ? ' has-next' : ''}${data.bigCover ? ' is-cover' : ''}`}
+      className={`playlist-course${data.missing ? ' is-missing' : ''}${data.inProcess ? ' is-active' : ''}${data.continues ? ' has-next' : ''}${data.bigCover ? ' is-cover' : ''}${actions?.detailPath === data.coursePath ? ' is-preview' : ''}`}
     >
       <CourseCover
         coursePath={data.missing ? '' : data.coursePath}
@@ -196,7 +199,10 @@ function CourseNode({ data }) {
           type="button"
           className="playlist-frame__icon"
           aria-label={`Abrir ${data.title}`}
-          onClick={() => actions?.openCourse(data.coursePath)}
+          onClick={(event) => {
+            event.stopPropagation()
+            actions?.openCourse(data.coursePath)
+          }}
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M8 5v14l11-7z" />
@@ -206,7 +212,10 @@ function CourseNode({ data }) {
           type="button"
           className="playlist-frame__icon"
           aria-label={`Quitar ${data.title} de la lista`}
-          onClick={() => actions?.removeCourse(data.playlistId, data.coursePath)}
+          onClick={(event) => {
+            event.stopPropagation()
+            actions?.removeCourse(data.playlistId, data.coursePath, data.title)
+          }}
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
@@ -267,6 +276,9 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   const [selectedId, setSelectedId] = useState(null)
   const [dropId, setDropId] = useState(null)
   const [focusPlaylistId, setFocusPlaylistId] = useState(null)
+  const [detailPath, setDetailPath] = useState(null)
+  const [editingCourse, setEditingCourse] = useState(null)
+  const [coverSearch, setCoverSearch] = useState(null)
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const playlistsRef = useRef(playlists)
@@ -438,9 +450,15 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   }, [])
 
   const removeCourse = useCallback(
-    (playlistId, coursePath) => {
+    (playlistId, coursePath, title) => {
       const current = playlistsRef.current.find((playlist) => playlist.id === playlistId)
       if (!current) return
+      const course = coursesRef.current.find((item) => item.path === coursePath)
+      const label = String(title || course?.title || 'este curso').trim() || 'este curso'
+      const list = current.title || 'la lista'
+      if (!window.confirm(`¿Quitar «${label}» de «${list}»? El curso sigue en la biblioteca.`)) {
+        return
+      }
       persistPlaylist({
         ...current,
         coursePaths: current.coursePaths.filter((item) => item !== coursePath)
@@ -460,6 +478,50 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     },
     [onOpenCourse]
   )
+
+  const previewCourse = useCallback((coursePath) => {
+    const course = coursesRef.current.find((item) => item.path === coursePath)
+    if (!course) {
+      toast.error('Ese curso no está en la biblioteca')
+      return
+    }
+    setDetailPath(coursePath)
+  }, [])
+
+  const toggleInProcess = useCallback(async (course, newValue) => {
+    const result = await window.api.updateCourseProperty(course.path, 'isInProcess', newValue)
+    if (!result.success) throw new Error(result.error || 'Update failed')
+    toast.success(newValue ? 'Marcado en curso' : 'Quitado de en curso')
+  }, [])
+
+  const generateProps = useCallback(async (course) => {
+    try {
+      await window.api.generateCourseProps(course.path)
+      toast.success('Propiedades generadas')
+    } catch (err) {
+      toast.error(err.message || 'Error')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!detailPath) return undefined
+    if (courses.some((course) => course.path === detailPath)) return undefined
+    setDetailPath(null)
+    return undefined
+  }, [courses, detailPath])
+
+  useEffect(() => {
+    if (!detailPath) return undefined
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape' || editingCourse || coverSearch) return
+      const tag = event.target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (event.target?.isContentEditable) return
+      setDetailPath(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [detailPath, editingCourse, coverSearch])
 
   const addCourse = useCallback(
     (playlistId, coursePath) => {
@@ -618,10 +680,32 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
 
   const onBeforeDelete = useCallback(({ nodes: doomed }) => {
     const groups = doomed.filter((node) => node.type === 'playlist')
-    if (groups.length === 0) return true
+    const groupIds = new Set(groups.map((node) => node.id))
+    const courses = doomed.filter(
+      (node) =>
+        node.type === 'course' &&
+        !groupIds.has(node.parentId) &&
+        !groupIds.has(node.data?.playlistId)
+    )
+    if (groups.length === 0 && courses.length === 0) return true
+    if (groups.length === 0) {
+      const label =
+        courses.length === 1
+          ? `«${courses[0].data?.title || 'este curso'}» de la lista`
+          : `${courses.length} cursos de la lista`
+      const stays = courses.length === 1 ? 'El curso sigue' : 'Los cursos siguen'
+      return window.confirm(`¿Quitar ${label}? ${stays} en la biblioteca.`)
+    }
     const label =
       groups.length === 1 ? `«${groups[0].data?.title || 'esta lista'}»` : `${groups.length} listas`
-    return window.confirm(`¿Quitar ${label} del tablero? Los cursos siguen en la biblioteca.`)
+    if (courses.length === 0) {
+      return window.confirm(`¿Quitar ${label} del tablero? Los cursos siguen en la biblioteca.`)
+    }
+    const extra =
+      courses.length === 1
+        ? ` y «${courses[0].data?.title || 'un curso'}»`
+        : ` y ${courses.length} cursos`
+    return window.confirm(`¿Quitar ${label}${extra} del tablero? Los cursos siguen en la biblioteca.`)
   }, [])
 
   const onNodesDelete = useCallback((deleted) => {
@@ -693,6 +777,13 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     [addCourse, screenToFlowPosition]
   )
 
+  const onNodeClick = useCallback(
+    (_event, node) => {
+      if (node.type === 'course') previewCourse(node.data.coursePath)
+    },
+    [previewCourse]
+  )
+
   const onNodeDoubleClick = useCallback(
     (_event, node) => {
       if (node.type === 'course') openCourse(node.data.coursePath)
@@ -704,12 +795,13 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     () => ({
       dropId,
       selectedId,
+      detailPath,
       renamePlaylist,
       deletePlaylist,
       removeCourse,
       openCourse
     }),
-    [dropId, selectedId, renamePlaylist, deletePlaylist, removeCourse, openCourse]
+    [dropId, selectedId, detailPath, renamePlaylist, deletePlaylist, removeCourse, openCourse]
   )
 
   const selectedPlaylist = playlists.find((playlist) => playlist.id === selectedId) || null
@@ -729,6 +821,19 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     })
     return [...names].sort((a, b) => a.localeCompare(b))
   }, [courses])
+  const themes = useMemo(() => {
+    const names = new Set()
+    courses.forEach((course) => {
+      ;(course.theme || []).forEach((theme) => {
+        if (theme) names.add(theme)
+      })
+    })
+    return [...names].sort((a, b) => a.localeCompare(b))
+  }, [courses])
+  const detailCourse = useMemo(
+    () => (detailPath ? courses.find((course) => course.path === detailPath) || null : null),
+    [courses, detailPath]
+  )
   const visibleCourses = useMemo(() => {
     const query = search.trim().toLowerCase()
     const listed = new Set(selectedPlaylist?.coursePaths || [])
@@ -902,9 +1007,13 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
                   return (
                     <div
                       key={course.path}
-                      className={`playlist-course-row${member ? ' is-member' : ''}`}
+                      className={`playlist-course-row${member ? ' is-member' : ''}${detailPath === course.path ? ' is-preview' : ''}`}
                       role="listitem"
                       draggable
+                      onClick={(event) => {
+                        if (event.target.closest('button')) return
+                        previewCourse(course.path)
+                      }}
                       onDragStart={(event) => {
                         if (event.target.closest('button')) {
                           event.preventDefault()
@@ -974,6 +1083,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
               onNodesChange={handleNodesChange}
               onEdgesChange={onEdgesChange}
               onNodeDragStop={onNodeDragStop}
+              onNodeClick={onNodeClick}
               onBeforeDelete={onBeforeDelete}
               onNodesDelete={onNodesDelete}
               onNodeDoubleClick={onNodeDoubleClick}
@@ -1021,7 +1131,38 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
               ) : null}
             </ReactFlow>
           </div>
+          {detailCourse ? (
+            <CourseDetailPanel
+              course={detailCourse}
+              onClose={() => setDetailPath(null)}
+              onOpenCourse={(course, target) => onOpenCourse?.(course, target)}
+              onEdit={setEditingCourse}
+              onToggleInProcess={toggleInProcess}
+              onGenerateProps={
+                detailCourse.missingProps ? () => generateProps(detailCourse) : null
+              }
+              onSearchCover={() =>
+                setCoverSearch({ courses: [detailCourse], initialStep: 'choose' })
+              }
+            />
+          ) : null}
         </div>
+        {editingCourse ? (
+          <CourseEditModal
+            course={editingCourse}
+            programOptions={programs}
+            themeOptions={themes}
+            onCourseUpdated={() => setEditingCourse(null)}
+            onClose={() => setEditingCourse(null)}
+          />
+        ) : null}
+        {coverSearch ? (
+          <CoverSearchModal
+            courses={coverSearch.courses}
+            initialStep={coverSearch.initialStep}
+            onClose={() => setCoverSearch(null)}
+          />
+        ) : null}
       </div>
     </BoardActions.Provider>
   )

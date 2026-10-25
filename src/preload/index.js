@@ -50,6 +50,10 @@ const api = {
   generateMissingCourseProps: () => ipcRenderer.invoke('generate-missing-course-props'),
   generateCoursePropsBatch: (coursePaths) =>
     ipcRenderer.invoke('generate-course-props-batch', coursePaths),
+  saveCourseDescription: (coursePath, description) =>
+    ipcRenderer.invoke('save-course-description', { coursePath, description }),
+  saveCourseDescriptionBatch: (entries) =>
+    ipcRenderer.invoke('save-course-description-batch', { entries }),
   listProjects: (coursePath) => ipcRenderer.invoke('list-projects', coursePath),
   listAllProjects: () => ipcRenderer.invoke('list-all-projects'),
   upsertProject: (coursePath, project) =>

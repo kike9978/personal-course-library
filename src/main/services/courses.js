@@ -4,6 +4,7 @@ import path from 'path'
 import { shell } from 'electron'
 import { getLibraryPath, isLibraryPathValid } from './config.js'
 import { resolveCourseFile } from './courseScan.js'
+import { storedDescription } from '../../shared/courseDescription.js'
 
 const COVER_FORMATS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
 const READ_CONCURRENCY = 12
@@ -99,7 +100,8 @@ export function buildCoursePropsFromFolderName(folderName) {
     instructor: '',
     isIncomplete: false,
     isInProcess: false,
-    rate: 0
+    rate: 0,
+    description: null
   }
 }
 
@@ -139,6 +141,7 @@ function normalizeCourseRecord(courseDir, data, meta = {}) {
     rate,
     isInProcess: Boolean(data?.isInProcess),
     isIncomplete: Boolean(data?.isIncomplete),
+    description: storedDescription(data?.description),
     hasCover: Boolean(meta.hasCover),
     hasProps: meta.hasProps !== false,
     missingProps: Boolean(meta.missingProps),
@@ -308,7 +311,8 @@ export async function repairCourseProps(courseDir) {
     theme,
     rate: normalizeRate(existing.rate ?? defaults.rate),
     isIncomplete: Boolean(existing.isIncomplete),
-    isInProcess: Boolean(existing.isInProcess)
+    isInProcess: Boolean(existing.isInProcess),
+    description: storedDescription(existing.description)
   }
   delete data.themes
 
@@ -365,6 +369,9 @@ function sanitizeUpdates(updates = {}) {
   if (next.programs !== undefined && !Array.isArray(next.programs)) {
     next.programs = []
   }
+  if (Object.prototype.hasOwnProperty.call(next, 'description')) {
+    next.description = storedDescription(next.description)
+  }
   return next
 }
 
@@ -393,6 +400,7 @@ export async function updateCourse(courseDir, updates) {
   const data = sanitizeUpdates({ ...existing, ...updates })
   if (!Array.isArray(data.theme)) data.theme = normalizeThemes(data)
   data.rate = normalizeRate(data.rate)
+  data.description = storedDescription(data.description)
   delete data.themes
 
   await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8')

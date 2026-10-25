@@ -51,6 +51,7 @@ describe('course catalog export', () => {
       rate: 4,
       isInProcess: true,
       isIncomplete: false,
+      description: null,
       hasCover: true,
       hasProps: true,
       addedAt: '2026-01-02T00:00:00.000Z',
@@ -69,6 +70,27 @@ describe('course catalog export', () => {
     assert.equal('notesSearchText' in doc.courses[0], false)
     assert.equal('lessons' in doc.courses[0].progress, false)
     assert.equal('notes' in doc.courses[0].progress, false)
+  })
+
+  it('includes a description stored on the course record', () => {
+    const doc = buildCourseCatalogDocument([
+      {
+        path: 'School - Lighting',
+        title: 'Lighting',
+        description: {
+          summary:
+            'A lighting course that places a key light and a fill on a simple character in Blender.',
+          audience: 'People who already model in Blender.',
+          outcomes: ['Place a key light.', 'Add a fill light.'],
+          source: { title: 'School page', url: 'https://school.example/light' },
+          grounded: 'web',
+          updatedAt: '2026-10-25T00:00:00.000Z'
+        }
+      }
+    ])
+    assert.equal(doc.courses[0].description.summary.includes('key light'), true)
+    assert.equal(doc.courses[0].description.grounded, 'web')
+    assert.equal(doc.courses[0].description.source.url, 'https://school.example/light')
   })
 
   it('keeps a folder that has no courseProps file', () => {

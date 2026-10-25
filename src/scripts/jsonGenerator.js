@@ -49,7 +49,8 @@ dirs.forEach((extension) => {
     instructor: '',
     isIncomplete: false,
     isInProcess: false,
-    rate: 0
+    rate: 0,
+    description: null
   }
   const outputPath = path.join(libraryPath, extension, 'courseProps.json')
   if (fs.existsSync(outputPath)) {

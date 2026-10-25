@@ -105,6 +105,15 @@ export function getInstitutionLogo(institution) {
   return fallback
 }
 
+/** True when a real institution logo exists (not the generic placeholder). */
+export function hasInstitutionLogo(institution) {
+  if (!institution) return false
+  const fallback = institutionByKey.get('default') || null
+  const logo = getInstitutionLogo(institution)
+  if (!logo) return false
+  return logo !== fallback
+}
+
 export function getCoverFallback() {
   return toAssetUrl(coverFallback) || coverFallback
 }

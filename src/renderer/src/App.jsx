@@ -5,12 +5,13 @@ import CourseEditModal from './components/CourseEditModal'
 import ImportMissingPropsModal from './components/ImportMissingPropsModal'
 import CoverSearchModal from './components/CoverSearchModal'
 import CourseDetailPanel from './components/CourseDetailPanel'
+import CourseDescriptionBatch from './components/CourseDescriptionBatch'
 import CourseRoom from './components/CourseRoom'
 import LibraryStudyView from './components/LibraryStudyView'
 import AnnotationsPopoutView from './components/AnnotationsPopoutView'
 import ProjectsKanban from './components/ProjectsKanban'
 import PlaylistCanvas from './components/PlaylistCanvas'
-import AppNav from './components/AppNav'
+import LibraryHeader from './components/LibraryHeader'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
 import { Toaster, toast } from 'react-hot-toast'
@@ -33,6 +34,19 @@ function useDebouncedValue(value, delay = 200) {
     return () => clearTimeout(id)
   }, [value, delay])
   return debounced
+}
+
+function DesktopShellNotice() {
+  return (
+    <div className="library-setup">
+      <img src={brandMark} alt="" width={72} height={72} className="library-setup__mark" />
+      <h1>Abre la ventana de la app</h1>
+      <p>
+        Esta página en el navegador no tiene acceso a la biblioteca. Usa la ventana de escritorio
+        que abre <strong>bun dev</strong>.
+      </p>
+    </div>
+  )
 }
 
 function LibrarySetup({ onPathSet }) {
@@ -62,240 +76,6 @@ function LibrarySetup({ onPathSet }) {
         {isPicking ? 'Abriendo…' : 'Elegir carpeta'}
       </button>
     </div>
-  )
-}
-
-function AppHeader({
-  filterText,
-  onFilterTextChange,
-  isCardLayout,
-  onCardLayoutChange,
-  isInProcessOnly,
-  onInProcessOnlyChange,
-  isNewOnly,
-  onNewOnlyChange,
-  recentlyViewedOnly,
-  onRecentlyViewedOnlyChange,
-  missingPropsOnly,
-  onMissingPropsOnlyChange,
-  courseCount,
-  isLoading,
-  onRefresh,
-  onChangeLibrary,
-  onNavigate,
-  institutions,
-  programs,
-  themes,
-  institutionFilter,
-  onInstitutionFilterChange,
-  programFilter,
-  onProgramFilterChange,
-  themeFilter,
-  onThemeFilterChange,
-  minRate,
-  onMinRateChange,
-  sortMode,
-  onSortModeChange,
-  onExportCourses,
-  isExporting,
-  canExport
-}) {
-  return (
-    <header className="app-header">
-      <div className="app-header__top">
-        <div className="brand">
-          <div className="brand__mark">
-            <img src={brandMark} alt="" />
-          </div>
-          <div className="brand__text">
-            <h1 className="brand__title">Catálogo de cursos</h1>
-            <AppNav active="library" onSelect={onNavigate} />
-          </div>
-        </div>
-
-        <div className="search-field">
-          <svg
-            className="search-field__icon"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-          </svg>
-          <input
-            type="search"
-            value={filterText}
-            placeholder="Buscar título, academia, instructor, temas, notas…"
-            onChange={(e) => onFilterTextChange(e.target.value)}
-            aria-label="Buscar"
-          />
-        </div>
-
-        <div className="header-actions">
-          <span className="count-badge" aria-live="polite">
-            {courseCount} cursos
-          </span>
-
-          <div className="segmented" role="group" aria-label="Vista">
-            <button
-              type="button"
-              aria-pressed={isCardLayout}
-              onClick={() => onCardLayoutChange(true)}
-            >
-              Cards
-            </button>
-            <button
-              type="button"
-              aria-pressed={!isCardLayout}
-              onClick={() => onCardLayoutChange(false)}
-            >
-              Lista
-            </button>
-          </div>
-
-          <button
-            type="button"
-            className="filter-pill"
-            aria-pressed={isInProcessOnly}
-            onClick={() => onInProcessOnlyChange(!isInProcessOnly)}
-          >
-            En curso
-          </button>
-
-          <button
-            type="button"
-            className="filter-pill"
-            aria-pressed={isNewOnly}
-            onClick={() => onNewOnlyChange(!isNewOnly)}
-            title="Carpetas añadidas en los últimos 14 días"
-          >
-            Nuevos
-          </button>
-
-          <button
-            type="button"
-            className="filter-pill"
-            aria-pressed={recentlyViewedOnly}
-            onClick={() => onRecentlyViewedOnlyChange(!recentlyViewedOnly)}
-            title="Cursos abiertos en los últimos 14 días"
-          >
-            Recientes
-          </button>
-
-          <button
-            type="button"
-            className="filter-pill"
-            aria-pressed={missingPropsOnly}
-            onClick={() => onMissingPropsOnlyChange(!missingPropsOnly)}
-          >
-            Sin props
-          </button>
-
-          <button
-            type="button"
-            className="icon-btn icon-btn--ghost"
-            onClick={onExportCourses}
-            disabled={isLoading || isExporting || !canExport}
-            title="Exportar cursos y metadatos a JSON"
-          >
-            {isExporting ? '…' : 'Exportar'}
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={onRefresh}
-            disabled={isLoading}
-            title="Refrescar (Ctrl+R)"
-          >
-            {isLoading ? '…' : 'Refrescar'}
-          </button>
-          <button type="button" className="icon-btn icon-btn--ghost" onClick={onChangeLibrary}>
-            Carpeta
-          </button>
-        </div>
-      </div>
-
-      <div className="app-header__filters">
-        <div className="chip-select">
-          <label htmlFor="sort-mode">Orden</label>
-          <select
-            id="sort-mode"
-            value={sortMode}
-            onChange={(e) => onSortModeChange(e.target.value)}
-          >
-            <option value="az">A → Z</option>
-            <option value="za">Z → A</option>
-            <option value="recent">Recientes</option>
-            <option value="added">Fecha de añadido</option>
-            <option value="addedOldest">Añadidos primero</option>
-            <option value="newest">Última modificación</option>
-            <option value="rate">Mejor valorados</option>
-            <option value="progress">Más progreso</option>
-            <option value="inProgress">En curso primero</option>
-          </select>
-        </div>
-
-        <div className="chip-select">
-          <label htmlFor="institution-filter">Academia</label>
-          <select
-            id="institution-filter"
-            value={institutionFilter}
-            onChange={(e) => onInstitutionFilterChange(e.target.value)}
-          >
-            <option value="">Todas</option>
-            {institutions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="chip-select">
-          <label htmlFor="min-rate-filter">Mín. ★</label>
-          <select
-            id="min-rate-filter"
-            value={minRate}
-            onChange={(e) => onMinRateChange(Number(e.target.value))}
-          >
-            <option value={0}>Cualquiera</option>
-            <option value={3}>3+</option>
-            <option value={4}>4+</option>
-            <option value={5}>5</option>
-          </select>
-        </div>
-
-        <div className="filter-chips" role="group" aria-label="Programas">
-          {programs.slice(0, 10).map((program) => (
-            <button
-              key={program}
-              type="button"
-              className="filter-chip"
-              aria-pressed={programFilter === program}
-              onClick={() => onProgramFilterChange(programFilter === program ? '' : program)}
-            >
-              {program}
-            </button>
-          ))}
-        </div>
-
-        {themes.length > 0 ? (
-          <div className="filter-chips" role="group" aria-label="Temas">
-            {themes.slice(0, 8).map((theme) => (
-              <button
-                key={theme}
-                type="button"
-                className="filter-chip filter-chip--theme"
-                aria-pressed={themeFilter === theme}
-                onClick={() => onThemeFilterChange(themeFilter === theme ? '' : theme)}
-              >
-                {theme}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </header>
   )
 }
 
@@ -355,6 +135,7 @@ function FilterableCoursesGrid({
   const [isExporting, setIsExporting] = useState(false)
   const [importMissingOpen, setImportMissingOpen] = useState(false)
   const [coverSearch, setCoverSearch] = useState(null)
+  const [descriptionBatchOpen, setDescriptionBatchOpen] = useState(false)
   const debouncedFilter = useDebouncedValue(filterText, 200)
 
   const institutions = useMemo(() => {
@@ -391,6 +172,10 @@ function FilterableCoursesGrid({
 
   const missingPropsCourses = useMemo(() => courses.filter((c) => c.missingProps), [courses])
   const missingCoverCourses = useMemo(() => courses.filter((c) => !c.hasCover), [courses])
+  const missingDescriptionCourses = useMemo(
+    () => courses.filter((c) => !c.description?.summary),
+    [courses]
+  )
 
   const inProgressCourses = useMemo(
     () => courses.filter((c) => !c.missingProps && c.isInProcess),
@@ -509,8 +294,8 @@ function FilterableCoursesGrid({
   }, [])
 
   const handleOpenCourse = useCallback(
-    (course) => {
-      if (course && onOpenCourse) onOpenCourse(course)
+    (course, target = null) => {
+      if (course && onOpenCourse) onOpenCourse(course, target)
     },
     [onOpenCourse]
   )
@@ -633,7 +418,7 @@ function FilterableCoursesGrid({
 
   return (
     <div className="app-shell">
-      <AppHeader
+      <LibraryHeader
         filterText={filterText}
         onFilterTextChange={setFilterText}
         isCardLayout={isCardLayout}
@@ -752,6 +537,24 @@ function FilterableCoursesGrid({
                 </div>
               ) : null}
 
+              {missingDescriptionCourses.length > 0 ? (
+                <div className="catalog-banner">
+                  <div>
+                    <strong>{missingDescriptionCourses.length}</strong> curso
+                    {missingDescriptionCourses.length === 1 ? '' : 's'} sin descripción
+                  </div>
+                  <div className="catalog-banner__actions">
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      onClick={() => setDescriptionBatchOpen(true)}
+                    >
+                      Escribir descripciones
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               {!isInProcessOnly &&
                 !isNewOnly &&
                 !recentlyViewedOnly &&
@@ -853,6 +656,13 @@ function FilterableCoursesGrid({
                   onClose={() => setCoverSearch(null)}
                 />
               ) : null}
+
+              {descriptionBatchOpen ? (
+                <CourseDescriptionBatch
+                  courses={missingDescriptionCourses}
+                  onClose={() => setDescriptionBatchOpen(false)}
+                />
+              ) : null}
             </>
           )}
         </div>
@@ -883,6 +693,7 @@ function FilterableCoursesGrid({
 function App() {
   const annotationsWindowMode = useMemo(() => getAnnotationsWindowMode(), [])
   const [isLoading, setIsLoading] = useState(true)
+  const [shellMissing, setShellMissing] = useState(false)
   const [courses, setCourses] = useState([])
   const [libraryPath, setLibraryPath] = useState(null)
   const [needsSetup, setNeedsSetup] = useState(false)
@@ -918,6 +729,11 @@ function App() {
   }, [])
 
   const loadCourses = useCallback(async () => {
+    if (!window.api?.getLibraryPath) {
+      setShellMissing(true)
+      setIsLoading(false)
+      return
+    }
     if (loadingRef.current) return
     loadingRef.current = true
     setIsLoading(true)
@@ -1019,6 +835,12 @@ function App() {
   }, [loadCourses])
 
   useEffect(() => {
+    if (!window.api?.onCourseUpdated || !window.api?.onLibraryChanged) {
+      setShellMissing(true)
+      setIsLoading(false)
+      return
+    }
+
     loadCourses()
 
     const unsubscribeUpdated = window.api.onCourseUpdated((update) => {
@@ -1119,7 +941,9 @@ function App() {
           }
         }}
       />
-      {annotationsWindowMode ? (
+      {shellMissing ? (
+        <DesktopShellNotice />
+      ) : annotationsWindowMode ? (
         needsSetup ? (
           <LibrarySetup
             onPathSet={(path) => {

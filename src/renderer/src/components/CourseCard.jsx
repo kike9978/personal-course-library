@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { getInstitutionLogo, getCoverFallback, absoluteAssetUrl } from '../utils/images'
+import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
+import { InstitutionMark } from './InstitutionMark'
 import brandMark from '../assets/img/brand-mark.svg'
 
 function useCoverImage(coursePath, hasCover, coverStamp) {
@@ -82,18 +83,11 @@ function CourseCard({
 
   const [isInProcess, setIsInProcess] = useState(Boolean(initialInProcess))
   const isRecentlyViewed = Boolean(course.learning?.isRecentlyViewed)
-  const [institutionImg, setInstitutionImg] = useState(() =>
-    absoluteAssetUrl(getInstitutionLogo(institution))
-  )
   const { ref, coverSrc, onCoverError } = useCoverImage(coursePath, hasCover, course.coverStamp)
 
   useEffect(() => {
     setIsInProcess(Boolean(course.isInProcess))
   }, [course.isInProcess])
-
-  useEffect(() => {
-    setInstitutionImg(absoluteAssetUrl(getInstitutionLogo(institution)))
-  }, [institution])
 
   const toggleInProcess = async (e) => {
     stopCardEvent(e)
@@ -237,18 +231,7 @@ function CourseCard({
           </p>
         ) : null}
         <div className="course-card__meta">
-          {institutionImg ? (
-            <img
-              className="institution-logo"
-              src={institutionImg}
-              alt=""
-              title={institution}
-              onError={(e) => {
-                e.currentTarget.style.display = 'none'
-              }}
-            />
-          ) : null}
-          {institution ? <span className="institution-name">{institution}</span> : null}
+          <InstitutionMark institution={institution} nameClassName="institution-name" />
           {typeof course.rate === 'number' && course.rate > 0 ? (
             <span className="course-card__rate" title={`${course.rate}/5`}>
               {'★'.repeat(course.rate)}

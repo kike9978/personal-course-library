@@ -25,6 +25,7 @@ import {
   generateMissingCourseProps,
   generateCoursePropsBatch
 } from './services/courses.js'
+import { saveCourseDescription, saveCourseDescriptionBatch } from './services/courseDescription.js'
 import {
   searchCoverCandidates,
   saveCourseCover,
@@ -468,6 +469,27 @@ function registerIpcHandlers() {
   ipcMain.handle('generate-course-props-batch', async (_event, coursePaths) => {
     const result = await generateCoursePropsBatch(coursePaths)
     return { success: true, ...result }
+  })
+
+  ipcMain.handle('save-course-description', async (_event, { coursePath, description } = {}) => {
+    const saved = await saveCourseDescription(coursePath, description)
+    BrowserWindow.getAllWindows().forEach((win) => {
+      win.webContents.send('course-updated', { coursePath, fullData: saved.props })
+    })
+    return { success: true, description: saved.description }
+  })
+
+  ipcMain.handle('save-course-description-batch', async (_event, { entries } = {}) => {
+    const saved = await saveCourseDescriptionBatch(entries)
+    BrowserWindow.getAllWindows().forEach((win) => {
+      saved.forEach((item) => {
+        win.webContents.send('course-updated', {
+          coursePath: item.coursePath,
+          fullData: item.props
+        })
+      })
+    })
+    return { success: true, savedCount: saved.length }
   })
 
   ipcMain.handle('open-course-folder', async (_event, courseDir) => {

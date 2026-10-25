@@ -1,3 +1,5 @@
+import { storedDescription } from '../../../shared/courseDescription.js'
+
 /**
  * Portable JSON snapshot of the course catalog and its metadata.
  * Notes bodies and lesson maps stay out of the file.
@@ -48,6 +50,7 @@ export function courseToExportRecord(course = {}) {
     rate: clampRate(course.rate),
     isInProcess: Boolean(course.isInProcess),
     isIncomplete: Boolean(course.isIncomplete),
+    description: storedDescription(course.description),
     hasCover: Boolean(course.hasCover),
     hasProps: course.hasProps !== false && !course.missingProps,
     addedAt: isoOrNull(course.addedAt),
@@ -57,7 +60,10 @@ export function courseToExportRecord(course = {}) {
   }
 }
 
-export function buildCourseCatalogDocument(courses, { exportedAt = new Date().toISOString() } = {}) {
+export function buildCourseCatalogDocument(
+  courses,
+  { exportedAt = new Date().toISOString() } = {}
+) {
   const list = (Array.isArray(courses) ? courses : []).map(courseToExportRecord)
   return {
     exportedAt,

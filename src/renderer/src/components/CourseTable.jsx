@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { getInstitutionLogo, getCoverFallback, absoluteAssetUrl } from '../utils/images'
+import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
+import { InstitutionMark } from './InstitutionMark'
 import brandMark from '../assets/img/brand-mark.svg'
 import { courseViewedAt, formatCourseDate } from '../utils/courseTable'
 
@@ -242,7 +243,6 @@ function TableRow({
   onError
 }) {
   const [isInProcess, setIsInProcess] = useState(Boolean(course.isInProcess))
-  const institutionImg = absoluteAssetUrl(getInstitutionLogo(course.institution))
   const viewedAt = courseViewedAt(course)
   const percent =
     typeof course.learning?.percent === 'number' && course.learning.playableCount > 0
@@ -303,17 +303,7 @@ function TableRow({
       </td>
       <td>
         <div className="course-table__academy">
-          {institutionImg ? (
-            <img
-              className="institution-logo"
-              src={institutionImg}
-              alt=""
-              onError={(event) => {
-                event.currentTarget.style.display = 'none'
-              }}
-            />
-          ) : null}
-          <span>{course.institution || '—'}</span>
+          <InstitutionMark institution={course.institution} emptyLabel="—" />
         </div>
       </td>
       <td>{course.instructor || '—'}</td>

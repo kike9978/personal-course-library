@@ -16,7 +16,7 @@
     "build:mac": "npm run build && electron-builder --mac --config",
     "build:linux": "npm run build && electron-builder --linux --config",
     "generate:json": "node src/scripts/jsonGenerator.js",
-    "test": "node --experimental-detect-module --test src/renderer/src/utils/courseExport.test.js src/renderer/src/learning/playlistLayout.test.js"
+    "test": "node --experimental-detect-module --test src/shared/courseDescription.test.js src/renderer/src/utils/courseExport.test.js src/renderer/src/learning/playlistLayout.test.js"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
