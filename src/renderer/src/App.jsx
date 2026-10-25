@@ -9,6 +9,7 @@ import CourseRoom from './components/CourseRoom'
 import LibraryStudyView from './components/LibraryStudyView'
 import AnnotationsPopoutView from './components/AnnotationsPopoutView'
 import ProjectsKanban from './components/ProjectsKanban'
+import PlaylistCanvas from './components/PlaylistCanvas'
 import AppNav from './components/AppNav'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
@@ -889,6 +890,9 @@ function App() {
   const [resumeTarget, setResumeTarget] = useState(null)
   const [liveJump, setLiveJump] = useState(null)
   const [libraryStudyMode, setLibraryStudyMode] = useState(null)
+  const libraryStudyModeRef = useRef(null)
+  const returnStudyRef = useRef(null)
+  libraryStudyModeRef.current = libraryStudyMode
   const loadingRef = useRef(false)
   const activeCoursePathRef = useRef(null)
   activeCoursePathRef.current = activeCoursePath
@@ -990,6 +994,9 @@ function App() {
     (course, target = null) => {
       if (!course?.path) return
       setResumeTarget(target)
+      const from = libraryStudyModeRef.current
+      returnStudyRef.current =
+        from === 'projects' || from === 'annotations' || from === 'playlists' ? from : null
       setLibraryStudyMode(null)
       setActiveCoursePath(course.path)
       recordView(course.path)
@@ -1045,6 +1052,7 @@ function App() {
       ? null
       : window.api.onAnnotationsJump?.((payload) => {
           if (!payload?.coursePath) return
+          returnStudyRef.current = null
           setLibraryStudyMode(null)
           const target = {
             lessonRelativePath: payload.lessonRelativePath || null,
@@ -1090,7 +1098,7 @@ function App() {
   const navigateApp = useCallback((section) => {
     setActiveCoursePath(null)
     setResumeTarget(null)
-    if (section === 'projects' || section === 'annotations') {
+    if (section === 'projects' || section === 'annotations' || section === 'playlists') {
       setLibraryStudyMode(section)
       return
     }
@@ -1135,15 +1143,20 @@ function App() {
         <LibraryStudyView courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'projects' ? (
         <ProjectsKanban courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
+      ) : libraryStudyMode === 'playlists' ? (
+        <PlaylistCanvas courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : activeCourse ? (
         <CourseRoom
           course={activeCourse}
           resumeTarget={resumeTarget}
           liveJump={liveJump}
           onBack={() => {
+            const back = returnStudyRef.current
+            returnStudyRef.current = null
             setActiveCoursePath(null)
             setResumeTarget(null)
             setLiveJump(null)
+            if (back) setLibraryStudyMode(back)
           }}
           onOpenExplorer={(c) => window.api.openCourseFolder(c.path)}
           onProgressChange={handleLearningProgressChange}

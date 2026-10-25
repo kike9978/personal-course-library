@@ -13,7 +13,8 @@ function getStorePath() {
 function emptyStore() {
   return {
     version: 5,
-    courses: {}
+    courses: {},
+    playlists: []
   }
 }
 
@@ -146,6 +147,10 @@ function readStore() {
         delete data[key]
         dirty = true
       }
+    }
+    if (!Array.isArray(data.playlists)) {
+      data.playlists = []
+      dirty = true
     }
     if (dirty) writeStore(data)
     return data
@@ -767,6 +772,87 @@ export function getNotesSearchByCourse() {
     map[coursePath] = chunks.join('\n').toLowerCase()
   }
   return map
+}
+
+function finiteNumber(value, fallback) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function normalizePlaylist(input, existing) {
+  const source = input && typeof input === 'object' ? input : {}
+  const rawId = String(source.id || existing?.id || '').trim()
+  const id = /^[a-zA-Z0-9_-]{1,80}$/.test(rawId) ? rawId : makeId()
+  const title =
+    String(source.title ?? existing?.title ?? 'Nueva lista')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120) || 'Nueva lista'
+  const position = {
+    x: finiteNumber(source.position?.x, existing?.position?.x ?? 48),
+    y: finiteNumber(source.position?.y, existing?.position?.y ?? 48)
+  }
+  const size = {
+    width: clampNumber(finiteNumber(source.size?.width, existing?.size?.width ?? 320), 280, 960),
+    height: clampNumber(finiteNumber(source.size?.height, existing?.size?.height ?? 220), 140, 8000)
+  }
+  const rawPaths = Array.isArray(source.coursePaths)
+    ? source.coursePaths
+    : existing?.coursePaths || []
+  const coursePaths = []
+  const seen = new Set()
+  for (const item of rawPaths) {
+    const name = path.basename(String(item || '').trim())
+    if (!name || name === '.' || name === '..' || seen.has(name)) continue
+    seen.add(name)
+    coursePaths.push(name)
+  }
+  const now = Date.now()
+  return {
+    id,
+    title,
+    position,
+    size,
+    coursePaths,
+    createdAt: existing?.createdAt || now,
+    updatedAt: source === existing && existing?.updatedAt ? existing.updatedAt : now
+  }
+}
+
+export function listPlaylists() {
+  const store = readStore()
+  return (store.playlists || []).map((playlist) => normalizePlaylist(playlist, playlist))
+}
+
+export function upsertPlaylist(payload) {
+  const store = readStore()
+  if (!Array.isArray(store.playlists)) store.playlists = []
+  const existing = store.playlists.find((playlist) => playlist.id === payload?.id)
+  const next = normalizePlaylist(payload, existing)
+  if (existing && existing.id === next.id) {
+    const index = store.playlists.findIndex((playlist) => playlist.id === next.id)
+    store.playlists[index] = next
+  } else {
+    store.playlists.push(next)
+  }
+  writeStore(store)
+  return next
+}
+
+export function deletePlaylist(playlistId) {
+  const store = readStore()
+  if (!Array.isArray(store.playlists)) store.playlists = []
+  const id = String(playlistId || '')
+  const next = store.playlists.filter((playlist) => playlist.id !== id)
+  if (next.length !== store.playlists.length) {
+    store.playlists = next
+    writeStore(store)
+  }
+  return { ok: true }
 }
 
 /** Absolute path to learning-store.json (notes, projects, progress). */

@@ -63,7 +63,10 @@ import {
   deleteProject,
   getProjectLinkedPath,
   getNotesSearchByCourse,
-  ensureLearningStoreFile
+  ensureLearningStoreFile,
+  listPlaylists,
+  upsertPlaylist,
+  deletePlaylist
 } from './services/learningStore.js'
 
 protocol.registerSchemesAsPrivileged([
@@ -611,6 +614,9 @@ function registerIpcHandlers() {
   ipcMain.handle('delete-project', (_event, { coursePath, projectId }) =>
     deleteProject(coursePath, projectId)
   )
+  ipcMain.handle('list-playlists', () => listPlaylists())
+  ipcMain.handle('upsert-playlist', (_event, playlist) => upsertPlaylist(playlist))
+  ipcMain.handle('delete-playlist', (_event, playlistId) => deletePlaylist(playlistId))
 
   ipcMain.handle('pick-project-folder', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {

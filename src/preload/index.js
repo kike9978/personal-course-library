@@ -56,6 +56,9 @@ const api = {
     ipcRenderer.invoke('upsert-project', { coursePath, project }),
   deleteProject: (coursePath, projectId) =>
     ipcRenderer.invoke('delete-project', { coursePath, projectId }),
+  listPlaylists: () => ipcRenderer.invoke('list-playlists'),
+  upsertPlaylist: (playlist) => ipcRenderer.invoke('upsert-playlist', playlist),
+  deletePlaylist: (playlistId) => ipcRenderer.invoke('delete-playlist', playlistId),
   pickProjectFolder: () => ipcRenderer.invoke('pick-project-folder'),
   pickNoteImage: () => ipcRenderer.invoke('pick-note-image'),
   saveNoteImage: (payload) => ipcRenderer.invoke('save-note-image', payload),
