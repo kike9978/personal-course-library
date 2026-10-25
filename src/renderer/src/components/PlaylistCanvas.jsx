@@ -32,6 +32,7 @@ import CourseEditModal from './CourseEditModal'
 import CoverSearchModal from './CoverSearchModal'
 import PlaylistBuilder from './PlaylistBuilder'
 import brandMark from '../assets/img/brand-mark.svg'
+import { InstitutionMark } from './InstitutionMark'
 import { MAX_NESTED, settleNesting } from '../../../shared/playlistNest.js'
 import {
   PLAYLIST_CARD_H,
@@ -395,7 +396,17 @@ function CourseNode({ data }) {
       />
       <div className="playlist-course__text">
         <h3 title={data.why ? `${data.title}. ${data.why}` : data.title}>{data.title}</h3>
-        <p title={meta}>{meta}</p>
+        {data.missing ? (
+          <p title={meta}>{meta}</p>
+        ) : (
+          <p className="playlist-course__academy" title={meta}>
+            <InstitutionMark institution={data.institution} nameClassName="institution-name" />
+            {typeof data.percent === 'number' ? (
+              <span>{`${data.institution ? ' · ' : ''}${data.percent}%`}</span>
+            ) : null}
+            {!data.institution && typeof data.percent !== 'number' ? 'Curso' : null}
+          </p>
+        )}
       </div>
       <div className="playlist-course__actions nodrag nopan">
         <button
@@ -1637,11 +1648,17 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
                           {course.title || course.path}
                         </span>
                         <span className="playlist-course-row__meta">
-                          {member
-                            ? 'En esta lista'
-                            : count > 0
-                              ? `En ${count} ${count === 1 ? 'lista' : 'listas'}`
-                              : course.institution || 'Arrastrar'}
+                          {member ? (
+                            'En esta lista'
+                          ) : count > 0 ? (
+                            `En ${count} ${count === 1 ? 'lista' : 'listas'}`
+                          ) : (
+                            <InstitutionMark
+                              institution={course.institution}
+                              nameClassName="institution-name"
+                              emptyLabel="Arrastrar"
+                            />
+                          )}
                         </span>
                       </div>
                       <button

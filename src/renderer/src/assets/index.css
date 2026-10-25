@@ -5932,6 +5932,18 @@ kbd {
   text-overflow: ellipsis;
 }
 
+.playlist-course-row__meta .institution-logo,
+.playlist-course__academy .institution-logo {
+  display: block;
+}
+
+.playlist-course__academy {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
 .playlist-course-row__add {
   flex: none;
   border: var(--border-thin);
