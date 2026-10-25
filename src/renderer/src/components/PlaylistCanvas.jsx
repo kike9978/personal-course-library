@@ -20,15 +20,24 @@ import AppNav from './AppNav'
 import CourseDetailPanel from './CourseDetailPanel'
 import CourseEditModal from './CourseEditModal'
 import CoverSearchModal from './CoverSearchModal'
+import PlaylistBuilder from './PlaylistBuilder'
 import brandMark from '../assets/img/brand-mark.svg'
+import { settleNesting } from '../../../shared/playlistNest.js'
 import {
   PLAYLIST_CARD_H,
   PLAYLIST_COVER_H,
   PLAYLIST_DEFAULT_W,
   PLAYLIST_GAP,
+  PLAYLIST_HEADER,
+  PLAYLIST_MAX_W,
+  PLAYLIST_MIN_W,
   PLAYLIST_PAD_X,
+  NEST_FRAME_X,
+  NEST_COURSE_X,
   buildFlow,
   contentHeight,
+  orderPlaylists,
+  placeWithoutOverlap,
   playlistAtPoint,
   reorderCoursePaths,
   withFittedHeight
@@ -40,6 +49,12 @@ function heightToStore(height, count, bigCover) {
   if (!bigCover) return height
   const extra = contentHeight(count, PLAYLIST_COVER_H) - contentHeight(count, PLAYLIST_CARD_H)
   return Math.max(contentHeight(count), height - extra)
+}
+
+function showPlaylists(list, cardHeight = PLAYLIST_CARD_H) {
+  const settled = settleNesting(list)
+  const byId = new Map(settled.map((playlist) => [playlist.id, playlist]))
+  return settled.map((playlist) => withFittedHeight(playlist, cardHeight, byId))
 }
 
 function readNodeSize(node, fallback) {
@@ -62,13 +77,15 @@ function PlaylistNode({ id, data }) {
       data-playlist-id={id}
     >
       <NodeResizer
-        minWidth={280}
+        minWidth={PLAYLIST_MIN_W}
+        maxWidth={PLAYLIST_MAX_W}
         minHeight={data.minHeight}
+        maxHeight={data.minHeight}
         color="#e84570"
         lineClassName="playlist-frame__resize-line"
         handleClassName="playlist-frame__resize-handle"
       />
-      <header className="playlist-frame__drag">
+      <header className="playlist-frame__drag" title={data.why || undefined}>
         <input
           className="playlist-frame__title nodrag nopan nowheel"
           data-playlist-title={id}
@@ -98,7 +115,44 @@ function PlaylistNode({ id, data }) {
           </svg>
         </button>
       </header>
-      {data.count === 0 ? <p className="playlist-frame__empty">Arrastra un curso aquí</p> : null}
+      {(data.nests || []).map((nest) => (
+        <div
+          key={nest.childId}
+          className="playlist-nest nodrag nopan"
+          style={{ top: nest.y, height: nest.height, left: NEST_FRAME_X, right: NEST_FRAME_X }}
+          title={nest.why || undefined}
+        >
+          <div className="playlist-nest__head">
+            <button
+              type="button"
+              className="playlist-nest__title"
+              onClick={() => actions?.selectPlaylist(nest.childId)}
+            >
+              {nest.title}
+            </button>
+            <span className="playlist-frame__count">{nest.count}</span>
+            <button
+              type="button"
+              className="playlist-frame__icon"
+              aria-label={`Sacar ${nest.title}`}
+              onClick={() => actions?.unnestPlaylist(nest.childId)}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM5 5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6H5V5z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      ))}
+      {data.count === 0 && !(data.nests || []).length ? (
+        <p className="playlist-frame__empty">Arrastra un curso o una lista aquí</p>
+      ) : null}
     </div>
   )
 }
@@ -191,7 +245,7 @@ function CourseNode({ data }) {
         eager
       />
       <div className="playlist-course__text">
-        <h3 title={data.title}>{data.title}</h3>
+        <h3 title={data.why ? `${data.title}. ${data.why}` : data.title}>{data.title}</h3>
         <p title={meta}>{meta}</p>
       </div>
       <div className="playlist-course__actions nodrag nopan">
@@ -266,6 +320,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   const [playlists, setPlaylists] = useState([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [ordering, setOrdering] = useState(false)
   const [search, setSearch] = useState('')
   const [institutionFilter, setInstitutionFilter] = useState('')
   const [programFilter, setProgramFilter] = useState('')
@@ -279,6 +334,9 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   const [detailPath, setDetailPath] = useState(null)
   const [editingCourse, setEditingCourse] = useState(null)
   const [coverSearch, setCoverSearch] = useState(null)
+  const [builderOpen, setBuilderOpen] = useState(false)
+  const [intentReady, setIntentReady] = useState(!window.api?.getPlaylistIntent)
+  const [intent, setIntent] = useState({ goal: '', interests: [] })
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const playlistsRef = useRef(playlists)
@@ -295,7 +353,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   coursesRef.current = courses
   selectedIdRef.current = selectedId
 
-  const { fitView, screenToFlowPosition } = useReactFlow()
+  const { fitView, getViewport, getZoom, screenToFlowPosition, setCenter } = useReactFlow()
   const nodesReady = useNodesInitialized()
   const courseSignature = useMemo(() => courseSignatureOf(courses), [courses])
 
@@ -368,7 +426,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     window.api
       .listPlaylists()
       .then((list) => {
-        if (!cancelled) setPlaylists((list || []).map(withFittedHeight))
+        if (!cancelled) setPlaylists(showPlaylists(list || []))
       })
       .catch((err) => {
         if (!cancelled) toast.error(err.message || 'No se pudieron cargar las listas')
@@ -398,12 +456,27 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     const frame = window.requestAnimationFrame(() => {
       const input = document.querySelector(`[data-playlist-title="${CSS.escape(focusPlaylistId)}"]`)
       if (!(input instanceof HTMLInputElement)) return
+      const playlist = playlistsRef.current.find((item) => item.id === focusPlaylistId)
+      if (playlist) {
+        const fitted = withFittedHeight(
+          playlist,
+          bigCoverRef.current ? PLAYLIST_COVER_H : PLAYLIST_CARD_H
+        )
+        setCenter(
+          fitted.position.x + fitted.size.width / 2,
+          fitted.position.y + fitted.size.height / 2,
+          {
+            zoom: getZoom(),
+            duration: 250
+          }
+        )
+      }
       input.focus()
       input.select()
       setFocusPlaylistId(null)
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [focusPlaylistId, nodes])
+  }, [focusPlaylistId, nodes, getZoom, setCenter])
 
   useOnSelectionChange({
     onChange: ({ nodes: selected }) => {
@@ -415,14 +488,19 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   })
 
   const persistPlaylist = useCallback(async (playlist) => {
-    const next = withFittedHeight(playlist)
-    setPlaylists((prev) => prev.map((item) => (item.id === next.id ? next : item)))
+    const cardHeight = bigCoverRef.current ? PLAYLIST_COVER_H : PLAYLIST_CARD_H
+    const merged = playlistsRef.current.map((item) =>
+      item.id === playlist.id ? { ...item, ...playlist } : item
+    )
+    const next = showPlaylists(merged, cardHeight)
+    const saved = next.find((item) => item.id === playlist.id) || playlist
+    setPlaylists(next)
     try {
-      await window.api.upsertPlaylist(next)
+      await window.api.upsertPlaylist(saved)
     } catch (err) {
       toast.error(err.message || 'No se pudo guardar la lista')
       const fresh = await window.api.listPlaylists().catch(() => null)
-      if (fresh) setPlaylists(fresh.map(withFittedHeight))
+      if (fresh) setPlaylists(showPlaylists(fresh, cardHeight))
     }
   }, [])
 
@@ -441,11 +519,11 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     if (!window.confirm(`¿Quitar «${label}» del tablero? Los cursos siguen en la biblioteca.`)) {
       return
     }
-    setPlaylists((prev) => prev.filter((playlist) => playlist.id !== id))
+    setPlaylists((prev) => showPlaylists(prev.filter((playlist) => playlist.id !== id)))
     window.api.deletePlaylist(id).catch(async (err) => {
       toast.error(err.message || 'No se pudo quitar la lista')
       const fresh = await window.api.listPlaylists().catch(() => null)
-      if (fresh) setPlaylists(fresh.map(withFittedHeight))
+      if (fresh) setPlaylists(showPlaylists(fresh))
     })
   }, [])
 
@@ -513,7 +591,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   useEffect(() => {
     if (!detailPath) return undefined
     const onKeyDown = (event) => {
-      if (event.key !== 'Escape' || editingCourse || coverSearch) return
+      if (event.key !== 'Escape' || editingCourse || coverSearch || builderOpen) return
       const tag = event.target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (event.target?.isContentEditable) return
@@ -521,7 +599,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [detailPath, editingCourse, coverSearch])
+  }, [detailPath, editingCourse, coverSearch, builderOpen])
 
   const addCourse = useCallback(
     (playlistId, coursePath) => {
@@ -553,27 +631,159 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     [persistPlaylist]
   )
 
+  useEffect(() => {
+    if (!window.api?.getPlaylistIntent) return undefined
+    let cancelled = false
+    window.api
+      .getPlaylistIntent()
+      .then((next) => {
+        if (!cancelled && next) setIntent(next)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIntentReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const saveIntent = useCallback((next) => {
+    setIntent(next)
+    const save = window.api?.savePlaylistIntent
+    if (!save) return
+    save(next).catch(() => {})
+  }, [])
+
+  const cardHeightNow = useCallback(
+    () => (bigCoverRef.current ? PLAYLIST_COVER_H : PLAYLIST_CARD_H),
+    []
+  )
+
+  const playlistOrigin = useCallback(() => {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    let position = { x: 48, y: 48 }
+    if (rect && rect.width > 0) {
+      const center = screenToFlowPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top + Math.min(rect.height * 0.38, 280)
+      })
+      position = { x: center.x - PLAYLIST_DEFAULT_W / 2, y: center.y - 40 }
+    }
+    return position
+  }, [screenToFlowPosition])
+
+  const openPosition = useCallback(
+    (occupied, size, preferred) =>
+      placeWithoutOverlap(occupied, size, preferred, { cardHeight: cardHeightNow() }),
+    [cardHeightNow]
+  )
+
+  const createBuiltLists = useCallback(
+    async (lists) => {
+      const origin = playlistOrigin()
+      const cardHeight = cardHeightNow()
+      const created = []
+      for (const item of lists) {
+        const children = []
+        for (const child of item.children || []) {
+          const childPaths = child.coursePaths || []
+          const savedChild = await window.api.upsertPlaylist({
+            title: child.title || 'Nuevo paso',
+            why: child.why || '',
+            courseWhys: child.courseWhys || {},
+            childIds: [],
+            position: origin,
+            size: {
+              width: PLAYLIST_DEFAULT_W,
+              height: contentHeight(childPaths.length, cardHeight)
+            },
+            coursePaths: childPaths
+          })
+          children.push(savedChild)
+        }
+        const coursePaths = item.coursePaths || []
+        const childIds = children.map((child) => child.id)
+        const draft = {
+          title: item.title || 'Nueva lista',
+          why: item.why || '',
+          courseWhys: item.courseWhys || {},
+          childIds,
+          position: { x: 0, y: 0 },
+          size: {
+            width: PLAYLIST_DEFAULT_W,
+            height: contentHeight(coursePaths.length, cardHeight)
+          },
+          coursePaths
+        }
+        const byId = new Map(
+          [...playlistsRef.current, ...created, ...children, { ...draft, id: 'draft' }].map(
+            (playlist) => [playlist.id, playlist]
+          )
+        )
+        const visual = withFittedHeight({ ...draft, id: 'draft' }, cardHeight, byId)
+        const nestedIds = new Set(created.flatMap((playlist) => playlist.childIds || []))
+        const position = openPosition(
+          [...playlistsRef.current, ...created.filter((playlist) => !nestedIds.has(playlist.id))],
+          visual.size,
+          origin
+        )
+        const playlist = await window.api.upsertPlaylist({ ...draft, position, size: visual.size })
+        created.push(playlist, ...children)
+      }
+      if (created.length) {
+        const next = showPlaylists([...playlistsRef.current, ...created], cardHeight)
+        setPlaylists(next)
+        const parent = next.find((playlist) =>
+          created.some((item) => item.id === playlist.id && !playlist.parentId)
+        )
+        if (parent) {
+          setSelectedId(parent.id)
+          setFocusPlaylistId(parent.id)
+        }
+      }
+      return lists.length
+    },
+    [cardHeightNow, openPosition, playlistOrigin]
+  )
+
+  const extendSelectedPlaylist = useCallback(async (item) => {
+    const current = playlistsRef.current.find((playlist) => playlist.id === selectedIdRef.current)
+    if (!current) throw new Error('Selecciona una lista')
+    const coursePaths = [...current.coursePaths]
+    for (const coursePath of item?.coursePaths || []) {
+      if (!coursePaths.includes(coursePath)) coursePaths.push(coursePath)
+    }
+    const next = withFittedHeight({
+      ...current,
+      why: current.why || item?.why || '',
+      coursePaths,
+      courseWhys: { ...(current.courseWhys || {}), ...(item?.courseWhys || {}) }
+    })
+    const saved = withFittedHeight(await window.api.upsertPlaylist(next))
+    setPlaylists((prev) => prev.map((playlist) => (playlist.id === saved.id ? saved : playlist)))
+    return coursePaths.length - current.coursePaths.length
+  }, [])
+
   const createPlaylist = useCallback(async () => {
     if (creatingRef.current) return
     creatingRef.current = true
     setCreating(true)
     try {
-      const rect = canvasRef.current?.getBoundingClientRect()
-      let position = {
-        x: 48 + (playlistsRef.current.length % 6) * 28,
-        y: 48 + (playlistsRef.current.length % 6) * 24
-      }
-      if (rect && rect.width > 0) {
-        const center = screenToFlowPosition({
-          x: rect.left + rect.width / 2,
-          y: rect.top + Math.min(rect.height * 0.38, 280)
-        })
-        position = { x: center.x - PLAYLIST_DEFAULT_W / 2, y: center.y - 40 }
-      }
+      const cardHeight = cardHeightNow()
+      const visual = withFittedHeight(
+        {
+          position: { x: 0, y: 0 },
+          size: { width: PLAYLIST_DEFAULT_W, height: contentHeight(0) },
+          coursePaths: []
+        },
+        cardHeight
+      )
+      const position = openPosition(playlistsRef.current, visual.size, playlistOrigin())
       const created = await window.api.upsertPlaylist({
         title: 'Nueva lista',
         position,
-        size: { width: PLAYLIST_DEFAULT_W, height: 220 },
+        size: { width: PLAYLIST_DEFAULT_W, height: contentHeight(0) },
         coursePaths: []
       })
       const next = withFittedHeight(created)
@@ -586,7 +796,53 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       creatingRef.current = false
       setCreating(false)
     }
-  }, [screenToFlowPosition])
+  }, [cardHeightNow, openPosition, playlistOrigin])
+
+  const orderBoard = useCallback(async () => {
+    const current = playlistsRef.current
+    if (!current.length || ordering) return
+    const rect = canvasRef.current?.getBoundingClientRect()
+    const zoom = getViewport().zoom || 1
+    const cardHeight = cardHeightNow()
+    let originX = 48
+    let originY = 48
+    let maxRowWidth = 1280
+    if (rect && rect.width > 0) {
+      const origin = screenToFlowPosition({ x: rect.left + 36, y: rect.top + 36 })
+      originX = origin.x
+      originY = origin.y
+      maxRowWidth = Math.max(PLAYLIST_DEFAULT_W, rect.width / zoom - 72)
+    }
+    const next = orderPlaylists(current, { cardHeight, originX, originY, maxRowWidth })
+    const moved = next.filter((playlist) => {
+      const before = current.find((item) => item.id === playlist.id)
+      if (!before) return false
+      return (
+        Math.abs(playlist.position.x - before.position.x) > 0.5 ||
+        Math.abs(playlist.position.y - before.position.y) > 0.5
+      )
+    })
+    if (!moved.length) {
+      fitView({ padding: 0.16, duration: 250 })
+      return
+    }
+    setOrdering(true)
+    setPlaylists(next)
+    try {
+      await Promise.all(moved.map((playlist) => window.api.upsertPlaylist(playlist)))
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          fitView({ padding: 0.16, duration: 280 })
+        })
+      })
+    } catch (err) {
+      toast.error(err.message || 'No se pudieron ordenar las listas')
+      const fresh = await window.api.listPlaylists().catch(() => null)
+      if (fresh) setPlaylists(showPlaylists(fresh))
+    } finally {
+      setOrdering(false)
+    }
+  }, [cardHeightNow, fitView, getViewport, ordering, screenToFlowPosition])
 
   const handleNodesChange = useCallback(
     (changes) => {
@@ -600,7 +856,8 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
             if (node.type !== 'course') return node
             const change = live.find((item) => item.id === node.parentId)
             if (!change) return node
-            const cardWidth = Math.max(120, change.dimensions.width - PLAYLIST_PAD_X * 2)
+            const inset = node.data?.nested ? NEST_COURSE_X : PLAYLIST_PAD_X
+            const cardWidth = Math.max(120, change.dimensions.width - inset * 2)
             return {
               ...node,
               width: cardWidth,
@@ -643,6 +900,43 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       if (node.type === 'playlist') {
         const current = list.find((playlist) => playlist.id === node.id)
         if (!current) return
+        const cardHeight = bigCoverRef.current ? PLAYLIST_COVER_H : PLAYLIST_CARD_H
+        const point = {
+          x: node.position.x + current.size.width / 2,
+          y: node.position.y + 28
+        }
+        const hit = playlistAtPoint(list, point, { ignoreId: node.id, cardHeight })
+        const canNest =
+          hit &&
+          hit.id !== current.id &&
+          !current.parentId &&
+          !(current.childIds || []).length &&
+          !hit.parentId &&
+          !(hit.childIds || []).includes(current.id)
+        if (canNest && (hit.childIds || []).length >= 6) {
+          toast('Esa lista ya tiene 6 listas dentro')
+          syncFlow(list)
+          return
+        }
+        if (canNest) {
+          const parent = {
+            ...hit,
+            childIds: [...(hit.childIds || []), current.id].slice(0, 6)
+          }
+          const next = showPlaylists(
+            list.map((playlist) => (playlist.id === parent.id ? parent : playlist)),
+            cardHeight
+          )
+          setPlaylists(next)
+          const saved = next.find((playlist) => playlist.id === parent.id)
+          window.api.upsertPlaylist(saved || parent).catch(async (err) => {
+            toast.error(err.message || 'No se pudo anidar la lista')
+            const fresh = await window.api.listPlaylists().catch(() => null)
+            if (fresh) setPlaylists(showPlaylists(fresh, cardHeight))
+          })
+          setSelectedId(parent.id)
+          return
+        }
         const position = { x: node.position.x, y: node.position.y }
         const measured = readNodeSize(node, current.size)
         const size = {
@@ -662,10 +956,11 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       if (node.type !== 'course') return
       const current = list.find((playlist) => playlist.id === node.data.playlistId)
       if (!current) return
+      const sectionTop = node.data.sectionTop ?? PLAYLIST_HEADER
       const nextPaths = reorderCoursePaths(
         current.coursePaths,
         node.data.coursePath,
-        node.position.y,
+        node.position.y - sectionTop + PLAYLIST_HEADER,
         bigCoverRef.current ? PLAYLIST_COVER_H : PLAYLIST_CARD_H
       )
       const same = nextPaths.every((coursePath, index) => coursePath === current.coursePaths[index])
@@ -705,7 +1000,9 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       courses.length === 1
         ? ` y «${courses[0].data?.title || 'un curso'}»`
         : ` y ${courses.length} cursos`
-    return window.confirm(`¿Quitar ${label}${extra} del tablero? Los cursos siguen en la biblioteca.`)
+    return window.confirm(
+      `¿Quitar ${label}${extra} del tablero? Los cursos siguen en la biblioteca.`
+    )
   }, [])
 
   const onNodesDelete = useCallback((deleted) => {
@@ -720,29 +1017,36 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       removals.set(node.data.playlistId, paths)
     }
     const prev = playlistsRef.current
-    const next = prev
-      .filter((playlist) => !removedGroups.has(playlist.id))
-      .map((playlist) => {
-        const drop = removals.get(playlist.id)
-        if (!drop?.length) return playlist
-        const dropSet = new Set(drop)
-        return withFittedHeight({
-          ...playlist,
-          coursePaths: playlist.coursePaths.filter((coursePath) => !dropSet.has(coursePath))
+    const next = showPlaylists(
+      prev
+        .filter((playlist) => !removedGroups.has(playlist.id))
+        .map((playlist) => {
+          const drop = removals.get(playlist.id)
+          const childIds = (playlist.childIds || []).filter((id) => !removedGroups.has(id))
+          if (!drop?.length && childIds.length === (playlist.childIds || []).length) {
+            return { ...playlist, childIds }
+          }
+          const dropSet = new Set(drop || [])
+          return {
+            ...playlist,
+            childIds,
+            coursePaths: playlist.coursePaths.filter((coursePath) => !dropSet.has(coursePath))
+          }
         })
-      })
+    )
     setPlaylists(next)
     const tasks = [...removedGroups].map((id) => window.api.deletePlaylist(id))
     for (const playlist of next) {
       const before = prev.find((item) => item.id === playlist.id)
-      if (before && before.coursePaths.length !== playlist.coursePaths.length) {
-        tasks.push(window.api.upsertPlaylist(playlist))
-      }
+      if (!before) continue
+      const pathsChanged = before.coursePaths.length !== playlist.coursePaths.length
+      const nestChanged = (before.childIds || []).join() !== (playlist.childIds || []).join()
+      if (pathsChanged || nestChanged) tasks.push(window.api.upsertPlaylist(playlist))
     }
     Promise.all(tasks).catch(async (err) => {
       toast.error(err.message || 'No se pudo actualizar la lista')
       const fresh = await window.api.listPlaylists().catch(() => null)
-      if (fresh) setPlaylists(fresh.map(withFittedHeight))
+      if (fresh) setPlaylists(showPlaylists(fresh))
     })
   }, [])
 
@@ -791,6 +1095,56 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     [openCourse]
   )
 
+  const selectPlaylist = useCallback((id) => {
+    setSelectedId(id)
+  }, [])
+
+  const unnestPlaylist = useCallback(
+    (childId) => {
+      const list = playlistsRef.current
+      const child = list.find((playlist) => playlist.id === childId)
+      const parent = list.find((playlist) => (playlist.childIds || []).includes(childId))
+      if (!child || !parent) return
+      const cardHeight = cardHeightNow()
+      const parentNext = {
+        ...parent,
+        childIds: parent.childIds.filter((id) => id !== childId)
+      }
+      const released = {
+        ...child,
+        parentId: '',
+        childIds: []
+      }
+      const merged = list.map((playlist) => {
+        if (playlist.id === parent.id) return parentNext
+        if (playlist.id === child.id) return released
+        return playlist
+      })
+      const position = openPosition(merged, child.size, {
+        x: parent.position.x + parent.size.width + PLAYLIST_GAP,
+        y: parent.position.y
+      })
+      const next = showPlaylists(
+        merged.map((playlist) => (playlist.id === child.id ? { ...released, position } : playlist)),
+        cardHeight
+      )
+      setPlaylists(next)
+      const savedParent = next.find((playlist) => playlist.id === parent.id)
+      const savedChild = next.find((playlist) => playlist.id === child.id)
+      Promise.all([
+        window.api.upsertPlaylist(savedParent),
+        window.api.upsertPlaylist(savedChild)
+      ]).catch(async (err) => {
+        toast.error(err.message || 'No se pudo sacar la lista')
+        const fresh = await window.api.listPlaylists().catch(() => null)
+        if (fresh) setPlaylists(showPlaylists(fresh, cardHeight))
+      })
+      setSelectedId(child.id)
+      setFocusPlaylistId(child.id)
+    },
+    [cardHeightNow, openPosition]
+  )
+
   const actions = useMemo(
     () => ({
       dropId,
@@ -799,9 +1153,21 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       renamePlaylist,
       deletePlaylist,
       removeCourse,
-      openCourse
+      openCourse,
+      selectPlaylist,
+      unnestPlaylist
     }),
-    [dropId, selectedId, detailPath, renamePlaylist, deletePlaylist, removeCourse, openCourse]
+    [
+      dropId,
+      selectedId,
+      detailPath,
+      renamePlaylist,
+      deletePlaylist,
+      removeCourse,
+      openCourse,
+      selectPlaylist,
+      unnestPlaylist
+    ]
   )
 
   const selectedPlaylist = playlists.find((playlist) => playlist.id === selectedId) || null
@@ -897,14 +1263,32 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
             <h1>Listas</h1>
             <AppNav active="playlists" onSelect={onNavigate} />
           </div>
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={createPlaylist}
-            disabled={creating}
-          >
-            Nueva lista
-          </button>
+          <div className="playlist-board__actions">
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={orderBoard}
+              disabled={ordering || loading || playlists.length === 0}
+            >
+              Ordenar
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => setBuilderOpen(true)}
+              disabled={!intentReady}
+            >
+              Armar
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={createPlaylist}
+              disabled={creating}
+            >
+              Nueva lista
+            </button>
+          </div>
         </header>
         <div className="playlist-board__body">
           <aside className="playlist-board__sidebar">
@@ -929,6 +1313,9 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
                   ? `${visibleCourses.length} · añadir a «${selectedPlaylist.title}»`
                   : `${visibleCourses.length} cursos`}
               </p>
+              {selectedPlaylist?.why ? (
+                <p className="playlist-board__why">{selectedPlaylist.why}</p>
+              ) : null}
             </div>
             <div className="search-field playlist-board__search">
               <svg
@@ -1121,7 +1508,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
               />
               {!loading && playlists.length === 0 ? (
                 <Panel position="top-center" className="playlist-board__hint">
-                  Crea una lista y arrastra cursos desde el lateral.
+                  Crea una lista, o usa Armar para agrupar cursos parecidos.
                 </Panel>
               ) : null}
               {loading ? (
@@ -1138,9 +1525,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
               onOpenCourse={(course, target) => onOpenCourse?.(course, target)}
               onEdit={setEditingCourse}
               onToggleInProcess={toggleInProcess}
-              onGenerateProps={
-                detailCourse.missingProps ? () => generateProps(detailCourse) : null
-              }
+              onGenerateProps={detailCourse.missingProps ? () => generateProps(detailCourse) : null}
               onSearchCover={() =>
                 setCoverSearch({ courses: [detailCourse], initialStep: 'choose' })
               }
@@ -1154,6 +1539,18 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
             themeOptions={themes}
             onCourseUpdated={() => setEditingCourse(null)}
             onClose={() => setEditingCourse(null)}
+          />
+        ) : null}
+        {builderOpen ? (
+          <PlaylistBuilder
+            courses={courses}
+            seedCourse={detailCourse}
+            selectedPlaylist={selectedPlaylist}
+            intent={intent}
+            onIntent={saveIntent}
+            onCreateLists={createBuiltLists}
+            onExtend={extendSelectedPlaylist}
+            onClose={() => setBuilderOpen(false)}
           />
         ) : null}
         {coverSearch ? (

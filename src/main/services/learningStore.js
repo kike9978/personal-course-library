@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
+import { normalizeChildIds, settleNesting } from '../../shared/playlistNest.js'
 
 const STORE_FILE = 'learning-store.json'
 const COMPLETE_THRESHOLD = 0.95
@@ -783,6 +784,40 @@ function clampNumber(value, min, max) {
   return Math.min(max, Math.max(min, value))
 }
 
+function clipText(value, max) {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max)
+}
+
+function normalizeCourseWhys(raw, coursePaths) {
+  const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+  const notes = {}
+  for (const coursePath of coursePaths) {
+    const text = clipText(source[coursePath], 180)
+    if (text) notes[coursePath] = text
+  }
+  return notes
+}
+
+function normalizePlaylistIntent(input) {
+  const source = input && typeof input === 'object' ? input : {}
+  const goal = clipText(source.goal, 180)
+  const interests = []
+  const seen = new Set()
+  const raw = Array.isArray(source.interests) ? source.interests : []
+  for (const item of raw) {
+    const text = clipText(item, 80)
+    const key = text.toLowerCase()
+    if (text.length < 2 || seen.has(key)) continue
+    seen.add(key)
+    interests.push(text)
+    if (interests.length >= 8) break
+  }
+  return { goal, interests }
+}
+
 function normalizePlaylist(input, existing) {
   const source = input && typeof input === 'object' ? input : {}
   const rawId = String(source.id || existing?.id || '').trim()
@@ -811,21 +846,45 @@ function normalizePlaylist(input, existing) {
     seen.add(name)
     coursePaths.push(name)
   }
+  const why = clipText(source.why !== undefined ? source.why : existing?.why, 280)
+  const childIds = normalizeChildIds(
+    source.childIds !== undefined ? source.childIds : existing?.childIds,
+    id
+  )
+  const courseWhys = normalizeCourseWhys(
+    source.courseWhys !== undefined ? source.courseWhys : existing?.courseWhys,
+    coursePaths
+  )
   const now = Date.now()
   return {
     id,
     title,
+    why,
     position,
     size,
     coursePaths,
+    childIds,
+    courseWhys,
     createdAt: existing?.createdAt || now,
     updatedAt: source === existing && existing?.updatedAt ? existing.updatedAt : now
   }
 }
 
+export function getPlaylistIntent() {
+  const store = readStore()
+  return normalizePlaylistIntent(store.playlistIntent)
+}
+
+export function savePlaylistIntent(payload) {
+  const store = readStore()
+  store.playlistIntent = normalizePlaylistIntent(payload)
+  writeStore(store)
+  return store.playlistIntent
+}
+
 export function listPlaylists() {
   const store = readStore()
-  return (store.playlists || []).map((playlist) => normalizePlaylist(playlist, playlist))
+  return settleNesting((store.playlists || []).map((playlist) => normalizePlaylist(playlist, playlist)))
 }
 
 export function upsertPlaylist(payload) {
@@ -847,7 +906,12 @@ export function deletePlaylist(playlistId) {
   const store = readStore()
   if (!Array.isArray(store.playlists)) store.playlists = []
   const id = String(playlistId || '')
-  const next = store.playlists.filter((playlist) => playlist.id !== id)
+  const next = store.playlists
+    .filter((playlist) => playlist.id !== id)
+    .map((playlist) => ({
+      ...playlist,
+      childIds: (playlist.childIds || []).filter((childId) => childId !== id)
+    }))
   if (next.length !== store.playlists.length) {
     store.playlists = next
     writeStore(store)

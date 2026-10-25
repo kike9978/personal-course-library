@@ -67,7 +67,9 @@ import {
   ensureLearningStoreFile,
   listPlaylists,
   upsertPlaylist,
-  deletePlaylist
+  deletePlaylist,
+  getPlaylistIntent,
+  savePlaylistIntent
 } from './services/learningStore.js'
 
 protocol.registerSchemesAsPrivileged([
@@ -644,6 +646,8 @@ function registerIpcHandlers() {
   ipcMain.handle('list-playlists', () => listPlaylists())
   ipcMain.handle('upsert-playlist', (_event, playlist) => upsertPlaylist(playlist))
   ipcMain.handle('delete-playlist', (_event, playlistId) => deletePlaylist(playlistId))
+  ipcMain.handle('get-playlist-intent', () => getPlaylistIntent())
+  ipcMain.handle('save-playlist-intent', (_event, intent) => savePlaylistIntent(intent))
 
   ipcMain.handle('pick-project-folder', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {

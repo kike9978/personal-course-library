@@ -52,7 +52,7 @@ function fact(value) {
 }
 
 /** Same title or folder, including accents and dashes that only look different. */
-function nameKey(value) {
+export function nameKey(value) {
   return fact(value)
     .normalize('NFKC')
     .replace(/[\u200b\u200c\u200d\ufeff\u00ad]/g, '')
