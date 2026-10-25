@@ -480,16 +480,21 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('save-course-description-batch', async (_event, { entries } = {}) => {
-    const saved = await saveCourseDescriptionBatch(entries)
+    const result = await saveCourseDescriptionBatch(entries)
     BrowserWindow.getAllWindows().forEach((win) => {
-      saved.forEach((item) => {
+      result.saved.forEach((item) => {
         win.webContents.send('course-updated', {
           coursePath: item.coursePath,
           fullData: item.props
         })
       })
     })
-    return { success: true, savedCount: saved.length }
+    return {
+      success: true,
+      savedCount: result.saved.length,
+      savedPaths: result.saved.map((item) => item.coursePath),
+      skips: result.skips
+    }
   })
 
   ipcMain.handle('open-course-folder', async (_event, courseDir) => {

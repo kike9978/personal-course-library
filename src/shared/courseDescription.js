@@ -5,11 +5,16 @@
  */
 
 const NOT_JSON = 'Ese texto no es JSON válido. No se guardó nada.'
-const NO_SUMMARY = 'Ese texto no tiene una descripción. No se guardó nada.'
-const NO_OUTCOMES = 'Ese texto no tiene resultados del temario. No se guardó nada.'
+const NO_SUMMARY = 'La descripción está vacía o es demasiado corta.'
+const NO_OUTCOMES = 'Faltan al menos dos resultados del temario.'
 const NO_BATCH = 'Ese texto no tiene descripciones. No se guardó nada.'
 const NO_BATCH_ROWS = 'Ese texto no tiene descripciones que guardar. No se guardó nada.'
-const EXAMPLE_ONLY = 'Esa respuesta es el ejemplo del encargo. No se guardó nada.'
+const SKIP_NOT_OBJECT = 'La fila no es un objeto.'
+const SKIP_NO_MATCH = 'No coincide con ningún curso marcado.'
+const SKIP_AMBIGUOUS = 'El título coincide con más de un curso y falta la carpeta.'
+const SKIP_DUPLICATE = 'Ese curso ya venía en otra fila. Se usó la primera.'
+const SKIP_MISSING = 'No vino en la respuesta.'
+const EXAMPLE_ONLY = 'La respuesta sigue siendo el ejemplo del encargo.'
 
 const EXAMPLE_SUMMARY = 'Two or three sentences on what this course teaches and who it is for.'
 const EXAMPLE_AUDIENCE = 'Who should take it, in one sentence.'
@@ -44,6 +49,16 @@ function fact(value) {
   return String(value ?? '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+/** Same title or folder, including accents and dashes that only look different. */
+function nameKey(value) {
+  return fact(value)
+    .normalize('NFKC')
+    .replace(/[\u200b\u200c\u200d\ufeff\u00ad]/g, '')
+    .replace(/[‘’′ʼ]/g, "'")
+    .replace(/[‐‑‒–—―]/g, '-')
+    .toLowerCase()
 }
 
 function clip(value, max) {
@@ -244,7 +259,7 @@ export function normalizeCourseDescription(value, expectedTitle) {
   }
 
   const named = fact(value.course)
-  if (named && expected && named.toLowerCase() !== expected.toLowerCase()) {
+  if (named && expected && nameKey(named) !== nameKey(expected)) {
     return { ok: false, error: wrongCourse(named, expected) }
   }
 
@@ -390,50 +405,65 @@ function matchBatchCourse(row, courses) {
   const folder = fact(row.folder || row.path)
   const title = fact(row.course)
   if (folder) {
-    const hits = courses.filter(
-      (course) => fact(course.path).toLowerCase() === folder.toLowerCase()
-    )
-    return hits.length === 1 ? hits[0] : null
+    const hits = courses.filter((course) => nameKey(course.path) === nameKey(folder))
+    if (hits.length === 1) return { course: hits[0] }
+    return { reason: SKIP_NO_MATCH, label: folder }
   }
-  if (!title) return null
-  const hits = courses.filter((course) => fact(course.title).toLowerCase() === title.toLowerCase())
-  return hits.length === 1 ? hits[0] : null
+  if (!title) return { reason: SKIP_NO_MATCH, label: '' }
+  const hits = courses.filter((course) => nameKey(course.title) === nameKey(title))
+  if (hits.length === 1) return { course: hits[0] }
+  if (hits.length > 1) return { reason: SKIP_AMBIGUOUS, label: title }
+  return { reason: SKIP_NO_MATCH, label: title }
 }
 
 /**
  * Parse one reply into rows for the courses this brief listed.
- * A broken reply writes nothing. A row for an unknown course, a duplicate, or a
- * short summary is dropped. The rest can be saved.
+ * A broken reply writes nothing. Each course that does not get a description
+ * is returned in `skips` with the reason. The rest can be saved.
  */
 export function parseCourseDescriptionBatch(text, courses) {
-  if (!fact(text)) return { ok: false, error: NOT_JSON }
+  if (!fact(text)) return { ok: false, error: NOT_JSON, items: [], skips: [], dropped: 0 }
   const value = extractJsonValue(text)
-  if (value == null) return { ok: false, error: NOT_JSON }
+  if (value == null) return { ok: false, error: NOT_JSON, items: [], skips: [], dropped: 0 }
   const rows = descriptionRows(value)
-  if (!rows) return { ok: false, error: NO_BATCH }
+  if (!rows) return { ok: false, error: NO_BATCH, items: [], skips: [], dropped: 0 }
 
   const allow = (Array.isArray(courses) ? courses : []).filter((course) => fact(course?.path))
   const items = []
   const seen = new Set()
+  const failed = new Map()
+  const strays = []
   let dropped = 0
 
   for (const row of rows) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) {
       dropped += 1
+      strays.push({ path: '', title: 'Fila vacía', reason: SKIP_NOT_OBJECT })
       continue
     }
-    const course = matchBatchCourse(row, allow)
-    const expected = fact(course?.title)
-    const key = fact(course?.path).toLowerCase()
-    if (!course || seen.has(key)) {
+    const match = matchBatchCourse(row, allow)
+    if (!match.course) {
       dropped += 1
+      strays.push({ path: '', title: match.label || 'Sin nombre', reason: match.reason })
+      continue
+    }
+    const course = match.course
+    const expected = fact(course.title) || course.path
+    const key = fact(course.path).toLowerCase()
+    if (seen.has(key)) {
+      dropped += 1
+      strays.push({ path: course.path, title: expected, reason: SKIP_DUPLICATE })
       continue
     }
     const normalized = normalizeCourseDescription(row, expected)
     if (!normalized.ok) {
       dropped += 1
+      if (!failed.has(key)) {
+        failed.set(key, { path: course.path, title: expected, reason: normalized.error })
+      }
       continue
     }
+    failed.delete(key)
     seen.add(key)
     items.push({
       path: course.path,
@@ -443,8 +473,22 @@ export function parseCourseDescriptionBatch(text, courses) {
     })
   }
 
-  if (!items.length) return { ok: false, error: NO_BATCH_ROWS }
-  return { ok: true, items, dropped }
+  const skips = []
+  for (const course of allow) {
+    const key = fact(course.path).toLowerCase()
+    if (seen.has(key)) continue
+    skips.push(
+      failed.get(key) || {
+        path: course.path,
+        title: fact(course.title) || course.path,
+        reason: SKIP_MISSING
+      }
+    )
+  }
+  skips.push(...strays.filter((skip) => !skip.path))
+
+  if (!items.length) return { ok: false, error: NO_BATCH_ROWS, items, skips, dropped }
+  return { ok: true, items, skips, dropped }
 }
 
 /** Description object stored on courseProps, or null when the field is empty or invalid. */

@@ -78,7 +78,11 @@ function LibraryHeader({
   onSortModeChange,
   onExportCourses,
   isExporting,
-  canExport
+  canExport,
+  missingCoverCount = 0,
+  missingDescriptionCount = 0,
+  onSearchCovers,
+  onWriteDescriptions
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -248,6 +252,42 @@ function LibraryHeader({
                   <span>{isExporting ? 'Exportando…' : 'Exportar cursos'}</span>
                   <small>JSON con metadatos</small>
                 </button>
+                {missingCoverCount > 0 || missingDescriptionCount > 0 ? (
+                  <hr className="header-popover__sep" />
+                ) : null}
+                {missingCoverCount > 0 ? (
+                  <button
+                    type="button"
+                    className="header-popover__item"
+                    role="menuitem"
+                    onClick={() => {
+                      setMoreOpen(false)
+                      onSearchCovers?.()
+                    }}
+                  >
+                    <span>Buscar portadas</span>
+                    <small>
+                      {missingCoverCount} curso{missingCoverCount === 1 ? '' : 's'} sin portada
+                    </small>
+                  </button>
+                ) : null}
+                {missingDescriptionCount > 0 ? (
+                  <button
+                    type="button"
+                    className="header-popover__item"
+                    role="menuitem"
+                    onClick={() => {
+                      setMoreOpen(false)
+                      onWriteDescriptions?.()
+                    }}
+                  >
+                    <span>Escribir descripciones</span>
+                    <small>
+                      {missingDescriptionCount} curso{missingDescriptionCount === 1 ? '' : 's'} sin
+                      descripción
+                    </small>
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>

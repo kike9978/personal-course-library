@@ -38,6 +38,7 @@ export async function saveCourseDescription(courseDir, payload) {
 export async function saveCourseDescriptionBatch(entries) {
   const list = Array.isArray(entries) ? entries : []
   const prepared = []
+  const skips = []
   const seen = new Set()
 
   for (const entry of list) {
@@ -46,10 +47,15 @@ export async function saveCourseDescriptionBatch(entries) {
     if (!coursePath || seen.has(key)) continue
     const title = await titleOnDisk(coursePath)
     const normalized = normalizeCourseDescription(entry?.payload, title)
-    if (!normalized.ok) continue
+    if (!normalized.ok) {
+      seen.add(key)
+      skips.push({ path: coursePath, title, reason: normalized.error })
+      continue
+    }
     seen.add(key)
     prepared.push({
       coursePath,
+      title,
       description: {
         ...normalized.description,
         updatedAt: new Date().toISOString()
@@ -57,18 +63,22 @@ export async function saveCourseDescriptionBatch(entries) {
     })
   }
 
-  if (!prepared.length) {
-    throw new Error('Ese texto no tiene descripciones que guardar. No se guardó nada.')
-  }
-
   const saved = []
   for (const item of prepared) {
-    const props = await updateCourse(item.coursePath, { description: item.description })
-    saved.push({
-      coursePath: item.coursePath,
-      description: storedDescription(props.description),
-      props
-    })
+    try {
+      const props = await updateCourse(item.coursePath, { description: item.description })
+      saved.push({
+        coursePath: item.coursePath,
+        description: storedDescription(props.description),
+        props
+      })
+    } catch (err) {
+      skips.push({
+        path: item.coursePath,
+        title: item.title,
+        reason: err?.message || 'No se pudo escribir courseProps.json.'
+      })
+    }
   }
-  return saved
+  return { saved, skips }
 }

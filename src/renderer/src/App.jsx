@@ -27,6 +27,9 @@ import {
 import { exportViaDialog } from './utils/exportHelpers'
 import { stringifyCourseCatalog } from './utils/courseExport'
 
+const COVER_BANNER_DISMISS_KEY = 'pcl.banner.dismiss.covers'
+const DESCRIPTION_BANNER_DISMISS_KEY = 'pcl.banner.dismiss.descriptions'
+
 function useDebouncedValue(value, delay = 200) {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
@@ -34,6 +37,48 @@ function useDebouncedValue(value, delay = 200) {
     return () => clearTimeout(id)
   }, [value, delay])
   return debounced
+}
+
+function readStoredSignature(key) {
+  try {
+    return localStorage.getItem(key) || ''
+  } catch {
+    return ''
+  }
+}
+
+function storeSignature(key, signature) {
+  try {
+    localStorage.setItem(key, signature)
+  } catch {
+    // Dismissal still applies for this session.
+  }
+}
+
+function coursePathsSignature(list) {
+  return list
+    .map((course) => course.path)
+    .sort()
+    .join('\0')
+}
+
+function BannerDismiss({ onClick }) {
+  return (
+    <button
+      type="button"
+      className="catalog-banner__dismiss"
+      onClick={onClick}
+      aria-label="Ocultar aviso"
+      title="Ocultar aviso"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+        />
+      </svg>
+    </button>
+  )
 }
 
 function DesktopShellNotice() {
@@ -136,6 +181,12 @@ function FilterableCoursesGrid({
   const [importMissingOpen, setImportMissingOpen] = useState(false)
   const [coverSearch, setCoverSearch] = useState(null)
   const [descriptionBatchOpen, setDescriptionBatchOpen] = useState(false)
+  const [dismissedCoverSignature, setDismissedCoverSignature] = useState(() =>
+    readStoredSignature(COVER_BANNER_DISMISS_KEY)
+  )
+  const [dismissedDescriptionSignature, setDismissedDescriptionSignature] = useState(() =>
+    readStoredSignature(DESCRIPTION_BANNER_DISMISS_KEY)
+  )
   const debouncedFilter = useDebouncedValue(filterText, 200)
 
   const institutions = useMemo(() => {
@@ -176,6 +227,19 @@ function FilterableCoursesGrid({
     () => courses.filter((c) => !c.description?.summary),
     [courses]
   )
+  const missingCoverSignature = useMemo(
+    () => coursePathsSignature(missingCoverCourses),
+    [missingCoverCourses]
+  )
+  const missingDescriptionSignature = useMemo(
+    () => coursePathsSignature(missingDescriptionCourses),
+    [missingDescriptionCourses]
+  )
+  const showCoverBanner =
+    missingCoverCourses.length > 0 && dismissedCoverSignature !== missingCoverSignature
+  const showDescriptionBanner =
+    missingDescriptionCourses.length > 0 &&
+    dismissedDescriptionSignature !== missingDescriptionSignature
 
   const inProgressCourses = useMemo(
     () => courses.filter((c) => !c.missingProps && c.isInProcess),
@@ -346,6 +410,21 @@ function FilterableCoursesGrid({
     setCoverSearch({ courses: missingCoverCourses, initialStep: 'select' })
   }, [missingCoverCourses])
 
+  const handleOpenDescriptionBatch = useCallback(() => {
+    if (missingDescriptionCourses.length === 0) return
+    setDescriptionBatchOpen(true)
+  }, [missingDescriptionCourses.length])
+
+  const dismissCoverBanner = useCallback(() => {
+    storeSignature(COVER_BANNER_DISMISS_KEY, missingCoverSignature)
+    setDismissedCoverSignature(missingCoverSignature)
+  }, [missingCoverSignature])
+
+  const dismissDescriptionBanner = useCallback(() => {
+    storeSignature(DESCRIPTION_BANNER_DISMISS_KEY, missingDescriptionSignature)
+    setDismissedDescriptionSignature(missingDescriptionSignature)
+  }, [missingDescriptionSignature])
+
   const handleGenerateOne = useCallback(
     async (course) => {
       try {
@@ -455,6 +534,10 @@ function FilterableCoursesGrid({
         onExportCourses={handleExportCourses}
         isExporting={isExporting}
         canExport={courses.length > 0}
+        missingCoverCount={missingCoverCourses.length}
+        missingDescriptionCount={missingDescriptionCourses.length}
+        onSearchCovers={handleOpenCoverSearch}
+        onWriteDescriptions={handleOpenDescriptionBatch}
       />
 
       <div className={`app-main${selectedCourse ? ' app-main--with-detail' : ''}`}>
@@ -519,7 +602,7 @@ function FilterableCoursesGrid({
                 </div>
               ) : null}
 
-              {missingCoverCourses.length > 0 ? (
+              {showCoverBanner ? (
                 <div className="catalog-banner">
                   <div>
                     <strong>{missingCoverCourses.length}</strong> curso
@@ -533,11 +616,12 @@ function FilterableCoursesGrid({
                     >
                       Buscar portadas
                     </button>
+                    <BannerDismiss onClick={dismissCoverBanner} />
                   </div>
                 </div>
               ) : null}
 
-              {missingDescriptionCourses.length > 0 ? (
+              {showDescriptionBanner ? (
                 <div className="catalog-banner">
                   <div>
                     <strong>{missingDescriptionCourses.length}</strong> curso
@@ -547,10 +631,11 @@ function FilterableCoursesGrid({
                     <button
                       type="button"
                       className="btn btn--primary"
-                      onClick={() => setDescriptionBatchOpen(true)}
+                      onClick={handleOpenDescriptionBatch}
                     >
                       Escribir descripciones
                     </button>
+                    <BannerDismiss onClick={dismissDescriptionBanner} />
                   </div>
                 </div>
               ) : null}

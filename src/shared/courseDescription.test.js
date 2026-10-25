@@ -112,6 +112,14 @@ describe('course description paste', () => {
     assert.equal(result.ok, true)
   })
 
+  it('accepts a title that only differs by composed accents', () => {
+    const composed = 'Introducción a la fotografía urbana'
+    const decomposed = composed.normalize('NFD')
+    assert.notEqual(composed, decomposed)
+    const result = parseCourseDescription(validPaste({ course: decomposed }), composed)
+    assert.equal(result.ok, true)
+  })
+
   it('assumes this course when the course field is absent', () => {
     const body = JSON.parse(validPaste())
     delete body.course
@@ -299,10 +307,26 @@ describe('course description batch', () => {
     assert.equal(result.ok, true)
     assert.equal(result.items.length, 2)
     assert.equal(result.dropped, 1)
+    assert.equal(result.skips.length, 1)
+    assert.match(result.skips[0].reason, /coincide/)
+    assert.equal(result.skips[0].path, '')
     assert.deepEqual(
       result.items.map((item) => item.path),
       ['School - Grease Pencil', 'School - Lighting']
     )
+  })
+
+  it('names a marked course the reply left out', () => {
+    const result = parseCourseDescriptionBatch(
+      JSON.stringify({
+        descriptions: [batchRow('School - Grease Pencil', 'Grease Pencil in Blender')]
+      }),
+      batchCourses
+    )
+    assert.equal(result.ok, true)
+    assert.equal(result.items.length, 1)
+    const missed = result.skips.find((skip) => skip.path === 'School - Lighting')
+    assert.equal(missed.reason, 'No vino en la respuesta.')
   })
 
   it('writes nothing when every row is for another course or still the example', () => {
@@ -310,7 +334,8 @@ describe('course description batch', () => {
     const example = parseCourseDescriptionBatch(brief, batchCourses)
     assert.equal(example.ok, false)
     assert.match(example.error, /descripciones/)
-    assert.equal(example.items, undefined)
+    assert.equal(example.items.length, 0)
+    assert.ok(example.skips.some((skip) => /ejemplo/.test(skip.reason)))
 
     const swapped = parseCourseDescriptionBatch(
       JSON.stringify({
@@ -319,7 +344,9 @@ describe('course description batch', () => {
       batchCourses
     )
     assert.equal(swapped.ok, false)
-    assert.equal(swapped.items, undefined)
+    assert.equal(swapped.items.length, 0)
+    assert.ok(swapped.skips.some((skip) => /Grease Pencil in Blender/.test(skip.reason)))
+    assert.ok(swapped.skips.some((skip) => skip.reason === 'No vino en la respuesta.'))
   })
 
   it('drops a shared title when the folder is missing, and keeps the first duplicate', () => {
