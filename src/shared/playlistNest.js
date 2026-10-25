@@ -4,7 +4,7 @@
  */
 
 const ID_RE = /^[a-zA-Z0-9_-]{1,80}$/
-export const MAX_NESTED = 6
+export const MAX_NESTED = 40
 
 export function normalizeChildIds(raw, selfId = '') {
   const ids = []

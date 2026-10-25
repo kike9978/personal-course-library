@@ -15,12 +15,14 @@ const SKIP_NOT_OBJECT = 'La fila no es un objeto.'
 const EXAMPLE_ONLY = 'La respuesta sigue siendo el ejemplo del encargo.'
 
 const EXAMPLE_TITLE = 'A short path toward the goal'
+const EXAMPLE_PATH_2 = 'Another subject in the catalog'
 const EXAMPLE_STEP = 'First step'
+const EXAMPLE_STEP_2 = 'Next subject'
 const EXAMPLE_WHY = 'Why these courses belong together, in one sentence.'
 const EXAMPLE_COURSE_WHY = 'Why this course is next, in one sentence.'
 
-export const MAX_LISTS = 6
-export const MAX_COURSES = 12
+export const MAX_LISTS = 40
+export const MAX_COURSES = 40
 const SKIP_COURSE_CAP = `Pasa del máximo de ${MAX_COURSES} cursos.`
 const SKIP_LIST_CAP = `Pasa del máximo de ${MAX_LISTS} listas.`
 const MAX_TITLE = 120
@@ -122,8 +124,13 @@ export function buildPlaylistBrief({
   const extend = mode === 'extend'
   const held = (Array.isArray(existingPaths) ? existingPaths : []).map(fact).filter(Boolean)
   const first = list[0]
+  const second = list[1] || first
   const exampleCourse = {
     folder: fact(first?.path) || 'Folder name',
+    why: EXAMPLE_COURSE_WHY
+  }
+  const exampleCourse2 = {
+    folder: fact(second?.path) || 'Folder name',
     why: EXAMPLE_COURSE_WHY
   }
   const example = extend
@@ -138,12 +145,14 @@ export function buildPlaylistBrief({
           title: EXAMPLE_TITLE,
           why: EXAMPLE_WHY,
           lists: [
-            {
-              title: EXAMPLE_STEP,
-              why: '',
-              courses: [exampleCourse]
-            }
+            { title: EXAMPLE_STEP, why: '', courses: [exampleCourse] },
+            { title: EXAMPLE_STEP_2, why: '', courses: [exampleCourse2] }
           ]
+        },
+        {
+          title: EXAMPLE_PATH_2,
+          why: EXAMPLE_WHY,
+          courses: [exampleCourse2]
         }
       ]
     }
@@ -154,11 +163,13 @@ export function buildPlaylistBrief({
     ].join('\n')
     : ''
   const filterJob = extend
-    ? 'Filter the catalog yourself. Add only the courses that continue this lista. Leave out every course that does not. Two courses is enough. Stop when the next course would be a stretch. Do not pad the lista. Do not repeat a folder already in it.'
-    : 'Filter the catalog yourself. Include a course only when it belongs in a path toward the goal and the interests. Leave every other course out. If there is no goal, group courses that teach the same thing and leave out courses that do not fit a path. Stop when the next course would be a stretch. Do not pad a lista so the counts match.'
+    ? 'From the catalog, add every course that continues this lista. Leave out courses that do not. Do not repeat a folder already in it. Do not return a sample of the matches.'
+    : goalText
+      ? 'From the catalog, take every course that serves the goal or the interests. Leave out courses that do not. Do not return a sample of the matches. Do not stop after the first handful.'
+      : 'Organize the catalog. Leave a course out only when it fits no subject. Do not return a sample.'
   const shapeJob = extend
     ? 'Copy each folder exactly.'
-    : 'Build only the paths the goal needs. One path is enough. Split a path into nested listas only where the subject changes. A nested lista holds the courses that belong together and no others. Two courses is a complete lista. Order the nested listas so a person could follow them. A lista with courses and no nested listas is also fine. Copy each folder exactly.'
+    : 'Group the courses you kept by subject. One path per subject. Inside a path, nested listas are the steps of that subject, in the order a person would follow them. Nest only when a path has two or more steps. A path with one step is a single lista: put its courses directly on that lista and do not wrap them. Put every kept course into exactly one lista. A single lista of only a few courses means you stopped early. Do not pad a lista with courses that do not fit. Do not make the counts match. Copy each folder exactly.'
 
   return [
     'You are a course librarian. Reply with ONLY JSON (no intro). I will paste it back into the course library.',
@@ -183,7 +194,7 @@ export function buildPlaylistBrief({
 function isExampleStep(row) {
   const raw = courseRows(row) || []
   return (
-    fact(row?.title) === EXAMPLE_STEP &&
+    (fact(row?.title) === EXAMPLE_STEP || fact(row?.title) === EXAMPLE_STEP_2) &&
     raw.length > 0 &&
     raw.every((item) => fact(item?.why) === EXAMPLE_COURSE_WHY)
   )
@@ -196,10 +207,34 @@ function isExampleList(row) {
   const coursesAreExample =
     raw.length > 0 && raw.every((item) => fact(item?.why) === EXAMPLE_COURSE_WHY)
   return (
-    fact(row?.title) === EXAMPLE_TITLE &&
+    (fact(row?.title) === EXAMPLE_TITLE || fact(row?.title) === EXAMPLE_PATH_2) &&
     fact(row?.why) === EXAMPLE_WHY &&
     (stepsAreExample || coursesAreExample)
   )
+}
+
+/** A path with one step is that step. Nesting starts at two. */
+export function flattenSingleNest(list) {
+  const children = Array.isArray(list?.children) ? list.children : []
+  if (children.length !== 1) return { ...list, children }
+  const only = children[0]
+  const coursePaths = []
+  const seen = new Set()
+  const courseWhys = { ...(list.courseWhys || {}) }
+  for (const coursePath of [...(list.coursePaths || []), ...(only.coursePaths || [])]) {
+    if (!coursePath || seen.has(coursePath)) continue
+    seen.add(coursePath)
+    coursePaths.push(coursePath)
+  }
+  Object.assign(courseWhys, only.courseWhys || {})
+  const title = fact(list.title) && list.title !== 'Nueva lista' ? list.title : only.title
+  return {
+    title: title || only.title || 'Nueva lista',
+    why: fact(list.why) || fact(only.why),
+    coursePaths,
+    courseWhys,
+    children: []
+  }
 }
 
 function takeCourses(rows, courses, { existing = [], skips, label }) {
@@ -340,13 +375,15 @@ export function parsePlaylistBrief(text, courses, { goal = '', mode = 'create', 
       let title = usable(row.title, MAX_TITLE)
       if (title === EXAMPLE_TITLE) title = ''
       const whyText = usable(row.why, MAX_WHY)
-      lists.push({
-        title: title || 'Nueva lista',
-        why: whyText === EXAMPLE_WHY ? '' : whyText,
-        coursePaths: taken.coursePaths,
-        courseWhys: taken.courseWhys,
-        children
-      })
+      lists.push(
+        flattenSingleNest({
+          title: title || 'Nueva lista',
+          why: whyText === EXAMPLE_WHY ? '' : whyText,
+          coursePaths: taken.coursePaths,
+          courseWhys: taken.courseWhys,
+          children
+        })
+      )
     }
   }
 

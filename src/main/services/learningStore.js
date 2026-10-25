@@ -865,6 +865,7 @@ function normalizePlaylist(input, existing) {
     coursePaths,
     childIds,
     courseWhys,
+    collapsed: Boolean(source.collapsed !== undefined ? source.collapsed : existing?.collapsed),
     createdAt: existing?.createdAt || now,
     updatedAt: source === existing && existing?.updatedAt ? existing.updatedAt : now
   }
@@ -884,7 +885,9 @@ export function savePlaylistIntent(payload) {
 
 export function listPlaylists() {
   const store = readStore()
-  return settleNesting((store.playlists || []).map((playlist) => normalizePlaylist(playlist, playlist)))
+  return settleNesting(
+    (store.playlists || []).map((playlist) => normalizePlaylist(playlist, playlist))
+  )
 }
 
 export function upsertPlaylist(payload) {

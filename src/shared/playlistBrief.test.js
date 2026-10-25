@@ -38,8 +38,10 @@ describe('playlist brief', () => {
     assert.match(brief, /ONLY JSON/)
     assert.match(brief, /Goal: armar un reel/)
     assert.match(brief, /Interests: Storyboard/)
-    assert.match(brief, /Filter the catalog yourself/)
+    assert.match(brief, /Do not return a sample/)
+    assert.match(brief, /One path per subject/)
     assert.match(brief, /Do not pad/)
+    assert.doesNotMatch(brief, /One path is enough/)
     assert.doesNotMatch(brief, /up to \d+/)
     assert.match(brief, /School - Storyboard Action/)
     assert.match(brief, /School - Drawing People/)
@@ -119,6 +121,30 @@ describe('playlist paste', () => {
     assert.equal(parsed.ok, true)
     assert.deepEqual(parsed.lists[0].coursePaths, ['School - Storyboard Action'])
     assert.equal(parsed.skips[0].reason.includes('Ya está'), true)
+  })
+
+  it('flattens a path that has only one nested lista', () => {
+    const parsed = parsePlaylistBrief(
+      reply([
+        {
+          title: 'Piano',
+          why: 'Música.',
+          lists: [
+            {
+              title: 'Teclado',
+              why: 'Empieza aquí.',
+              courses: [{ folder: 'School - Drawing People', why: 'Lectura de partitura.' }]
+            }
+          ]
+        }
+      ]),
+      courses,
+      { goal: 'armar un reel' }
+    )
+    assert.equal(parsed.ok, true)
+    assert.equal(parsed.lists[0].title, 'Piano')
+    assert.deepEqual(parsed.lists[0].children, [])
+    assert.deepEqual(parsed.lists[0].coursePaths, ['School - Drawing People'])
   })
 
   it('keeps nested listas inside the path', () => {

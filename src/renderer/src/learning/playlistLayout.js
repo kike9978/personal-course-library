@@ -10,8 +10,9 @@ export const NEST_PAD = 8
 export const NEST_COURSE_X = NEST_FRAME_X + NEST_PAD
 export const NEST_PAD_BOTTOM = 12
 export const PLAYLIST_MIN_W = 280
-export const PLAYLIST_MAX_W = 960
+export const PLAYLIST_MAX_W = 1440
 export const PLAYLIST_DEFAULT_W = 320
+export const PLAYLIST_COVER_COL = 220
 export const PLAYLIST_PLACE_GAP = 32
 
 function finite(value, fallback) {
@@ -23,6 +24,19 @@ function cardStride(cardHeight = PLAYLIST_CARD_H) {
   return cardHeight + PLAYLIST_GAP
 }
 
+/** How many cover cards fit across the inside of a lista. */
+export function coverColumnCount(innerWidth) {
+  const inner = Math.max(0, Number(innerWidth) || 0)
+  return Math.max(1, Math.floor((inner + PLAYLIST_GAP) / (PLAYLIST_COVER_COL + PLAYLIST_GAP)))
+}
+
+export function coverCardWidth(innerWidth, columns) {
+  const cols = Math.max(1, columns || 1)
+  const inner = Math.max(0, Number(innerWidth) || 0)
+  if (cols === 1) return inner
+  return (inner - PLAYLIST_GAP * (cols - 1)) / cols
+}
+
 export function contentHeight(count, cardHeight = PLAYLIST_CARD_H) {
   const total = Number(count) || 0
   const card = cardHeight || PLAYLIST_CARD_H
@@ -31,11 +45,19 @@ export function contentHeight(count, cardHeight = PLAYLIST_CARD_H) {
 }
 
 /**
- * Vertical slots for a lista and the listas nested inside it.
+ * Slots for a lista and the listas nested inside it.
+ * Lista view is one column. Portadas wraps courses into a grid that follows the frame width.
  * Own courses come first. Each nested lista is a header plus its courses.
  */
 export function frameSlots(playlist, byId, cardHeight = PLAYLIST_CARD_H) {
   const card = cardHeight || PLAYLIST_CARD_H
+  const grid = card === PLAYLIST_COVER_H
+  const frameWidth = Math.min(
+    PLAYLIST_MAX_W,
+    Math.max(PLAYLIST_MIN_W, finite(playlist?.size?.width, PLAYLIST_DEFAULT_W))
+  )
+  if (playlist?.collapsed) return { slots: [], height: PLAYLIST_HEADER, width: frameWidth }
+
   const slots = []
   let y = PLAYLIST_HEADER
   let started = false
@@ -45,20 +67,43 @@ export function frameSlots(playlist, byId, cardHeight = PLAYLIST_CARD_H) {
     started = true
   }
 
-  const own = Array.isArray(playlist?.coursePaths) ? playlist.coursePaths : []
-  own.forEach((coursePath, index) => {
-    gap()
-    slots.push({
-      kind: 'course',
-      y,
-      height: card,
-      coursePath,
-      ownerId: playlist.id,
-      sectionTop: PLAYLIST_HEADER,
-      continues: index < own.length - 1
+  const placeCourses = (paths, { inset, ownerId, nested, sectionTop }) => {
+    const inner = Math.max(0, frameWidth - inset * 2)
+    const columns = grid ? coverColumnCount(inner) : 1
+    const cardWidth = columns === 1 ? inner : coverCardWidth(inner, columns)
+    paths.forEach((coursePath, index) => {
+      const column = index % columns
+      const row = Math.floor(index / columns)
+      slots.push({
+        kind: 'course',
+        x: inset + column * (cardWidth + PLAYLIST_GAP),
+        y: sectionTop + row * cardStride(card),
+        width: cardWidth,
+        height: card,
+        columns,
+        inset,
+        innerWidth: inner,
+        coursePath,
+        ownerId,
+        sectionTop,
+        nested: Boolean(nested),
+        continues: columns === 1 && index < paths.length - 1
+      })
     })
-    y += card
-  })
+    if (!paths.length) return 0
+    const rows = Math.ceil(paths.length / columns)
+    return rows * card + (rows - 1) * PLAYLIST_GAP
+  }
+
+  const own = Array.isArray(playlist?.coursePaths) ? playlist.coursePaths : []
+  if (own.length) {
+    y += placeCourses(own, {
+      inset: PLAYLIST_PAD_X,
+      ownerId: playlist.id,
+      sectionTop: y
+    })
+    started = true
+  }
 
   const childIds = Array.isArray(playlist?.childIds) ? playlist.childIds : []
   for (const childId of childIds) {
@@ -66,6 +111,7 @@ export function frameSlots(playlist, byId, cardHeight = PLAYLIST_CARD_H) {
     if (!child) continue
     gap()
     const paths = Array.isArray(child.coursePaths) ? child.coursePaths : []
+    const collapsed = Boolean(child.collapsed)
     const nest = {
       kind: 'nest',
       y,
@@ -74,31 +120,36 @@ export function frameSlots(playlist, byId, cardHeight = PLAYLIST_CARD_H) {
       childId,
       title: child.title || 'Lista',
       why: child.why || '',
-      count: paths.length
+      count: paths.length,
+      collapsed
     }
     slots.push(nest)
     y += NEST_HEAD
-    const sectionTop = y + (paths.length ? PLAYLIST_GAP : 0)
-    paths.forEach((coursePath, index) => {
-      y += PLAYLIST_GAP
-      slots.push({
-        kind: 'course',
-        y,
-        height: card,
-        coursePath,
+    if (!collapsed && paths.length) {
+      const sectionTop = y + PLAYLIST_GAP
+      const block = placeCourses(paths, {
+        inset: NEST_COURSE_X,
         ownerId: child.id,
-        sectionTop,
         nested: true,
-        continues: index < paths.length - 1
+        sectionTop
       })
-      y += card
-    })
-    if (paths.length) y += NEST_PAD_BOTTOM
+      y = sectionTop + block + NEST_PAD_BOTTOM
+    }
     nest.boxHeight = y - nest.y
   }
 
   const height = started ? y + PLAYLIST_PAD_BOTTOM : contentHeight(0, card)
-  return { slots, height }
+  return { slots, height, width: frameWidth }
+}
+
+export function playlistCourseCount(playlist, byId) {
+  const own = Array.isArray(playlist?.coursePaths) ? playlist.coursePaths.length : 0
+  const childIds = Array.isArray(playlist?.childIds) ? playlist.childIds : []
+  return childIds.reduce((total, childId) => {
+    const child = byId?.get(childId)
+    const nested = Array.isArray(child?.coursePaths) ? child.coursePaths.length : 0
+    return total + nested
+  }, own)
 }
 
 export function courseNodeY(index, cardHeight = PLAYLIST_CARD_H) {
@@ -112,14 +163,13 @@ export function courseNodeId(playlistId, coursePath) {
 export function withFittedHeight(playlist, cardHeight = PLAYLIST_CARD_H, byId) {
   const coursePaths = Array.isArray(playlist?.coursePaths) ? playlist.coursePaths : []
   const childIds = Array.isArray(playlist?.childIds) ? playlist.childIds : []
-  const needed =
-    byId && childIds.length
-      ? frameSlots(playlist, byId, cardHeight).height
-      : contentHeight(coursePaths.length, cardHeight)
   const width = Math.min(
     PLAYLIST_MAX_W,
     Math.max(PLAYLIST_MIN_W, finite(playlist?.size?.width, PLAYLIST_DEFAULT_W))
   )
+  const needed = playlist?.collapsed
+    ? PLAYLIST_HEADER
+    : frameSlots({ ...playlist, coursePaths, childIds, size: { width } }, byId, cardHeight).height
   return {
     ...playlist,
     coursePaths,
@@ -132,13 +182,34 @@ export function withFittedHeight(playlist, cardHeight = PLAYLIST_CARD_H, byId) {
 }
 
 /**
- * Drop index for a course dragged to a vertical offset inside its playlist.
- * `y` is relative to the playlist frame.
+ * Drop index for a course dragged inside its playlist.
+ * `y` is relative to the playlist frame. A cover grid also uses `layout.x`.
  */
-export function reorderCoursePaths(coursePaths, coursePath, y, cardHeight = PLAYLIST_CARD_H) {
+export function reorderCoursePaths(coursePaths, coursePath, y, cardHeight = PLAYLIST_CARD_H, layout) {
   const rest = coursePaths.filter((item) => item !== coursePath)
-  const slot = Math.round((finite(y, PLAYLIST_HEADER) - PLAYLIST_HEADER) / cardStride(cardHeight))
-  const index = Math.max(0, Math.min(rest.length, slot))
+  const columns = layout?.columns || 1
+  let index
+  if (columns > 1) {
+    const inset = layout.inset ?? PLAYLIST_PAD_X
+    const inner = layout.innerWidth ?? columns * PLAYLIST_COVER_COL
+    const cardWidth = coverCardWidth(inner, columns)
+    const originY = finite(layout.originY, PLAYLIST_HEADER)
+    const column = Math.max(
+      0,
+      Math.min(
+        columns - 1,
+        Math.round((finite(layout.x, inset) - inset) / (cardWidth + PLAYLIST_GAP))
+      )
+    )
+    const row = Math.max(
+      0,
+      Math.round((finite(y, originY) - originY) / cardStride(cardHeight))
+    )
+    index = Math.max(0, Math.min(rest.length, row * columns + column))
+  } else {
+    const slot = Math.round((finite(y, PLAYLIST_HEADER) - PLAYLIST_HEADER) / cardStride(cardHeight))
+    index = Math.max(0, Math.min(rest.length, slot))
+  }
   const next = rest.slice()
   next.splice(index, 0, coursePath)
   return next
@@ -309,7 +380,8 @@ export function buildFlow(playlists, courseByPath, options = {}) {
         why: slot.why,
         count: slot.count,
         y: slot.y,
-        height: slot.boxHeight
+        height: slot.boxHeight,
+        collapsed: Boolean(slot.collapsed)
       }))
 
     nodes.push({
@@ -326,7 +398,8 @@ export function buildFlow(playlists, courseByPath, options = {}) {
       data: {
         title: playlist.title,
         why: playlist.why || '',
-        count: courseSlots.length,
+        count: playlistCourseCount(playlist, byId),
+        collapsed: Boolean(playlist.collapsed),
         nests,
         minHeight: height
       }
@@ -336,15 +409,15 @@ export function buildFlow(playlists, courseByPath, options = {}) {
       const owner = byId.get(slot.ownerId) || playlist
       const course = courseByPath.get(slot.coursePath) || null
       const id = courseNodeId(slot.ownerId, slot.coursePath)
-      const inset = slot.nested ? NEST_COURSE_X : PLAYLIST_PAD_X
-      const slotWidth = width - inset * 2
+      const inset = slot.inset ?? (slot.nested ? NEST_COURSE_X : PLAYLIST_PAD_X)
+      const slotWidth = slot.width ?? width - inset * 2
       nodes.push({
         id,
         type: 'course',
         parentId: playlist.id,
-        extent: 'parent',
+        ...(bigCover ? {} : { extent: 'parent' }),
         zIndex: 10,
-        position: { x: inset, y: slot.y },
+        position: { x: slot.x ?? inset, y: slot.y },
         width: slotWidth,
         height: cardHeight,
         style: { width: slotWidth, height: cardHeight },
@@ -363,7 +436,10 @@ export function buildFlow(playlists, courseByPath, options = {}) {
           continues: slot.continues,
           sectionTop: slot.sectionTop,
           nested: Boolean(slot.nested),
-          bigCover
+          bigCover,
+          columns: slot.columns || 1,
+          inset,
+          innerWidth: slot.innerWidth
         }
       })
     }

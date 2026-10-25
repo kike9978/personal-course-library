@@ -1,4 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import { toast } from 'react-hot-toast'
 import {
   Background,
@@ -13,7 +22,8 @@ import {
   useNodesInitialized,
   useNodesState,
   useOnSelectionChange,
-  useReactFlow
+  useReactFlow,
+  useStore
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import AppNav from './AppNav'
@@ -22,7 +32,7 @@ import CourseEditModal from './CourseEditModal'
 import CoverSearchModal from './CoverSearchModal'
 import PlaylistBuilder from './PlaylistBuilder'
 import brandMark from '../assets/img/brand-mark.svg'
-import { settleNesting } from '../../../shared/playlistNest.js'
+import { MAX_NESTED, settleNesting } from '../../../shared/playlistNest.js'
 import {
   PLAYLIST_CARD_H,
   PLAYLIST_COVER_H,
@@ -36,6 +46,8 @@ import {
   NEST_COURSE_X,
   buildFlow,
   contentHeight,
+  courseNodeId,
+  frameSlots,
   orderPlaylists,
   placeWithoutOverlap,
   playlistAtPoint,
@@ -66,6 +78,131 @@ function readNodeSize(node, fallback) {
   }
 }
 
+function nestViews(slots) {
+  return slots
+    .filter((slot) => slot.kind === 'nest')
+    .map((slot) => ({
+      childId: slot.childId,
+      title: slot.title,
+      why: slot.why,
+      count: slot.count,
+      y: slot.y,
+      height: slot.boxHeight,
+      collapsed: Boolean(slot.collapsed)
+    }))
+}
+
+function applyCoverWidth(nodes, playlist, width, playlists) {
+  const byId = new Map(playlists.map((item) => [item.id, item]))
+  const fitted = withFittedHeight(
+    { ...playlist, size: { ...playlist.size, width } },
+    PLAYLIST_COVER_H,
+    byId
+  )
+  const { slots } = frameSlots(fitted, byId, PLAYLIST_COVER_H)
+  const byNode = new Map(
+    slots
+      .filter((slot) => slot.kind === 'course')
+      .map((slot) => [courseNodeId(slot.ownerId, slot.coursePath), slot])
+  )
+  const nests = nestViews(slots)
+  return nodes.map((node) => {
+    if (node.id === fitted.id && node.type === 'playlist') {
+      return {
+        ...node,
+        data: { ...node.data, nests }
+      }
+    }
+    if (node.parentId !== fitted.id || node.type !== 'course') return node
+    const slot = byNode.get(node.id)
+    if (!slot) return node
+    return {
+      ...node,
+      position: { x: slot.x, y: slot.y },
+      width: slot.width,
+      height: slot.height,
+      style: { ...node.style, width: slot.width, height: slot.height },
+      data: {
+        ...node.data,
+        continues: slot.continues,
+        columns: slot.columns,
+        inset: slot.inset,
+        innerWidth: slot.innerWidth
+      }
+    }
+  })
+}
+
+function ListTitle({ id, title }) {
+  const actions = useContext(BoardActions)
+  const zoom = useStore((state) => state.transform[2])
+  const inputRef = useRef(null)
+  const [draft, setDraft] = useState(title)
+  const [editing, setEditing] = useState(false)
+  const screenZoom = Math.max(Number.isFinite(zoom) && zoom > 0 ? zoom : 1, 0.35)
+  const pillStyle = {
+    fontSize: `calc(0.9rem / ${screenZoom})`,
+    maxWidth: `calc(min(64rem, 72vw) / ${screenZoom})`
+  }
+
+  if (actions?.focusPlaylistId === id && !editing) setEditing(true)
+
+  useEffect(() => {
+    setDraft(title)
+  }, [title])
+
+  useLayoutEffect(() => {
+    if (!editing) return
+    const input = inputRef.current
+    if (!input || document.activeElement === input) return
+    input.focus()
+    input.select()
+  }, [editing])
+
+  const commit = (event) => {
+    const next = event.target.value.trim() || 'Nueva lista'
+    setDraft(next)
+    setEditing(false)
+    if (next !== title) actions?.renamePlaylist(id, next)
+  }
+
+  const startEditing = (event) => {
+    event.stopPropagation()
+    setEditing(true)
+  }
+
+  return (
+    <>
+      <div className="playlist-frame__title-slot">
+        <span className="playlist-frame__title" onDoubleClick={startEditing}>
+          {draft}
+        </span>
+      </div>
+      {editing ? (
+        <input
+          ref={inputRef}
+          className="playlist-title-pill nodrag nopan nowheel"
+          style={pillStyle}
+          aria-label="Nombre de la lista"
+          data-playlist-title={id}
+          value={draft}
+          autoComplete="off"
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur()
+            event.stopPropagation()
+          }}
+        />
+      ) : (
+        <span className="playlist-title-pill" style={pillStyle} onDoubleClick={startEditing}>
+          {draft}
+        </span>
+      )}
+    </>
+  )
+}
+
 function PlaylistNode({ id, data }) {
   const actions = useContext(BoardActions)
   const dropHere = actions?.dropId === id
@@ -86,23 +223,18 @@ function PlaylistNode({ id, data }) {
         handleClassName="playlist-frame__resize-handle"
       />
       <header className="playlist-frame__drag" title={data.why || undefined}>
-        <input
-          className="playlist-frame__title nodrag nopan nowheel"
-          data-playlist-title={id}
-          aria-label="Nombre de la lista"
-          defaultValue={data.title}
-          key={data.title}
-          autoComplete="off"
-          onBlur={(event) => {
-            const title = event.target.value.trim() || 'Nueva lista'
-            event.target.value = title
-            if (title !== data.title) actions?.renamePlaylist(id, title)
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') event.currentTarget.blur()
-            event.stopPropagation()
-          }}
-        />
+        <button
+          type="button"
+          className={`playlist-frame__icon playlist-frame__toggle nodrag nopan${data.collapsed ? ' is-collapsed' : ''}`}
+          aria-expanded={!data.collapsed}
+          aria-label={data.collapsed ? `Expandir ${data.title}` : `Contraer ${data.title}`}
+          onClick={() => actions?.toggleCollapsed(id)}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
+          </svg>
+        </button>
+        <ListTitle id={id} title={data.title} />
         <span className="playlist-frame__count">{data.count}</span>
         <button
           type="button"
@@ -123,6 +255,23 @@ function PlaylistNode({ id, data }) {
           title={nest.why || undefined}
         >
           <div className="playlist-nest__head">
+            <button
+              type="button"
+              className={`playlist-frame__icon playlist-frame__toggle${nest.collapsed ? ' is-collapsed' : ''}`}
+              aria-expanded={!nest.collapsed}
+              aria-label={nest.collapsed ? `Expandir ${nest.title}` : `Contraer ${nest.title}`}
+              onClick={() => actions?.toggleCollapsed(nest.childId)}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
+              </svg>
+            </button>
             <button
               type="button"
               className="playlist-nest__title"
@@ -150,9 +299,9 @@ function PlaylistNode({ id, data }) {
           </div>
         </div>
       ))}
-      {data.count === 0 && !(data.nests || []).length ? (
+      {data.collapsed || data.count > 0 || (data.nests || []).length ? null : (
         <p className="playlist-frame__empty">Arrastra un curso o una lista aquí</p>
-      ) : null}
+      )}
     </div>
   )
 }
@@ -284,6 +433,15 @@ const nodeTypes = { playlist: PlaylistNode, course: CourseNode }
 const SIDEBAR_MIN = 280
 const SIDEBAR_MAX = 1080
 const SIDEBAR_WIDTH_KEY = 'playlist-sidebar-width'
+const COURSE_VIEW_KEY = 'playlist-course-view'
+
+function readBigCover() {
+  try {
+    return localStorage.getItem(COURSE_VIEW_KEY) === 'covers'
+  } catch {
+    return false
+  }
+}
 
 function clampSidebar(width, maxAvailable = SIDEBAR_MAX) {
   const max = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, maxAvailable))
@@ -326,7 +484,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   const [programFilter, setProgramFilter] = useState('')
   const [inProcessOnly, setInProcessOnly] = useState(false)
   const [unlistedOnly, setUnlistedOnly] = useState(false)
-  const [bigCover, setBigCover] = useState(false)
+  const [bigCover, setBigCover] = useState(readBigCover)
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth)
   const [selectedId, setSelectedId] = useState(null)
   const [dropId, setDropId] = useState(null)
@@ -345,7 +503,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   const canvasRef = useRef(null)
   const didFit = useRef(false)
   const creatingRef = useRef(false)
-  const bigCoverRef = useRef(false)
+  const bigCoverRef = useRef(bigCover)
   const sidebarWidthRef = useRef(sidebarWidth)
   playlistsRef.current = playlists
   bigCoverRef.current = bigCover
@@ -384,6 +542,14 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       // Ignore storage failures; the width still applies for this session.
     }
   }, [sidebarWidth])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COURSE_VIEW_KEY, bigCover ? 'covers' : 'list')
+    } catch {
+      // Ignore storage failures; the view still applies for this session.
+    }
+  }, [bigCover])
 
   const onSidebarResizeStart = useCallback((event) => {
     if (event.button != null && event.button !== 0) return
@@ -513,6 +679,15 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     [persistPlaylist]
   )
 
+  const toggleCollapsed = useCallback(
+    (id) => {
+      const current = playlistsRef.current.find((playlist) => playlist.id === id)
+      if (!current) return
+      persistPlaylist({ ...current, collapsed: !current.collapsed })
+    },
+    [persistPlaylist]
+  )
+
   const deletePlaylist = useCallback((id) => {
     const current = playlistsRef.current.find((playlist) => playlist.id === id)
     const label = current?.title || 'esta lista'
@@ -626,7 +801,11 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
         return
       }
       setSelectedId(id)
-      persistPlaylist({ ...playlist, coursePaths: [...playlist.coursePaths, coursePath] })
+      persistPlaylist({
+        ...playlist,
+        collapsed: false,
+        coursePaths: [...playlist.coursePaths, coursePath]
+      })
     },
     [persistPlaylist]
   )
@@ -685,8 +864,10 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       const cardHeight = cardHeightNow()
       const created = []
       for (const item of lists) {
+        const steps = Array.isArray(item.children) ? item.children : []
+        const flat = steps.length === 1
         const children = []
-        for (const child of item.children || []) {
+        for (const child of flat ? [] : steps) {
           const childPaths = child.coursePaths || []
           const savedChild = await window.api.upsertPlaylist({
             title: child.title || 'Nuevo paso',
@@ -702,12 +883,23 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
           })
           children.push(savedChild)
         }
-        const coursePaths = item.coursePaths || []
+        const coursePaths = [...(item.coursePaths || [])]
+        const courseWhys = { ...(item.courseWhys || {}) }
+        if (flat) {
+          const only = steps[0]
+          const seen = new Set(coursePaths)
+          for (const coursePath of only.coursePaths || []) {
+            if (seen.has(coursePath)) continue
+            seen.add(coursePath)
+            coursePaths.push(coursePath)
+          }
+          Object.assign(courseWhys, only.courseWhys || {})
+        }
         const childIds = children.map((child) => child.id)
         const draft = {
           title: item.title || 'Nueva lista',
-          why: item.why || '',
-          courseWhys: item.courseWhys || {},
+          why: item.why || (flat ? steps[0].why || '' : ''),
+          courseWhys,
           childIds,
           position: { x: 0, y: 0 },
           size: {
@@ -851,20 +1043,27 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
         (change) => change.type === 'dimensions' && change.resizing && change.dimensions
       )
       if (live.length) {
-        setNodes((current) =>
-          current.map((node) => {
-            if (node.type !== 'course') return node
-            const change = live.find((item) => item.id === node.parentId)
-            if (!change) return node
-            const inset = node.data?.nested ? NEST_COURSE_X : PLAYLIST_PAD_X
-            const cardWidth = Math.max(120, change.dimensions.width - inset * 2)
-            return {
-              ...node,
-              width: cardWidth,
-              style: { ...node.style, width: cardWidth }
-            }
-          })
-        )
+        setNodes((current) => {
+          if (!bigCoverRef.current) {
+            return current.map((node) => {
+              if (node.type !== 'course') return node
+              const change = live.find((item) => item.id === node.parentId)
+              if (!change) return node
+              const inset = node.data?.nested ? NEST_COURSE_X : PLAYLIST_PAD_X
+              const cardWidth = Math.max(120, change.dimensions.width - inset * 2)
+              return {
+                ...node,
+                width: cardWidth,
+                style: { ...node.style, width: cardWidth }
+              }
+            })
+          }
+          return live.reduce((next, change) => {
+            const playlist = playlistsRef.current.find((item) => item.id === change.id)
+            if (!playlist) return next
+            return applyCoverWidth(next, playlist, change.dimensions.width, playlistsRef.current)
+          }, current)
+        })
       }
       const finished = changes.filter(
         (change) => change.type === 'dimensions' && change.resizing === false && change.dimensions
@@ -913,15 +1112,16 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
           !(current.childIds || []).length &&
           !hit.parentId &&
           !(hit.childIds || []).includes(current.id)
-        if (canNest && (hit.childIds || []).length >= 6) {
-          toast('Esa lista ya tiene 6 listas dentro')
+        if (canNest && (hit.childIds || []).length >= MAX_NESTED) {
+          toast(`Esa lista ya tiene ${MAX_NESTED} listas dentro`)
           syncFlow(list)
           return
         }
         if (canNest) {
           const parent = {
             ...hit,
-            childIds: [...(hit.childIds || []), current.id].slice(0, 6)
+            collapsed: false,
+            childIds: [...(hit.childIds || []), current.id].slice(0, MAX_NESTED)
           }
           const next = showPlaylists(
             list.map((playlist) => (playlist.id === parent.id ? parent : playlist)),
@@ -957,12 +1157,23 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       const current = list.find((playlist) => playlist.id === node.data.playlistId)
       if (!current) return
       const sectionTop = node.data.sectionTop ?? PLAYLIST_HEADER
-      const nextPaths = reorderCoursePaths(
-        current.coursePaths,
-        node.data.coursePath,
-        node.position.y - sectionTop + PLAYLIST_HEADER,
-        bigCoverRef.current ? PLAYLIST_COVER_H : PLAYLIST_CARD_H
-      )
+      const cardHeight = bigCoverRef.current ? PLAYLIST_COVER_H : PLAYLIST_CARD_H
+      const columns = node.data.columns || 1
+      const nextPaths =
+        columns > 1
+          ? reorderCoursePaths(current.coursePaths, node.data.coursePath, node.position.y, cardHeight, {
+              columns,
+              x: node.position.x,
+              inset: node.data.inset,
+              innerWidth: node.data.innerWidth,
+              originY: sectionTop
+            })
+          : reorderCoursePaths(
+              current.coursePaths,
+              node.data.coursePath,
+              node.position.y - sectionTop + PLAYLIST_HEADER,
+              cardHeight
+            )
       const same = nextPaths.every((coursePath, index) => coursePath === current.coursePaths[index])
       if (same) {
         syncFlow(list)
@@ -1150,7 +1361,9 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       dropId,
       selectedId,
       detailPath,
+      focusPlaylistId,
       renamePlaylist,
+      toggleCollapsed,
       deletePlaylist,
       removeCourse,
       openCourse,
@@ -1161,7 +1374,9 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       dropId,
       selectedId,
       detailPath,
+      focusPlaylistId,
       renamePlaylist,
+      toggleCollapsed,
       deletePlaylist,
       removeCourse,
       openCourse,

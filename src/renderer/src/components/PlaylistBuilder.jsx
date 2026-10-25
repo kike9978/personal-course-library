@@ -392,7 +392,7 @@ function PlaylistBuilder({
             </div>
           </div>
           <p className="course-description__note">
-            {`El chat filtra los ${courses.length} cursos del catálogo y arma las listas.`}
+            {`El chat reparte los cursos que encajan en varias listas. El catálogo tiene ${courses.length}.`}
           </p>
           <div className="field">
             <label htmlFor="playlist-brief">Encargo</label>

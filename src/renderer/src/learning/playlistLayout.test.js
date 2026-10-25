@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   PLAYLIST_COVER_H,
+  PLAYLIST_GAP,
   PLAYLIST_PLACE_GAP,
   boxesOverlap,
   buildFlow,
@@ -261,5 +262,98 @@ describe('playlist layout', () => {
     const fitted = withFittedHeight(parent, undefined, byId)
     assert.equal(fitted.size.height, frameSlots(parent, byId).height)
     assert.ok(fitted.size.height < 700)
+  })
+
+  it('collapses a lista to its header and a nested lista to its bar', () => {
+    const courses = new Map([
+      ['boards', { path: 'boards', title: 'Boards', institution: 'School' }]
+    ])
+    const child = {
+      id: 'step',
+      title: 'Figura',
+      parentId: 'path',
+      position: { x: 0, y: 0 },
+      size: { width: 320, height: 400 },
+      coursePaths: ['boards'],
+      collapsed: true
+    }
+    const parent = {
+      id: 'path',
+      title: 'Camino',
+      position: { x: 0, y: 0 },
+      size: { width: 320, height: 800 },
+      coursePaths: ['boards'],
+      childIds: ['step']
+    }
+    const open = buildFlow([parent, child], courses)
+    assert.equal(open.nodes.filter((node) => node.type === 'course').length, 1)
+    assert.equal(open.nodes[0].data.collapsed, false)
+    assert.equal(open.nodes[0].data.nests[0].collapsed, true)
+    assert.equal(open.nodes[0].data.nests[0].height, 40)
+    assert.equal(open.nodes[0].data.count, 2)
+
+    const closed = buildFlow([{ ...parent, collapsed: true }, child], courses)
+    assert.equal(closed.nodes.filter((node) => node.type === 'course').length, 0)
+    assert.equal(closed.nodes[0].height, 56)
+    assert.equal(closed.nodes[0].data.collapsed, true)
+    assert.equal(closed.nodes[0].data.count, 2)
+    assert.equal(closed.nodes[0].data.nests.length, 0)
+  })
+
+  it('wraps portadas into columns when the lista is wide enough', () => {
+    const paths = ['a', 'b', 'c', 'd']
+    const courses = new Map(paths.map((path) => [path, { path, title: path }]))
+    const narrow = buildFlow(
+      [
+        {
+          id: 'pl',
+          title: 'Ruta',
+          position: { x: 0, y: 0 },
+          size: { width: 320, height: 200 },
+          coursePaths: paths
+        }
+      ],
+      courses,
+      { cardHeight: PLAYLIST_COVER_H }
+    )
+    const narrowCourses = narrow.nodes.filter((node) => node.type === 'course')
+    assert.equal(narrowCourses[0].data.columns, 1)
+    assert.equal(narrowCourses[0].position.y, narrowCourses[1].position.y - (PLAYLIST_COVER_H + PLAYLIST_GAP))
+    assert.equal(narrow.nodes[0].height, contentHeight(4, PLAYLIST_COVER_H))
+
+    const wide = buildFlow(
+      [
+        {
+          id: 'pl',
+          title: 'Ruta',
+          position: { x: 0, y: 0 },
+          size: { width: 720, height: 200 },
+          coursePaths: paths
+        }
+      ],
+      courses,
+      { cardHeight: PLAYLIST_COVER_H }
+    )
+    const cards = wide.nodes.filter((node) => node.type === 'course')
+    assert.equal(cards.length, 4)
+    assert.ok(cards[0].data.columns >= 2)
+    assert.equal(cards[0].position.y, cards[1].position.y)
+    assert.ok(cards[1].position.x > cards[0].position.x)
+    assert.ok(cards[2].position.y > cards[0].position.y)
+    assert.equal(cards[2].position.x, cards[0].position.x)
+    assert.ok(wide.nodes[0].height < contentHeight(4, PLAYLIST_COVER_H))
+    assert.equal(wide.nodes[0].height, wide.nodes[0].data.minHeight)
+
+    const layout = {
+      columns: cards[0].data.columns,
+      x: cards[0].position.x,
+      inset: cards[0].data.inset,
+      innerWidth: cards[0].data.innerWidth,
+      originY: cards[0].data.sectionTop
+    }
+    assert.deepEqual(
+      reorderCoursePaths(paths, 'd', cards[0].position.y, PLAYLIST_COVER_H, layout),
+      ['d', 'a', 'b', 'c']
+    )
   })
 })
