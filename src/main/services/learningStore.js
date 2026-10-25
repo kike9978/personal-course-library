@@ -2,6 +2,16 @@ import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
 import { normalizeChildIds, settleNesting } from '../../shared/playlistNest.js'
+import {
+  findingFromLegacyNote,
+  findingsForCourse,
+  normalizeAnchor,
+  normalizeTopicTitle,
+  parseMentions,
+  projectFinding,
+  sameCourse,
+  topicKey
+} from '../../shared/knowledgeGraph.js'
 
 const STORE_FILE = 'learning-store.json'
 const COMPLETE_THRESHOLD = 0.95
@@ -13,9 +23,11 @@ function getStorePath() {
 
 function emptyStore() {
   return {
-    version: 5,
+    version: 6,
     courses: {},
-    playlists: []
+    playlists: [],
+    topics: [],
+    findings: []
   }
 }
 
@@ -135,6 +147,48 @@ export function withAddedDates(courses, recentMs = RECENTLY_VIEWED_MS) {
   return next
 }
 
+function presentCourse(store, key, courseState) {
+  const summary = summarizeCourseState(courseState)
+  const noteCount = (store.findings || []).filter((finding) =>
+    (finding.anchors || []).some((anchor) => sameCourse(anchor.coursePath, key))
+  ).length
+  return { ...summary, noteCount }
+}
+
+/**
+ * Lift per-course notes into library-level findings and ensure topic storage.
+ * Existing note ids and bodies are kept. Each note becomes one anchor.
+ */
+function ensureKnowledge(store) {
+  let dirty = false
+  if (!Array.isArray(store.topics)) {
+    store.topics = []
+    dirty = true
+  }
+  if (!Array.isArray(store.findings)) {
+    store.findings = []
+    dirty = true
+  }
+  const known = new Set(store.findings.map((finding) => finding.id))
+  for (const [coursePath, course] of Object.entries(store.courses || {})) {
+    ensureArrays(course)
+    if (!Array.isArray(course.notes) || course.notes.length === 0) continue
+    for (const note of course.notes) {
+      let id = note.id || makeId()
+      if (known.has(id)) id = makeId()
+      known.add(id)
+      store.findings.push(findingFromLegacyNote({ ...note, id }, coursePath))
+    }
+    course.notes = []
+    dirty = true
+  }
+  if (store.version !== 6) {
+    store.version = 6
+    dirty = true
+  }
+  return dirty
+}
+
 function readStore() {
   try {
     const filePath = getStorePath()
@@ -153,6 +207,8 @@ function readStore() {
       data.playlists = []
       dirty = true
     }
+    for (const course of Object.values(data.courses || {})) ensureArrays(course)
+    if (ensureKnowledge(data)) dirty = true
     if (dirty) writeStore(data)
     return data
   } catch {
@@ -167,6 +223,7 @@ function writeStore(store) {
 }
 
 function courseKey(coursePath) {
+  if (typeof coursePath !== 'string' || !coursePath) return null
   return path.basename(coursePath)
 }
 
@@ -246,7 +303,7 @@ export function summarizeCourseState(courseState) {
 export function getCourseProgress(coursePath) {
   const store = readStore()
   const key = courseKey(coursePath)
-  return summarizeCourseState(store.courses[key] || emptyCourseState())
+  return presentCourse(store, key, store.courses[key] || emptyCourseState())
 }
 
 /**
@@ -264,7 +321,7 @@ export function setCourseCurriculum(coursePath, playableLessons) {
   }))
   store.courses[key] = course
   writeStore(store)
-  return summarizeCourseState(course)
+  return presentCourse(store, key, course)
 }
 
 /**
@@ -345,7 +402,7 @@ export function setLessonProgress(coursePath, update) {
 
   store.courses[key] = course
   writeStore(store)
-  return summarizeCourseState(course)
+  return presentCourse(store, key, course)
 }
 
 /**
@@ -357,7 +414,7 @@ export function recordCourseView(coursePath) {
   const { course } = getMutableCourse(store, coursePath)
   course.lastViewedAt = Date.now()
   writeStore(store)
-  return summarizeCourseState(course)
+  return presentCourse(store, courseKey(coursePath), course)
 }
 
 export function getLessonProgress(coursePath, relativePath) {
@@ -379,7 +436,7 @@ export function getAllCourseProgress() {
   const store = readStore()
   const out = {}
   for (const [key, value] of Object.entries(store.courses || {})) {
-    out[key] = summarizeCourseState(value)
+    out[key] = presentCourse(store, key, value)
   }
   return out
 }
@@ -391,14 +448,94 @@ function getMutableCourse(store, coursePath) {
   return { key, course }
 }
 
+function decorateFinding(store, finding) {
+  const topics = (finding.topicIds || [])
+    .map((id) => store.topics.find((topic) => topic.id === id))
+    .filter(Boolean)
+    .map((topic) => ({ id: topic.id, title: topic.title }))
+  return { ...finding, topics }
+}
+
+function resolveTopicLinks(store, explicitIds, mentions) {
+  const ids = []
+  const add = (id) => {
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  for (const id of explicitIds || []) {
+    if (store.topics.some((topic) => topic.id === id)) add(id)
+  }
+  const now = Date.now()
+  for (const mention of mentions) {
+    if (mention.type !== 'topic') continue
+    const title = normalizeTopicTitle(mention.title) || 'Tema'
+    let topic = store.topics.find((item) => item.id === mention.id)
+    if (!topic) topic = store.topics.find((item) => topicKey(item.title) === topicKey(title))
+    if (!topic) {
+      topic = {
+        id: mention.id || makeId(),
+        title,
+        aliases: [],
+        summary: '',
+        createdAt: now,
+        updatedAt: now
+      }
+      store.topics.push(topic)
+    }
+    add(topic.id)
+  }
+  return ids
+}
+
+function anchorFromPayload(payload, coursePath, base = {}) {
+  const next = {
+    coursePath,
+    lessonRelativePath:
+      payload.lessonRelativePath !== undefined
+        ? payload.lessonRelativePath
+        : (base.lessonRelativePath ?? null),
+    lessonTitle:
+      payload.lessonTitle !== undefined ? payload.lessonTitle : (base.lessonTitle ?? null),
+    projectId: payload.projectId !== undefined ? payload.projectId : (base.projectId ?? null),
+    projectTitle:
+      payload.projectTitle !== undefined ? payload.projectTitle : (base.projectTitle ?? null),
+    timeSec:
+      payload.timeSec !== undefined
+        ? typeof payload.timeSec === 'number'
+          ? Math.max(0, payload.timeSec)
+          : null
+        : (base.timeSec ?? null)
+  }
+  if (payload.projectId) {
+    next.projectId = payload.projectId
+    next.projectTitle = payload.projectTitle ?? next.projectTitle ?? null
+    next.lessonRelativePath = null
+    next.lessonTitle = null
+    next.timeSec = null
+  } else if (payload.lessonRelativePath !== undefined || payload.timeSec !== undefined) {
+    next.projectId = null
+    next.projectTitle = null
+  }
+  return normalizeAnchor(next, coursePath)
+}
+
+function targetsTouched(payload) {
+  return (
+    payload.anchors !== undefined ||
+    payload.lessonRelativePath !== undefined ||
+    payload.lessonTitle !== undefined ||
+    payload.projectId !== undefined ||
+    payload.projectTitle !== undefined ||
+    payload.timeSec !== undefined
+  )
+}
+
 export function listNotes(coursePath) {
   const store = readStore()
   const key = courseKey(coursePath)
-  const hadMigrated = Boolean(store.courses[key]?.bookmarksMigrated)
-  const course = ensureArrays(store.courses[key] || emptyCourseState())
-  store.courses[key] = course
-  if (!hadMigrated && course.bookmarksMigrated) writeStore(store)
-  return [...course.notes].sort(compareStudyItems)
+  if (!key) return []
+  return findingsForCourse(store.findings, key)
+    .map((finding) => decorateFinding(store, finding))
+    .sort(compareStudyItems)
 }
 
 /**
@@ -451,15 +588,15 @@ export function listBookmarks(coursePath) {
 
 /**
  * @param {string} coursePath
- * @param {{ id?: string, title?: string|null, body?: string, bodyHtml?: string|null, bodyJson?: string|null, lessonRelativePath?: string|null, lessonTitle?: string|null, projectId?: string|null, projectTitle?: string|null, timeSec?: number|null, color?: string|null }} payload
- * `body` is markdown (canonical). `bodyHtml` / `bodyJson` are legacy and cleared on new saves.
- * Project notes use `projectId` (no path/time). File notes use `lessonRelativePath`.
+ * @param {{ id?: string, title?: string|null, body?: string, bodyHtml?: string|null, bodyJson?: string|null, lessonRelativePath?: string|null, lessonTitle?: string|null, projectId?: string|null, projectTitle?: string|null, timeSec?: number|null, color?: string|null, topicIds?: string[], anchors?: Array }} payload
+ * `body` is markdown (canonical). A finding can carry several anchors and topic ids.
+ * Within one anchor, a project target still clears the lesson/time fields.
  */
 export function upsertNote(coursePath, payload) {
   const store = readStore()
-  const { course } = getMutableCourse(store, coursePath)
+  const key = courseKey(coursePath)
+  if (key) getMutableCourse(store, coursePath)
   const now = Date.now()
-  // Empty body allowed = pin on timeline / lesson without text yet
   const body = String(payload.body ?? '').trim()
   const title = payload.title === undefined ? undefined : String(payload.title ?? '').trim() || null
   const bodyHtml =
@@ -467,83 +604,111 @@ export function upsertNote(coursePath, payload) {
   const bodyJson =
     payload.bodyJson === undefined ? undefined : payload.bodyJson ? String(payload.bodyJson) : null
 
-  const resolveTargets = (base = {}) => {
-    const next = {
-      lessonRelativePath:
-        payload.lessonRelativePath !== undefined
-          ? payload.lessonRelativePath
-          : (base.lessonRelativePath ?? null),
-      lessonTitle:
-        payload.lessonTitle !== undefined ? payload.lessonTitle : (base.lessonTitle ?? null),
-      projectId: payload.projectId !== undefined ? payload.projectId : (base.projectId ?? null),
-      projectTitle:
-        payload.projectTitle !== undefined ? payload.projectTitle : (base.projectTitle ?? null),
-      timeSec:
-        payload.timeSec !== undefined
-          ? typeof payload.timeSec === 'number'
-            ? Math.max(0, payload.timeSec)
-            : null
-          : (base.timeSec ?? null)
-    }
+  const applyTopics = (finding, nextBody) => {
+    const explicit = payload.topicIds !== undefined ? payload.topicIds : finding.topicIds
+    finding.topicIds = resolveTopicLinks(store, explicit, parseMentions(nextBody))
+  }
 
-    // Mutual exclusion: project notes vs file/video notes
-    if (payload.projectId) {
-      next.projectId = payload.projectId
-      next.projectTitle = payload.projectTitle ?? next.projectTitle ?? null
-      next.lessonRelativePath = null
-      next.lessonTitle = null
-      next.timeSec = null
-    } else if (payload.lessonRelativePath !== undefined || payload.timeSec !== undefined) {
-      next.projectId = null
-      next.projectTitle = null
+  const applyAnchors = (finding) => {
+    if (Array.isArray(payload.anchors)) {
+      finding.anchors = payload.anchors
+        .map((anchor) => normalizeAnchor(anchor, anchor.coursePath || key))
+        .filter((anchor) => anchor.coursePath)
+      return
     }
-
-    return next
+    if (!key || !targetsTouched(payload)) return
+    const current =
+      (finding.anchors || []).find((anchor) => sameCourse(anchor.coursePath, key)) || {}
+    const next = anchorFromPayload(payload, key, current)
+    const rest = (finding.anchors || []).filter((anchor) => !sameCourse(anchor.coursePath, key))
+    finding.anchors = [...rest, next]
   }
 
   if (payload.id) {
-    const idx = course.notes.findIndex((n) => n.id === payload.id)
-    if (idx === -1) throw new Error('Anotación no encontrada')
-    const targets = resolveTargets(course.notes[idx])
-    course.notes[idx] = {
-      ...course.notes[idx],
-      title: title !== undefined ? title : (course.notes[idx].title ?? null),
-      body: payload.body !== undefined ? body : course.notes[idx].body,
-      bodyHtml: bodyHtml !== undefined ? bodyHtml : (course.notes[idx].bodyHtml ?? null),
-      bodyJson: bodyJson !== undefined ? bodyJson : (course.notes[idx].bodyJson ?? null),
-      ...targets,
-      color: payload.color !== undefined ? payload.color : course.notes[idx].color,
-      updatedAt: now
-    }
+    const finding = store.findings.find((item) => item.id === payload.id)
+    if (!finding) throw new Error('Anotación no encontrada')
+    if (title !== undefined) finding.title = title
+    if (payload.body !== undefined) finding.body = body
+    if (bodyHtml !== undefined) finding.bodyHtml = bodyHtml
+    if (bodyJson !== undefined) finding.bodyJson = bodyJson
+    if (payload.color !== undefined) finding.color = payload.color
+    applyAnchors(finding)
+    applyTopics(finding, finding.body || '')
+    finding.updatedAt = now
   } else {
-    const targets = resolveTargets({})
-    course.notes.push({
+    const finding = {
       id: makeId(),
       title: title ?? null,
       body,
       bodyHtml: bodyHtml ?? null,
       bodyJson: bodyJson ?? null,
-      lessonRelativePath: targets.lessonRelativePath,
-      lessonTitle: targets.lessonTitle,
-      projectId: targets.projectId,
-      projectTitle: targets.projectTitle,
-      timeSec: targets.timeSec,
+      topicIds: [],
+      anchors: [],
       color: payload.color ?? null,
       createdAt: now,
       updatedAt: now
-    })
+    }
+    applyAnchors(finding)
+    if (!finding.anchors.length && key) finding.anchors = [normalizeAnchor({}, key)]
+    applyTopics(finding, body)
+    store.findings.push(finding)
   }
 
   writeStore(store)
-  return listNotes(coursePath)
+  return key ? listNotes(coursePath) : listAllNotes()
 }
 
 export function deleteNote(coursePath, noteId) {
   const store = readStore()
-  const { course } = getMutableCourse(store, coursePath)
-  course.notes = course.notes.filter((n) => n.id !== noteId)
+  store.findings = (store.findings || []).filter((finding) => finding.id !== noteId)
   writeStore(store)
-  return listNotes(coursePath)
+  return courseKey(coursePath) ? listNotes(coursePath) : listAllNotes()
+}
+
+export function listTopics() {
+  const store = readStore()
+  return [...(store.topics || [])].sort((a, b) =>
+    String(a.title || '').localeCompare(String(b.title || ''), undefined, { sensitivity: 'base' })
+  )
+}
+
+export function upsertTopic(payload = {}) {
+  const store = readStore()
+  const title = normalizeTopicTitle(payload.title)
+  if (!title) throw new Error('El tema necesita un nombre')
+  const now = Date.now()
+  let topic = payload.id ? store.topics.find((item) => item.id === payload.id) : null
+  if (!topic) topic = store.topics.find((item) => topicKey(item.title) === topicKey(title))
+  if (topic) {
+    topic.title = title
+    if (payload.summary !== undefined) topic.summary = String(payload.summary || '')
+    if (Array.isArray(payload.aliases)) {
+      topic.aliases = payload.aliases.map((alias) => normalizeTopicTitle(alias)).filter(Boolean)
+    }
+    topic.updatedAt = now
+  } else {
+    topic = {
+      id: payload.id || makeId(),
+      title,
+      aliases: [],
+      summary: payload.summary ? String(payload.summary) : '',
+      createdAt: now,
+      updatedAt: now
+    }
+    store.topics.push(topic)
+  }
+  writeStore(store)
+  return topic
+}
+
+export function deleteTopic(topicId) {
+  const store = readStore()
+  store.topics = (store.topics || []).filter((topic) => topic.id !== topicId)
+  for (const finding of store.findings || []) {
+    finding.topicIds = (finding.topicIds || []).filter((id) => id !== topicId)
+  }
+  writeStore(store)
+  return listTopics()
 }
 
 /** @deprecated Use upsertNote — bookmarks are notes. */
@@ -568,30 +733,13 @@ export function deleteBookmark(coursePath, bookmarkId) {
  */
 export function listAllNotes() {
   const store = readStore()
-  // Ensure migration runs for every course
-  let dirty = false
-  for (const value of Object.values(store.courses || {})) {
-    const before = value.bookmarksMigrated
-    ensureArrays(value)
-    if (!before && value.bookmarksMigrated) dirty = true
-  }
-  if (dirty) writeStore(store)
-
-  const items = []
-  for (const [coursePath, value] of Object.entries(store.courses || {})) {
-    const course = ensureArrays(value)
-    for (const note of course.notes) {
-      items.push({
-        ...note,
-        coursePath
-      })
-    }
-  }
-  return items.sort((a, b) => {
-    const courseCmp = String(a.coursePath || '').localeCompare(String(b.coursePath || ''))
-    if (courseCmp !== 0) return courseCmp
-    return compareStudyItems(a, b)
-  })
+  return (store.findings || [])
+    .map((finding) => decorateFinding(store, projectFinding(finding)))
+    .sort((a, b) => {
+      const courseCmp = String(a.coursePath || '').localeCompare(String(b.coursePath || ''))
+      if (courseCmp !== 0) return courseCmp
+      return compareStudyItems(a, b)
+    })
 }
 
 /** @deprecated Bookmarks merged into notes; kept for IPC compat. */
@@ -763,14 +911,18 @@ export function getProjectLinkedPath(coursePath, projectId) {
 export function getNotesSearchByCourse() {
   const store = readStore()
   const map = {}
-  for (const [coursePath, value] of Object.entries(store.courses || {})) {
-    const course = ensureArrays(value)
-    const chunks = []
-    for (const note of course.notes) {
-      if (note.title) chunks.push(String(note.title))
-      if (note.body) chunks.push(String(note.body))
+  const topicTitle = (id) => store.topics.find((topic) => topic.id === id)?.title || ''
+  for (const key of Object.keys(store.courses || {})) map[key] = ''
+  for (const finding of store.findings || []) {
+    const chunks = [finding.title, finding.body, ...(finding.topicIds || []).map(topicTitle)]
+      .filter(Boolean)
+      .join('\n')
+    const courses = new Set(
+      (finding.anchors || []).map((anchor) => anchor.coursePath).filter(Boolean)
+    )
+    for (const coursePath of courses) {
+      map[coursePath] = `${map[coursePath] || ''}\n${chunks}`.trim().toLowerCase()
     }
-    map[coursePath] = chunks.join('\n').toLowerCase()
   }
   return map
 }

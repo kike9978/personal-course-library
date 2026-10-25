@@ -26,18 +26,14 @@ import {
 } from './utils/courseTable'
 import { exportViaDialog } from './utils/exportHelpers'
 import { stringifyCourseCatalog } from './utils/courseExport'
+import {
+  collectCourseFacets,
+  courseMatchesLibraryFilters,
+  useDebouncedValue
+} from './utils/courseFilters'
 
 const COVER_BANNER_DISMISS_KEY = 'pcl.banner.dismiss.covers'
 const DESCRIPTION_BANNER_DISMISS_KEY = 'pcl.banner.dismiss.descriptions'
-
-function useDebouncedValue(value, delay = 200) {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delay)
-    return () => clearTimeout(id)
-  }, [value, delay])
-  return debounced
-}
 
 function readStoredSignature(key) {
   try {
@@ -189,37 +185,7 @@ function FilterableCoursesGrid({
   )
   const debouncedFilter = useDebouncedValue(filterText, 200)
 
-  const institutions = useMemo(() => {
-    const set = new Set()
-    courses.forEach((c) => {
-      if (c.institution) set.add(c.institution)
-    })
-    return [...set].sort((a, b) => a.localeCompare(b))
-  }, [courses])
-
-  const programs = useMemo(() => {
-    const counts = new Map()
-    courses.forEach((c) => {
-      ;(c.programs || []).forEach((p) => {
-        counts.set(p, (counts.get(p) || 0) + 1)
-      })
-    })
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([name]) => name)
-  }, [courses])
-
-  const themes = useMemo(() => {
-    const counts = new Map()
-    courses.forEach((c) => {
-      ;(c.theme || []).forEach((t) => {
-        counts.set(t, (counts.get(t) || 0) + 1)
-      })
-    })
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([name]) => name)
-  }, [courses])
+  const { institutions, programs, themes } = useMemo(() => collectCourseFacets(courses), [courses])
 
   const missingPropsCourses = useMemo(() => courses.filter((c) => c.missingProps), [courses])
   const missingCoverCourses = useMemo(() => courses.filter((c) => !c.hasCover), [courses])
@@ -259,45 +225,22 @@ function FilterableCoursesGrid({
   }, [courses])
 
   const sortedCourses = useMemo(() => {
-    const searchLower = debouncedFilter.toLowerCase()
-    const filtered = courses.filter((course) => {
-      const title = (course.title || '').toLowerCase()
-      const institution = (course.institution || '').toLowerCase()
-      const instructor = (course.instructor || '').toLowerCase()
-      const programsText = (course.programs || []).join(' ').toLowerCase()
-      const themesText = (course.theme || []).join(' ').toLowerCase()
-      const notesText = (course.notesSearchText || '').toLowerCase()
-      const matchesText =
-        !searchLower ||
-        title.includes(searchLower) ||
-        institution.includes(searchLower) ||
-        instructor.includes(searchLower) ||
-        programsText.includes(searchLower) ||
-        themesText.includes(searchLower) ||
-        notesText.includes(searchLower) ||
-        (course.path || '').toLowerCase().includes(searchLower)
-      const processCheck = !isInProcessOnly || course.isInProcess
-      const newCheck = !isNewOnly || course.isNew
-      const recentCheck = !recentlyViewedOnly || course.learning?.isRecentlyViewed
-      const missingCheck = !missingPropsOnly || course.missingProps
-      const institutionCheck = !institutionFilter || course.institution === institutionFilter
-      const programCheck = !programFilter || (course.programs || []).includes(programFilter)
-      const themeCheck = !themeFilter || (course.theme || []).includes(themeFilter)
-      const rateCheck = !minRate || (Number(course.rate) || 0) >= minRate
-      const columnCheck = isCardLayout || matchesColumnFilters(course, columnFilters)
-      return (
-        matchesText &&
-        processCheck &&
-        newCheck &&
-        recentCheck &&
-        missingCheck &&
-        institutionCheck &&
-        programCheck &&
-        themeCheck &&
-        rateCheck &&
-        columnCheck
-      )
-    })
+    const libraryFilters = {
+      query: debouncedFilter,
+      isInProcessOnly,
+      isNewOnly,
+      recentlyViewedOnly,
+      missingPropsOnly,
+      institution: institutionFilter,
+      program: programFilter,
+      theme: themeFilter,
+      minRate
+    }
+    const filtered = courses.filter(
+      (course) =>
+        courseMatchesLibraryFilters(course, libraryFilters) &&
+        (isCardLayout || matchesColumnFilters(course, columnFilters))
+    )
 
     return [...filtered].sort((a, b) => {
       if (!isCardLayout && columnSort) {

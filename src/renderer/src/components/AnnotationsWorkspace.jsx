@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, Fragment } from 'react'
 import { toast } from 'react-hot-toast'
 import NoteEditor from './NoteEditor'
+import KnowledgeGraphView from './KnowledgeGraphView'
 import { formatTime } from './StudySidePanel'
 import { groupAnnotationsByTarget } from '../utils/annotationGroups'
+import { buildLocalGraph, groupFindingsByTopic, relatedFindings } from '../../../shared/knowledgeGraph.js'
 
 function noteTitleFallback(item) {
   if (!item) return 'Sin título'
@@ -25,6 +27,23 @@ function noteTitle(item) {
   return noteTitleFallback(item)
 }
 
+function topicTitlesOf(item, topics = []) {
+  if (Array.isArray(item?.topics) && item.topics.length) {
+    return item.topics.map((topic) => topic.title).filter(Boolean)
+  }
+  return (item?.topicIds || [])
+    .map((id) => topics.find((topic) => topic.id === id)?.title)
+    .filter(Boolean)
+}
+
+function sameSelection(item, selectedId) {
+  if (!item || !selectedId) return false
+  if (typeof selectedId === 'object') {
+    return item.id === selectedId.id && (item.coursePath || null) === (selectedId.coursePath || null)
+  }
+  return item.id === selectedId
+}
+
 function formatDateTime(ts) {
   if (!ts) return '—'
   try {
@@ -40,15 +59,8 @@ function formatDateTime(ts) {
   }
 }
 
-function contextLabel(item) {
-  if (typeof item.timeSec === 'number') return formatTime(item.timeSec)
-  if (item.projectId) return 'Proyecto'
-  if (item.lessonRelativePath) return 'Sin tiempo'
-  return 'Curso'
-}
-
 /**
- * Notion-like annotations workspace: table + document pane with Lexical.
+ * Page list, note, and local graph. The graph stays beside the note.
  */
 function AnnotationsWorkspace({
   title = 'Anotaciones',
@@ -66,15 +78,23 @@ function AnnotationsWorkspace({
   courseTitleByPath = {},
   preferGroupPath = null,
   preferGroupProjectId = null,
-  loading = false
+  loading = false,
+  topics = [],
+  corpus = null,
+  onUpsertTopic
 }) {
   const [query, setQuery] = useState('')
   const [listCollapsed, setListCollapsed] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
+  const [draftTopics, setDraftTopics] = useState([])
+  const [topicQuery, setTopicQuery] = useState('')
   const [draft, setDraft] = useState({ text: '', markdown: '', json: null })
   const [editorKey, setEditorKey] = useState(0)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [groupMode, setGroupMode] = useState('target')
+  const [overlapOnly, setOverlapOnly] = useState(false)
+  const [graphFocus, setGraphFocus] = useState(null)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -87,6 +107,7 @@ function AnnotationsWorkspace({
         item.lessonTitle,
         item.projectTitle,
         course,
+        ...(item.topics || []).map((topic) => topic.title),
         noteTitle(item)
       ]
         .filter(Boolean)
@@ -96,29 +117,49 @@ function AnnotationsWorkspace({
     })
   }, [annotations, query, courseTitleByPath])
 
-  const groups = useMemo(
-    () =>
-      groupAnnotationsByTarget(filtered, {
-        preferPath: preferGroupPath,
-        preferProjectId: preferGroupProjectId,
-        includeCourseKey: courseColumn
-      }),
-    [filtered, preferGroupPath, preferGroupProjectId, courseColumn]
-  )
+  const libraryFindings = corpus || annotations
+
+  const groups = useMemo(() => {
+    if (groupMode === 'topic') {
+      return groupFindingsByTopic(filtered, topics, {
+        corpus: libraryFindings,
+        overlapOnly
+      })
+    }
+    return groupAnnotationsByTarget(filtered, {
+      preferPath: preferGroupPath,
+      preferProjectId: preferGroupProjectId,
+      includeCourseKey: courseColumn
+    })
+  }, [
+    filtered,
+    groupMode,
+    topics,
+    libraryFindings,
+    overlapOnly,
+    preferGroupPath,
+    preferGroupProjectId,
+    courseColumn
+  ])
+
+  const isRowActive = (item) => sameSelection(item, selectedId)
 
   const selected = useMemo(() => {
     if (!selectedId) return null
-    if (typeof selectedId === 'object' && selectedId.coursePath) {
-      return (
-        annotations.find((a) => a.id === selectedId.id && a.coursePath === selectedId.coursePath) ||
-        null
-      )
-    }
-    return annotations.find((a) => a.id === selectedId) || null
+    return annotations.find((item) => sameSelection(item, selectedId)) || null
   }, [annotations, selectedId])
 
   const mentionItems = useMemo(() => {
     const map = new Map()
+    for (const topic of topics) {
+      if (!topic?.id) continue
+      map.set(`topic:${topic.id}`, {
+        type: 'topic',
+        id: topic.id,
+        title: topic.title,
+        subtitle: 'Tema'
+      })
+    }
     for (const item of annotations) {
       if (item.lessonRelativePath) {
         const key = `lesson:${item.lessonRelativePath}`
@@ -144,24 +185,19 @@ function AnnotationsWorkspace({
       }
     }
     return [...map.values()]
-  }, [annotations])
-
-  const isRowActive = (item) => {
-    if (!selectedId) return false
-    if (typeof selectedId === 'object' && selectedId.coursePath) {
-      return item.id === selectedId.id && item.coursePath === selectedId.coursePath
-    }
-    return item.id === selectedId
-  }
+  }, [annotations, topics])
 
   useEffect(() => {
     if (!selected) {
       setDraftTitle('')
+      setDraftTopics([])
       setDraft({ text: '', markdown: '', json: null })
       setDirty(false)
       return
     }
     setDraftTitle(selected.title || '')
+    setDraftTopics(topicTitlesOf(selected, topics))
+    setTopicQuery('')
     setDraft({
       text: selected.body || '',
       markdown: selected.body || '',
@@ -170,7 +206,11 @@ function AnnotationsWorkspace({
     setEditorKey((k) => k + 1)
     setDirty(false)
     // Only remount when switching notes — not after every save (updatedAt).
-  }, [selected?.id])
+  }, [selected?.id, selected?.coursePath])
+
+  useEffect(() => {
+    setGraphFocus(null)
+  }, [selected?.id, selected?.coursePath])
 
   const handleDraftChange = (next) => {
     setDraft({
@@ -198,11 +238,24 @@ function AnnotationsWorkspace({
     if (!selected) return
     setSaving(true)
     try {
+      const topicIds = []
+      const known = [...topics]
+      for (const title of draftTopics) {
+        const key = title.trim().toLowerCase()
+        if (!key) continue
+        let topic = known.find((item) => String(item.title || '').trim().toLowerCase() === key)
+        if (!topic && onUpsertTopic) {
+          topic = await onUpsertTopic({ title: title.trim() })
+          if (topic) known.push(topic)
+        }
+        if (topic?.id && !topicIds.includes(topic.id)) topicIds.push(topic.id)
+      }
       await onSave?.(selected, {
         title: draftTitle.trim() || null,
         body: (draft.markdown || draft.text || '').trim(),
         bodyHtml: null,
-        bodyJson: null
+        bodyJson: null,
+        topicIds
       })
       setDirty(false)
       toast.success('Guardado')
@@ -274,15 +327,10 @@ function AnnotationsWorkspace({
     }
   }
 
-  const showRowDelete = typeof onDelete === 'function'
-  const colSpan = (courseColumn ? 4 : 3) + (showRowDelete ? 1 : 0)
-
-  const handleRowDelete = (event, item) => {
-    event.stopPropagation()
-    onDelete?.(item)
-  }
-
   const groupHeading = (group) => {
+    if (group.topicId) {
+      return group.courseCount > 1 ? `${group.title} · ${group.courseCount} cursos` : group.title
+    }
     if (courseColumn && group.coursePath) {
       const courseName = courseTitleByPath[group.coursePath] || group.coursePath
       if (group.projectId) return `${courseName} · ${group.title}`
@@ -310,6 +358,63 @@ function AnnotationsWorkspace({
   const targetPropValue = (item) => {
     if (item.projectId) return item.projectTitle || 'Proyecto'
     return item.lessonTitle || 'Del curso'
+  }
+
+  const related = useMemo(() => {
+    if (!selected) return []
+    return relatedFindings(selected, libraryFindings, topics)
+  }, [selected, libraryFindings, topics])
+
+  const graph = useMemo(() => {
+    const focusType = graphFocus?.type || (selected ? 'finding' : null)
+    const focusId = graphFocus?.id || selected?.id
+    return buildLocalGraph({
+      focusType,
+      focusId,
+      findings: libraryFindings,
+      topics,
+      courseTitles: courseTitleByPath,
+      depth: 2
+    })
+  }, [graphFocus, selected, libraryFindings, topics, courseTitleByPath])
+
+  const topicSuggestions = useMemo(() => {
+    const q = topicQuery.trim().toLowerCase()
+    const selectedKeys = new Set(draftTopics.map((title) => title.toLowerCase()))
+    return topics
+      .map((topic) => topic.title)
+      .filter((title) => title && !selectedKeys.has(title.toLowerCase()))
+      .filter((title) => !q || title.toLowerCase().includes(q))
+      .slice(0, 6)
+  }, [draftTopics, topicQuery, topics])
+
+  const addTopicTitle = (title) => {
+    const next = String(title || '').trim()
+    if (!next) return
+    setDraftTopics((current) => {
+      if (current.some((item) => item.toLowerCase() === next.toLowerCase())) return current
+      return [...current, next]
+    })
+    setTopicQuery('')
+    setDirty(true)
+  }
+
+  const handleGraphNode = (node) => {
+    if (node?.data?.kind === 'finding') {
+      const finding = libraryFindings.find((item) => item.id === node.data.refId)
+      if (finding) onSelect?.(finding)
+      setGraphFocus(null)
+      return
+    }
+    if (node?.data?.kind === 'topic') {
+      setGraphFocus({ type: 'topic', id: node.data.refId })
+    }
+  }
+
+  const createTopic = async (title) => {
+    if (!onUpsertTopic) return null
+    const topic = await onUpsertTopic({ title })
+    return topic
   }
 
   return (
@@ -369,96 +474,77 @@ function AnnotationsWorkspace({
       </header>
 
       <div className="annotations-page__body">
-        <aside className="annotations-table-pane" aria-label="Lista de anotaciones">
-          <div className="annotations-table-pane__bar">
+        <aside className="annotations-page-list" aria-label="Lista de anotaciones">
+          <div className="annotations-page-list__bar">
             <button
               type="button"
               className="annotations-page__icon-btn"
-              onClick={() => setListCollapsed((v) => !v)}
+              onClick={() => setListCollapsed((value) => !value)}
               title={listCollapsed ? 'Mostrar lista' : 'Ocultar lista'}
             >
               {listCollapsed ? '»' : '«'}
             </button>
-            <span className="annotations-table-pane__label">Tabla</span>
-            <span className="annotations-table-pane__count">{filtered.length}</span>
+            {!listCollapsed ? (
+              <span className="annotations-page-list__count">{filtered.length}</span>
+            ) : null}
           </div>
-
           {!listCollapsed ? (
-            <div className="annotations-table-wrap">
-              <table className="annotations-table">
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    {courseColumn ? <th>Curso</th> : null}
-                    <th>Contexto</th>
-                    <th>Fecha de creación</th>
-                    {showRowDelete ? <th className="annotations-table__actions-col"> </th> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={colSpan}>Cargando…</td>
-                    </tr>
-                  ) : filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={colSpan}>
-                        {annotations.length === 0 ? 'Aún no hay anotaciones.' : 'Ningún resultado.'}
-                      </td>
-                    </tr>
-                  ) : (
-                    groups.map((group) => (
-                      <Fragment key={group.key}>
-                        <tr className="annotations-table__group">
-                          <td colSpan={colSpan}>
-                            <span className="annotations-table__group-title">
-                              {groupHeading(group)}
-                            </span>
-                            <span className="annotations-table__group-count">{group.items.length}</span>
-                          </td>
-                        </tr>
-                        {group.items.map((item) => {
-                          const active = isRowActive(item)
-                          return (
-                            <tr
-                              key={`${item.coursePath || 'local'}-${item.id}`}
-                              className={active ? 'is-active' : ''}
-                              onClick={() => onSelect?.(item)}
-                            >
-                              <td>
-                                <span className="annotations-table__name">{displayName(item)}</span>
-                              </td>
-                              {courseColumn ? (
-                                <td className="annotations-table__muted">
-                                  {courseTitleByPath[item.coursePath] || item.coursePath}
-                                </td>
-                              ) : null}
-                              <td className="annotations-table__muted">{contextLabel(item)}</td>
-                              <td className="annotations-table__muted">
-                                {formatDateTime(item.createdAt)}
-                              </td>
-                              {showRowDelete ? (
-                                <td className="annotations-table__actions">
-                                  <button
-                                    type="button"
-                                    className="annotations-table__delete"
-                                    title="Borrar anotación"
-                                    aria-label={`Borrar ${displayName(item)}`}
-                                    onClick={(event) => handleRowDelete(event, item)}
-                                  >
-                                    Borrar
-                                  </button>
-                                </td>
-                              ) : null}
-                            </tr>
-                          )
-                        })}
-                      </Fragment>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div className="annotations-table-pane__filters">
+                <label>
+                  Agrupar
+                  <select value={groupMode} onChange={(event) => setGroupMode(event.target.value)}>
+                    <option value="target">Por archivo</option>
+                    <option value="topic">Por tema</option>
+                  </select>
+                </label>
+                <label className="annotations-table-pane__check">
+                  <input
+                    type="checkbox"
+                    checked={overlapOnly}
+                    onChange={(event) => {
+                      setOverlapOnly(event.target.checked)
+                      if (event.target.checked) setGroupMode('topic')
+                    }}
+                  />
+                  Cruces
+                </label>
+              </div>
+              <div className="annotations-page-list__items">
+                {loading ? (
+                  <p className="annotations-page-list__empty">Cargando…</p>
+                ) : filtered.length === 0 ? (
+                  <p className="annotations-page-list__empty">
+                    {annotations.length === 0 ? 'Aún no hay anotaciones.' : 'Ningún resultado.'}
+                  </p>
+                ) : groups.length === 0 ? (
+                  <p className="annotations-page-list__empty">Ningún cruce entre cursos.</p>
+                ) : (
+                  groups.map((group) => (
+                    <Fragment key={group.key}>
+                      <div className="annotations-page-list__group">{groupHeading(group)}</div>
+                      {group.items.map((item) => (
+                        <button
+                          key={`${group.key}-${item.coursePath || 'local'}-${item.id}`}
+                          type="button"
+                          className={`annotations-page-list__item${isRowActive(item) ? ' is-active' : ''}`}
+                          onClick={() => onSelect?.(item)}
+                        >
+                          <span>{displayName(item)}</span>
+                          {courseColumn ? (
+                            <small>
+                              {item.coursePath
+                                ? courseTitleByPath[item.coursePath] || item.coursePath
+                                : 'Sin curso'}
+                            </small>
+                          ) : null}
+                        </button>
+                      ))}
+                    </Fragment>
+                  ))
+                )}
+              </div>
+            </>
           ) : null}
         </aside>
 
@@ -472,7 +558,7 @@ function AnnotationsWorkspace({
             <div className="annotations-doc">
               <div className="annotations-doc__toolbar">
                 <div className="annotations-doc__toolbar-left">
-                  {onJump ? (
+                  {onJump && selected.coursePath ? (
                     <button
                       type="button"
                       className="btn btn--ghost"
@@ -525,14 +611,18 @@ function AnnotationsWorkspace({
                   <div className="annotations-doc__prop">
                     <span className="annotations-doc__prop-label">Curso</span>
                     <span>
-                      {courseTitleByPath[selected.coursePath] || selected.coursePath || '—'}
+                      {selected.coursePath
+                        ? courseTitleByPath[selected.coursePath] || selected.coursePath
+                        : 'Sin curso'}
                     </span>
                   </div>
                 ) : null}
-                <div className="annotations-doc__prop">
-                  <span className="annotations-doc__prop-label">{targetPropLabel(selected)}</span>
-                  <span>{targetPropValue(selected)}</span>
-                </div>
+                {selected.coursePath || selected.lessonRelativePath || selected.projectId ? (
+                  <div className="annotations-doc__prop">
+                    <span className="annotations-doc__prop-label">{targetPropLabel(selected)}</span>
+                    <span>{targetPropValue(selected)}</span>
+                  </div>
+                ) : null}
                 {typeof selected.timeSec === 'number' ? (
                   <div className="annotations-doc__prop">
                     <span className="annotations-doc__prop-label">Tiempo</span>
@@ -545,6 +635,60 @@ function AnnotationsWorkspace({
                     <span>{formatDateTime(selected.updatedAt)}</span>
                   </div>
                 ) : null}
+                {(selected.anchors || []).length > 1 ? (
+                  <div className="annotations-doc__prop annotations-doc__prop--wide">
+                    <span className="annotations-doc__prop-label">También anclada en</span>
+                    <span>
+                      {selected.anchors
+                        .filter((anchor) => anchor.coursePath && anchor.coursePath !== selected.coursePath)
+                        .map((anchor) => courseTitleByPath[anchor.coursePath] || anchor.coursePath)
+                        .join(' · ') || 'varios puntos'}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="annotations-topics">
+                <span className="annotations-doc__prop-label">Temas</span>
+                <div className="annotations-topics__chips">
+                  {draftTopics.map((title) => (
+                    <button
+                      key={title}
+                      type="button"
+                      className="annotations-topics__chip"
+                      onClick={() => {
+                        setDraftTopics((current) => current.filter((item) => item !== title))
+                        setDirty(true)
+                      }}
+                      title="Quitar tema"
+                    >
+                      {title}
+                      <span aria-hidden="true"> ×</span>
+                    </button>
+                  ))}
+                  <input
+                    className="annotations-topics__input"
+                    value={topicQuery}
+                    placeholder="Añadir tema"
+                    aria-label="Añadir tema"
+                    onChange={(event) => setTopicQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ',') {
+                        event.preventDefault()
+                        addTopicTitle(topicQuery)
+                      }
+                    }}
+                  />
+                </div>
+                {topicQuery.trim() && topicSuggestions.length ? (
+                  <div className="annotations-topics__suggest">
+                    {topicSuggestions.map((title) => (
+                      <button key={title} type="button" onClick={() => addTopicTitle(title)}>
+                        {title}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               <div className="annotations-doc__editor">
@@ -554,7 +698,7 @@ function AnnotationsWorkspace({
                   variant="document"
                   bodyText={draft.text}
                   bodyJson={draft.json}
-                  placeholder="Escribe tu anotación…"
+                  placeholder="Escribe tu anotación… Escribe @ para mencionar un tema."
                   onChange={handleDraftChange}
                   enableTimestamp={typeof selected.timeSec === 'number'}
                   currentTimeSec={
@@ -566,11 +710,52 @@ function AnnotationsWorkspace({
                       : null
                   }
                   mentionItems={mentionItems}
+                  onCreateTopic={onUpsertTopic ? createTopic : null}
                 />
               </div>
+
+              {related.length ? (
+                <div className="annotations-related">
+                  <span className="annotations-doc__prop-label">Referencias vinculadas</span>
+                  <ul>
+                    {related.map(({ finding, topics: shared }) => (
+                      <li key={finding.id}>
+                        <button type="button" onClick={() => onSelect?.(finding)}>
+                          <strong>{noteTitle(finding)}</strong>
+                          <span>
+                            {(finding.anchors || [])
+                              .map((anchor) => courseTitleByPath[anchor.coursePath] || anchor.coursePath)
+                              .filter(Boolean)
+                              .filter((value, index, all) => all.indexOf(value) === index)
+                              .join(' · ')}
+                            {shared.length ? ` · ${shared.map((topic) => topic.title).join(', ')}` : ''}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           )}
         </main>
+
+        <aside className="annotations-graph-pane" aria-label="Grafo de la anotación">
+          <div className="annotations-graph-pane__bar">
+            <span>Grafo</span>
+            {graphFocus?.type === 'topic' ? (
+              <button type="button" className="btn btn--ghost" onClick={() => setGraphFocus(null)}>
+                Volver
+              </button>
+            ) : null}
+          </div>
+          <KnowledgeGraphView
+            nodes={graph.nodes}
+            edges={graph.edges}
+            truncated={graph.truncated}
+            onNodeClick={handleGraphNode}
+          />
+        </aside>
       </div>
     </div>
   )

@@ -19,6 +19,7 @@
         "@lexical/table": "0.50.0",
         "@lexical/utils": "^0.50.0",
         "@xyflow/react": "^12.12.0",
+        "d3-force": "^3.0.0",
         "lexical": "^0.50.0",
         "marked": "^18.0.11",
         "react-hot-toast": "^2.5.2",

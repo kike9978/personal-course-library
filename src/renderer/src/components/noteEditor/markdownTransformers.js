@@ -66,8 +66,8 @@ const MENTION = {
     const text = node.getTextContent()
     return `@[${type}|${text}](${id})`
   },
-  importRegExp: /@\[(lesson|project|course)\|([^\]]+)]\(([^)]+)\)/,
-  regExp: /@\[(lesson|project|course)\|([^\]]+)]\(([^)]+)\)$/,
+  importRegExp: /@\[(lesson|project|course|topic)\|([^\]]+)]\(([^)]+)\)/,
+  regExp: /@\[(lesson|project|course|topic)\|([^\]]+)]\(([^)]+)\)$/,
   replace: (textNode, match) => {
     const [, mentionType, text, mentionId] = match
     textNode.replace($createMentionNode({ mentionType, mentionId, text }))

@@ -43,6 +43,7 @@ function CourseRoom({
   const [studyOpen, setStudyOpen] = useState(false)
   const [showCourseAnnotations, setShowCourseAnnotations] = useState(false)
   const [annotations, setAnnotations] = useState([])
+  const [topics, setTopics] = useState([])
   const [draft, setDraft] = useState({ text: '', markdown: '', json: null })
   const [editorKey, setEditorKey] = useState(0)
   const [editingId, setEditingId] = useState(null)
@@ -62,8 +63,12 @@ function CourseRoom({
 
   const refreshStudy = useCallback(async () => {
     try {
-      const list = await window.api.listNotes(coursePath)
+      const [list, topicList] = await Promise.all([
+        window.api.listNotes(coursePath),
+        window.api.listTopics()
+      ])
       setAnnotations(list || [])
+      setTopics(topicList || [])
     } catch (err) {
       console.error(err)
     }
@@ -196,8 +201,16 @@ function CourseRoom({
         subtitle: 'Curso'
       })
     }
+    for (const topic of topics) {
+      items.push({
+        type: 'topic',
+        id: topic.id,
+        title: topic.title,
+        subtitle: 'Tema'
+      })
+    }
     return items
-  }, [course?.title, coursePath, flatLessons, projects])
+  }, [course?.title, coursePath, flatLessons, projects, topics])
 
   const handleSeekTimestamp = useCallback((timeSec) => {
     const sec = Number(timeSec)
@@ -616,16 +629,28 @@ function CourseRoom({
   }
 
   const timelineMarks = useMemo(() => {
-    return annotations
-      .filter((n) => typeof n.timeSec === 'number' && n.lessonRelativePath)
-      .map((n) => ({
-        id: n.id,
-        kind: 'annotation',
-        lessonRelativePath: n.lessonRelativePath,
-        timeSec: n.timeSec,
-        title: n.body || 'Pin',
-        color: n.color || 'coral'
-      }))
+    const marks = []
+    for (const note of annotations) {
+      const anchors = (note.anchors || []).filter(
+        (anchor) => typeof anchor.timeSec === 'number' && anchor.lessonRelativePath
+      )
+      const source = anchors.length
+        ? anchors
+        : typeof note.timeSec === 'number' && note.lessonRelativePath
+          ? [note]
+          : []
+      for (const anchor of source) {
+        marks.push({
+          id: `${note.id}:${anchor.lessonRelativePath}:${anchor.timeSec}`,
+          kind: 'annotation',
+          lessonRelativePath: anchor.lessonRelativePath,
+          timeSec: anchor.timeSec,
+          title: note.title || note.body || 'Pin',
+          color: note.color || 'coral'
+        })
+      }
+    }
+    return marks
   }, [annotations])
 
   const goPrev = () => {
@@ -903,6 +928,11 @@ function CourseRoom({
             onSeekTimestamp={handleSeekTimestamp}
             enableTimestamp={Boolean(selectedLesson) && panelMode === 'lesson'}
             mentionItems={mentionItems}
+            onCreateTopic={async (title) => {
+              const saved = await window.api.upsertTopic({ title })
+              setTopics((await window.api.listTopics()) || [])
+              return saved
+            }}
             onSave={saveNote}
             editingId={editingId}
             onCancelEdit={clearDraft}

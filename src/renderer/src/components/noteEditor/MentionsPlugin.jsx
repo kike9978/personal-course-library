@@ -7,7 +7,7 @@ import {
   MenuOption
 } from '@lexical/react/LexicalTypeaheadMenuPlugin'
 import { $createMentionNode } from './MentionNode'
-import { $createTextNode } from 'lexical'
+import { $createTextNode, $getNodeByKey } from 'lexical'
 
 class MentionOption extends MenuOption {
   constructor(item) {
@@ -19,10 +19,11 @@ class MentionOption extends MenuOption {
 }
 
 /**
- * `@` mentions for lessons, projects, and courses.
- * mentionItems: [{ type: 'lesson'|'project'|'course', id, title, subtitle? }]
+ * `@` mentions for lessons, projects, courses, and topics.
+ * mentionItems: [{ type: 'lesson'|'project'|'course'|'topic', id, title, subtitle? }]
+ * onCreateTopic(title) may return { id, title } for a new topic.
  */
-export default function MentionsPlugin({ mentionItems = [] }) {
+export default function MentionsPlugin({ mentionItems = [], onCreateTopic }) {
   const [editor] = useLexicalComposerContext()
   const [query, setQuery] = useState(null)
   const checkTrigger = useBasicTypeaheadTriggerMatch('@', { minLength: 0 })
@@ -31,37 +32,76 @@ export default function MentionsPlugin({ mentionItems = [] }) {
     const q = String(query || '')
       .trim()
       .toLowerCase()
-    const filtered = (mentionItems || [])
-      .filter((item) => {
-        if (!q) return true
-        const hay = `${item.title || ''} ${item.subtitle || ''} ${item.type || ''}`.toLowerCase()
-        return hay.includes(q)
+    const filtered = (mentionItems || []).filter((item) => {
+      if (!q) return true
+      const hay = `${item.title || ''} ${item.subtitle || ''} ${item.type || ''}`.toLowerCase()
+      return hay.includes(q)
+    })
+    if (q) {
+      filtered.sort((a, b) => Number(b.type === 'topic') - Number(a.type === 'topic'))
+    }
+    const limited = filtered.slice(0, 12)
+    const hasExactTopic = filtered.some(
+      (item) => item.type === 'topic' && String(item.title || '').trim().toLowerCase() === q
+    )
+    if (q && onCreateTopic && !hasExactTopic) {
+      limited.push({
+        type: 'topic',
+        id: `new:${q}`,
+        title: String(query || '').trim(),
+        subtitle: 'Crear tema',
+        create: true
       })
-      .slice(0, 12)
-    return filtered.map((item) => new MentionOption(item))
-  }, [mentionItems, query])
+    }
+    return limited.map((item) => new MentionOption(item))
+  }, [mentionItems, onCreateTopic, query])
 
   const onSelectOption = useCallback(
     (option, textNodeContainingQuery, closeMenu) => {
-      editor.update(() => {
-        const mention = $createMentionNode({
-          mentionType: option.item.type,
-          mentionId: option.item.id,
-          text: option.item.title
+      const insert = (item) => {
+        editor.update(() => {
+          const mention = $createMentionNode({
+            mentionType: item.type,
+            mentionId: item.id,
+            text: item.title
+          })
+          if (textNodeContainingQuery) {
+            textNodeContainingQuery.replace(mention)
+          }
+          const space = $createTextNode(' ')
+          mention.insertAfter(space)
+          space.select()
+          closeMenu()
         })
-        if (textNodeContainingQuery) {
-          textNodeContainingQuery.replace(mention)
-        }
-        const space = $createTextNode(' ')
-        mention.insertAfter(space)
-        space.select()
-        closeMenu()
-      })
+      }
+      if (option.item.create && onCreateTopic) {
+        const queryNodeKey = textNodeContainingQuery?.getKey?.() || null
+        Promise.resolve(onCreateTopic(option.item.title))
+          .then((created) => {
+            if (!created?.id) return
+            editor.update(() => {
+              const mention = $createMentionNode({
+                mentionType: 'topic',
+                mentionId: created.id,
+                text: created.title || option.item.title
+              })
+              const queryNode = queryNodeKey ? $getNodeByKey(queryNodeKey) : null
+              if (queryNode) queryNode.replace(mention)
+              const space = $createTextNode(' ')
+              mention.insertAfter(space)
+              space.select()
+              closeMenu()
+            })
+          })
+          .catch(() => {})
+        return
+      }
+      insert(option.item)
     },
-    [editor]
+    [editor, onCreateTopic]
   )
 
-  if (!mentionItems?.length) return null
+  if (!mentionItems?.length && !onCreateTopic) return null
 
   return (
     <LexicalTypeaheadMenuPlugin

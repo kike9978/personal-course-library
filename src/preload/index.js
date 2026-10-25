@@ -41,6 +41,9 @@ const api = {
   deleteBookmark: (coursePath, bookmarkId) =>
     ipcRenderer.invoke('delete-bookmark', { coursePath, bookmarkId }),
   listAllNotes: () => ipcRenderer.invoke('list-all-notes'),
+  listTopics: () => ipcRenderer.invoke('list-topics'),
+  upsertTopic: (topic) => ipcRenderer.invoke('upsert-topic', topic || {}),
+  deleteTopic: (topicId) => ipcRenderer.invoke('delete-topic', topicId),
   listAllBookmarks: () => ipcRenderer.invoke('list-all-bookmarks'),
   getNotesSearchByCourse: () => ipcRenderer.invoke('get-notes-search-by-course'),
   revealLearningStore: () => ipcRenderer.invoke('reveal-learning-store'),

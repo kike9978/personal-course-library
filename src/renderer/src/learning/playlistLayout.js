@@ -185,7 +185,13 @@ export function withFittedHeight(playlist, cardHeight = PLAYLIST_CARD_H, byId) {
  * Drop index for a course dragged inside its playlist.
  * `y` is relative to the playlist frame. A cover grid also uses `layout.x`.
  */
-export function reorderCoursePaths(coursePaths, coursePath, y, cardHeight = PLAYLIST_CARD_H, layout) {
+export function reorderCoursePaths(
+  coursePaths,
+  coursePath,
+  y,
+  cardHeight = PLAYLIST_CARD_H,
+  layout
+) {
   const rest = coursePaths.filter((item) => item !== coursePath)
   const columns = layout?.columns || 1
   let index
@@ -201,10 +207,7 @@ export function reorderCoursePaths(coursePaths, coursePath, y, cardHeight = PLAY
         Math.round((finite(layout.x, inset) - inset) / (cardWidth + PLAYLIST_GAP))
       )
     )
-    const row = Math.max(
-      0,
-      Math.round((finite(y, originY) - originY) / cardStride(cardHeight))
-    )
+    const row = Math.max(0, Math.round((finite(y, originY) - originY) / cardStride(cardHeight)))
     index = Math.max(0, Math.min(rest.length, row * columns + column))
   } else {
     const slot = Math.round((finite(y, PLAYLIST_HEADER) - PLAYLIST_HEADER) / cardStride(cardHeight))
@@ -361,6 +364,8 @@ export function playlistAtPoint(playlists, point, options = {}) {
 export function buildFlow(playlists, courseByPath, options = {}) {
   const cardHeight = options.cardHeight || PLAYLIST_CARD_H
   const bigCover = cardHeight !== PLAYLIST_CARD_H
+  const coursesLocked = Boolean(options.coursesLocked)
+  const fullById = options.fullById || null
   const list = Array.isArray(playlists) ? playlists : []
   const byId = new Map(list.map((playlist) => [playlist.id, playlist]))
   const roots = list.filter((playlist) => !playlist.parentId || !byId.has(playlist.parentId))
@@ -374,15 +379,25 @@ export function buildFlow(playlists, courseByPath, options = {}) {
     const courseSlots = slots.filter((slot) => slot.kind === 'course')
     const nests = slots
       .filter((slot) => slot.kind === 'nest')
-      .map((slot) => ({
-        childId: slot.childId,
-        title: slot.title,
-        why: slot.why,
-        count: slot.count,
-        y: slot.y,
-        height: slot.boxHeight,
-        collapsed: Boolean(slot.collapsed)
-      }))
+      .map((slot) => {
+        const fullChild = fullById?.get(slot.childId)
+        const totalCount = Array.isArray(fullChild?.coursePaths)
+          ? fullChild.coursePaths.length
+          : slot.count
+        return {
+          childId: slot.childId,
+          title: slot.title,
+          why: slot.why,
+          count: slot.count,
+          totalCount,
+          y: slot.y,
+          height: slot.boxHeight,
+          collapsed: Boolean(slot.collapsed)
+        }
+      })
+    const fullPlaylist = fullById?.get(playlist.id) || playlist
+    const count = playlistCourseCount(playlist, byId)
+    const totalCount = fullById ? playlistCourseCount(fullPlaylist, fullById) : count
 
     nodes.push({
       id: playlist.id,
@@ -398,7 +413,9 @@ export function buildFlow(playlists, courseByPath, options = {}) {
       data: {
         title: playlist.title,
         why: playlist.why || '',
-        count: playlistCourseCount(playlist, byId),
+        count,
+        totalCount,
+        filtered: coursesLocked,
         collapsed: Boolean(playlist.collapsed),
         nests,
         minHeight: height
@@ -415,6 +432,7 @@ export function buildFlow(playlists, courseByPath, options = {}) {
         id,
         type: 'course',
         parentId: playlist.id,
+        draggable: !coursesLocked,
         ...(bigCover ? {} : { extent: 'parent' }),
         zIndex: 10,
         position: { x: slot.x ?? inset, y: slot.y },

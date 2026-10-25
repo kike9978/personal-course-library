@@ -13,12 +13,14 @@ export function sortWithinGroup(a, b) {
 function targetKey(item) {
   if (item.projectId) return `project:${item.projectId}`
   if (item.lessonRelativePath) return `file:${item.lessonRelativePath}`
+  if (!item.coursePath) return '__loose__'
   return '__course__'
 }
 
 function targetTitle(item) {
   if (item.projectId) return item.projectTitle || 'Proyecto'
   if (item.lessonRelativePath) return item.lessonTitle || item.lessonRelativePath
+  if (!item.coursePath) return 'Sin curso'
   return 'Del curso'
 }
 
@@ -67,7 +69,9 @@ export function groupAnnotationsByTarget(annotations, opts = {}) {
       ? g.title || 'Proyecto'
       : g.path
         ? g.title || g.path
-        : 'Del curso',
+        : g.key.endsWith('__loose__')
+          ? 'Sin curso'
+          : 'Del curso',
     items: [...g.items].sort(sortWithinGroup)
   }))
 

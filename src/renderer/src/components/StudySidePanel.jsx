@@ -82,6 +82,7 @@ function StudySidePanel({
   onSeekTimestamp = null,
   enableTimestamp = false,
   mentionItems = [],
+  onCreateTopic = null,
   onSave,
   onDelete,
   onEdit,
@@ -323,6 +324,7 @@ function StudySidePanel({
                 enableTimestamp={enableTimestamp || hasLesson}
                 onSeekTimestamp={onSeekTimestamp}
                 mentionItems={mentionItems}
+                onCreateTopic={onCreateTopic}
               />
               <div className="study-panel__composer-actions">
                 {editingId ? (

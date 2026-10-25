@@ -5362,11 +5362,11 @@ kbd {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(280px, 42%) 1fr;
+  grid-template-columns: 220px minmax(0, 1fr) minmax(280px, 34%);
 }
 
 .annotations-page.is-list-collapsed .annotations-page__body {
-  grid-template-columns: 3rem 1fr;
+  grid-template-columns: 3rem minmax(0, 1fr) minmax(280px, 34%);
 }
 
 .annotations-table-pane {
@@ -5663,14 +5663,10 @@ kbd {
 }
 
 @media (max-width: 900px) {
-  .annotations-page__body {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(180px, 40%) 1fr;
-  }
-
+  .annotations-page__body,
   .annotations-page.is-list-collapsed .annotations-page__body {
     grid-template-columns: 1fr;
-    grid-template-rows: 3rem 1fr;
+    grid-template-rows: minmax(140px, 28%) minmax(0, 1fr) minmax(220px, 36%);
   }
 
   .annotations-doc__prop {
@@ -5743,6 +5739,51 @@ kbd {
   flex: 1;
   min-height: 0;
   display: flex;
+}
+
+.playlist-board__stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.course-filter-bar {
+  display: contents;
+}
+
+.course-filter-bar--board {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  position: relative;
+  z-index: 4;
+  min-width: 0;
+  padding: 0.55rem 0.75rem;
+  border-bottom: var(--border-thin);
+  background: var(--clr-surface-muted);
+}
+
+.course-filter-bar--board .search-field {
+  flex: 0 1 18rem;
+  min-width: 9rem;
+  max-width: 22rem;
+}
+
+.course-filter-bar--board .search-field input {
+  height: 32px;
+  padding: 0 0.85rem 0 2.15rem;
+  font-size: 0.8125rem;
+}
+
+.course-filter-bar--board .search-field__icon {
+  left: 0.75rem;
+}
+
+.course-filter-bar--board .header-programs {
+  flex: 1 1 auto;
 }
 
 .playlist-board__sidebar {
@@ -5905,6 +5946,21 @@ kbd {
   box-shadow:
     inset 3px 0 0 var(--clr-coral),
     var(--shadow-card);
+}
+
+.playlist-course-row__status,
+.playlist-course__status {
+  display: none;
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.playlist-board__courses.is-covers .playlist-course-row__status,
+.playlist-course.is-cover .playlist-course__status {
+  display: inline-flex;
+  top: 0.45rem;
+  left: 0.45rem;
 }
 
 .playlist-course-row__text {
@@ -6474,4 +6530,317 @@ kbd {
     border-left: none;
     border-top: 1px solid var(--clr-border);
   }
+}
+
+.annotations-view-switch {
+  display: inline-flex;
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--clr-surface);
+}
+
+.annotations-view-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--clr-ink-soft);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+
+.annotations-view-switch button.is-active {
+  background: var(--clr-ink);
+  color: #fff;
+}
+
+.annotations-table-pane__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.7rem;
+  border-bottom: 1px solid var(--clr-border);
+  font-size: 0.75rem;
+  color: var(--clr-ink-soft);
+}
+
+.annotations-table-pane__filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.annotations-table-pane__filters select {
+  font: inherit;
+  color: var(--clr-ink);
+  background: var(--clr-surface);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  padding: 0.15rem 0.35rem;
+}
+
+.annotations-table-pane__check {
+  cursor: pointer;
+}
+
+.annotations-map-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.annotations-map-pane__back {
+  position: absolute;
+  z-index: 2;
+  top: 0.5rem;
+  right: 0.5rem;
+}
+
+.annotations-page-list {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--clr-border);
+  background: var(--clr-cream);
+}
+
+.annotations-page-list__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--clr-border);
+}
+
+.annotations-page-list__count {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--clr-ink-soft);
+}
+
+.annotations-page-list__items {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.35rem;
+}
+
+.annotations-page-list__group {
+  margin: 0.7rem 0.35rem 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--clr-ink-soft);
+}
+
+.annotations-page-list__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--clr-ink);
+  font: inherit;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  cursor: pointer;
+}
+
+.annotations-page-list__item span {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.annotations-page-list__item small {
+  color: var(--clr-ink-soft);
+  font-size: 0.72rem;
+}
+
+.annotations-page-list__item.is-active,
+.annotations-page-list__item:hover {
+  background: var(--clr-surface);
+}
+
+.annotations-page-list__item.is-active {
+  box-shadow: inset 2px 0 0 var(--clr-coral);
+}
+
+.annotations-page-list__empty {
+  margin: 0.8rem 0.5rem;
+  color: var(--clr-ink-soft);
+  font-size: 0.82rem;
+}
+
+.annotations-graph-pane {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--clr-border);
+  background: var(--clr-cream);
+}
+
+.annotations-graph-pane__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  border-bottom: 1px solid var(--clr-border);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--clr-ink-soft);
+}
+
+.knowledge-graph {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 16rem;
+  overflow: hidden;
+}
+
+.knowledge-graph__svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+
+.knowledge-graph__link {
+  stroke: rgba(42, 36, 56, 0.38);
+  stroke-width: 1.25;
+}
+
+.knowledge-graph__link.is-hot {
+  stroke: rgba(42, 36, 56, 0.72);
+  stroke-width: 1.6;
+}
+
+.knowledge-graph__link.is-dim,
+.knowledge-graph__node.is-dim {
+  opacity: 0.18;
+}
+
+.knowledge-graph__node {
+  cursor: grab;
+}
+
+.knowledge-graph__node text {
+  font-family: var(--font-body);
+  font-size: 12px;
+  fill: var(--clr-ink);
+  pointer-events: none;
+}
+
+.knowledge-graph__node.is-active circle {
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.knowledge-graph--empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  color: var(--clr-ink-soft);
+  text-align: center;
+}
+
+.knowledge-graph__note {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.4rem;
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--clr-ink-soft);
+}
+
+.annotations-topics,
+.annotations-related {
+  padding: 0 1.25rem 0.75rem;
+}
+
+.annotations-topics__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin-top: 0.35rem;
+}
+
+.annotations-topics__chip,
+.annotations-topics__suggest button,
+.annotations-related button {
+  border: 1px solid var(--clr-chip-status-border);
+  background: var(--clr-chip-status-bg);
+  color: var(--clr-chip-status-text);
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.15rem 0.55rem;
+  cursor: pointer;
+}
+
+.annotations-topics__input {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--clr-ink);
+  min-width: 8rem;
+  padding: 0.15rem 0.2rem;
+}
+
+.annotations-topics__input:focus {
+  outline: none;
+}
+
+.annotations-topics__suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.annotations-related ul {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.annotations-related button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  width: 100%;
+}
+
+.annotations-related button span {
+  color: var(--clr-ink-soft);
+  font-size: 0.75rem;
+}
+
+.annotations-doc__prop--wide {
+  grid-column: 1 / -1;
 }

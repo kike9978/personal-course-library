@@ -13,6 +13,7 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
   const [annotations, setAnnotations] = useState([])
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState([])
+  const [topics, setTopics] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [courseFilter, setCourseFilter] = useState(coursePath || '')
 
@@ -32,8 +33,12 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
   }, [coursePath])
 
   const refreshLibraryNotes = useCallback(async () => {
-    const list = await window.api.listAllNotes()
+    const [list, topicList] = await Promise.all([
+      window.api.listAllNotes(),
+      window.api.listTopics()
+    ])
     setItems(list || [])
+    setTopics(topicList || [])
     return list || []
   }, [])
 
@@ -126,7 +131,11 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
   }
 
   const visibleItems = courseFilter
-    ? items.filter((item) => item.coursePath === courseFilter)
+    ? items.filter(
+        (item) =>
+          item.coursePath === courseFilter ||
+          (item.anchors || []).some((anchor) => anchor.coursePath === courseFilter)
+      )
     : items
 
   return (
@@ -140,7 +149,13 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
         >
           <option value="">Todos</option>
           {courses
-            .filter((c) => items.some((n) => n.coursePath === c.path))
+            .filter((c) =>
+              items.some(
+                (note) =>
+                  note.coursePath === c.path ||
+                  (note.anchors || []).some((anchor) => anchor.coursePath === c.path)
+              )
+            )
             .map((c) => (
               <option key={c.path} value={c.path}>
                 {c.title || c.path}
@@ -153,7 +168,23 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
         subtitle={courseFilter ? titleByPath[courseFilter] || courseFilter : 'Toda la biblioteca'}
         annotations={visibleItems}
         selectedId={selectedId}
-        onSelect={(item) => setSelectedId({ id: item.id, coursePath: item.coursePath })}
+        onSelect={(item) => {
+          if (
+            courseFilter &&
+            item.coursePath !== courseFilter &&
+            !(item.anchors || []).some((anchor) => anchor.coursePath === courseFilter)
+          ) {
+            setCourseFilter('')
+          }
+          setSelectedId({ id: item.id, coursePath: item.coursePath })
+        }}
+        onCreate={async () => {
+          setCourseFilter('')
+          await window.api.upsertNote(null, { title: '', body: '', anchors: [] })
+          const all = await refreshLibraryNotes()
+          const created = [...all].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0]
+          if (created) setSelectedId({ id: created.id, coursePath: created.coursePath || null })
+        }}
         onSave={async (item, payload) => {
           await window.api.upsertNote(item.coursePath, { id: item.id, ...payload })
           const all = await refreshLibraryNotes()
@@ -177,6 +208,13 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
         onJump={handleJump}
         courseColumn
         courseTitleByPath={titleByPath}
+        topics={topics}
+        corpus={items}
+        onUpsertTopic={async (topic) => {
+          const saved = await window.api.upsertTopic(topic)
+          setTopics(await window.api.listTopics())
+          return saved
+        }}
       />
     </div>
   )

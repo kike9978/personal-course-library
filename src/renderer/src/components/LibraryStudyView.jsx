@@ -5,6 +5,7 @@ import AppNav from './AppNav'
 
 function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
   const [items, setItems] = useState([])
+  const [topics, setTopics] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [courseFilter, setCourseFilter] = useState('')
   const [loading, setLoading] = useState(true)
@@ -18,8 +19,12 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
   }, [courses])
 
   const refresh = async () => {
-    const list = await window.api.listAllNotes()
+    const [list, topicList] = await Promise.all([
+      window.api.listAllNotes(),
+      window.api.listTopics()
+    ])
     setItems(list || [])
+    setTopics(topicList || [])
     return list || []
   }
 
@@ -51,7 +56,13 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
   }, [])
 
   const coursesWithNotes = useMemo(() => {
-    const paths = new Set(items.map((n) => n.coursePath).filter(Boolean))
+    const paths = new Set()
+    for (const note of items) {
+      if (note.coursePath) paths.add(note.coursePath)
+      for (const anchor of note.anchors || []) {
+        if (anchor.coursePath) paths.add(anchor.coursePath)
+      }
+    }
     return courses
       .filter((c) => paths.has(c.path))
       .sort((a, b) =>
@@ -61,7 +72,11 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
 
   const visibleItems = useMemo(() => {
     if (!courseFilter) return items
-    return items.filter((item) => item.coursePath === courseFilter)
+    return items.filter(
+      (item) =>
+        item.coursePath === courseFilter ||
+        (item.anchors || []).some((anchor) => anchor.coursePath === courseFilter)
+    )
   }, [items, courseFilter])
 
   useEffect(() => {
@@ -75,6 +90,14 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
       )
     }
   }, [visibleItems, selectedId])
+
+  const handleCreate = async () => {
+    setCourseFilter('')
+    await window.api.upsertNote(null, { title: '', body: '', anchors: [] })
+    const all = await refresh()
+    const created = [...all].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0]
+    if (created) setSelectedId({ id: created.id, coursePath: created.coursePath || null })
+  }
 
   const handleSave = async (item, payload) => {
     await window.api.upsertNote(item.coursePath, {
@@ -137,7 +160,17 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
         subtitle={courseFilter ? titleByPath[courseFilter] || courseFilter : 'Toda la biblioteca'}
         annotations={visibleItems}
         selectedId={selectedId}
-        onSelect={(item) => setSelectedId({ id: item.id, coursePath: item.coursePath })}
+        onSelect={(item) => {
+          if (
+            courseFilter &&
+            item.coursePath !== courseFilter &&
+            !(item.anchors || []).some((anchor) => anchor.coursePath === courseFilter)
+          ) {
+            setCourseFilter('')
+          }
+          setSelectedId({ id: item.id, coursePath: item.coursePath })
+        }}
+        onCreate={handleCreate}
         onSave={handleSave}
         onDelete={handleDelete}
         onJump={handleJump}
@@ -151,6 +184,13 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
         courseColumn
         courseTitleByPath={titleByPath}
         loading={loading}
+        topics={topics}
+        corpus={items}
+        onUpsertTopic={async (topic) => {
+          const saved = await window.api.upsertTopic(topic)
+          setTopics(await window.api.listTopics())
+          return saved
+        }}
       />
     </div>
   )

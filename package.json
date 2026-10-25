@@ -16,7 +16,7 @@
     "build:mac": "npm run build && electron-builder --mac --config",
     "build:linux": "npm run build && electron-builder --linux --config",
     "generate:json": "node src/scripts/jsonGenerator.js",
-    "test": "node --experimental-detect-module --test src/shared/courseDescription.test.js src/shared/playlistBrief.test.js src/shared/playlistNest.test.js src/shared/playlistSemantic.test.js src/renderer/src/utils/courseExport.test.js src/renderer/src/learning/playlistLayout.test.js"
+    "test": "node --experimental-detect-module --test src/shared/courseDescription.test.js src/shared/playlistBrief.test.js src/shared/playlistNest.test.js src/shared/playlistSemantic.test.js src/shared/knowledgeGraph.test.js src/renderer/src/utils/courseExport.test.js src/renderer/src/utils/courseFilters.test.js src/renderer/src/learning/playlistLayout.test.js"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
@@ -34,6 +34,7 @@
     "@lexical/table": "0.50.0",
     "@lexical/utils": "^0.50.0",
     "@xyflow/react": "^12.12.0",
+    "d3-force": "^3.0.0",
     "lexical": "^0.50.0",
     "marked": "^18.0.11",
     "react-hot-toast": "^2.5.2"

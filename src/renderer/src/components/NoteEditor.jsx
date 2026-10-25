@@ -837,7 +837,8 @@ function NoteEditor({
   onSeekTimestamp = null,
   currentTimeSec = 0,
   enableTimestamp = false,
-  mentionItems = []
+  mentionItems = [],
+  onCreateTopic = null
 }) {
   const [anchorElem, setAnchorElem] = useState(null)
 
@@ -915,7 +916,7 @@ function NoteEditor({
             currentTimeSec={currentTimeSec}
             enableTimestamp={enableTimestamp}
           />
-          <MentionsPlugin mentionItems={mentionItems} />
+          <MentionsPlugin mentionItems={mentionItems} onCreateTopic={onCreateTopic} />
           <OnChangePlugin onChange={handleChange} ignoreSelectionChange />
           {autofocus ? <AutoFocusPlugin /> : null}
         </LexicalComposer>

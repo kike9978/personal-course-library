@@ -28,6 +28,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import AppNav from './AppNav'
 import CourseDetailPanel from './CourseDetailPanel'
+import CourseFilterBar from './CourseFilterBar'
 import CourseEditModal from './CourseEditModal'
 import CoverSearchModal from './CoverSearchModal'
 import PlaylistBuilder from './PlaylistBuilder'
@@ -55,6 +56,13 @@ import {
   reorderCoursePaths,
   withFittedHeight
 } from '../learning/playlistLayout'
+import {
+  collectCourseFacets,
+  courseMatchesLibraryFilters,
+  libraryFiltersActive,
+  projectPlaylists,
+  useDebouncedValue
+} from '../utils/courseFilters'
 
 const BoardActions = createContext(null)
 
@@ -236,7 +244,7 @@ function PlaylistNode({ id, data }) {
           </svg>
         </button>
         <ListTitle id={id} title={data.title} />
-        <span className="playlist-frame__count">{data.count}</span>
+        <FrameCount count={data.count} total={data.totalCount} />
         <button
           type="button"
           className="playlist-frame__icon nodrag nopan"
@@ -280,7 +288,7 @@ function PlaylistNode({ id, data }) {
             >
               {nest.title}
             </button>
-            <span className="playlist-frame__count">{nest.count}</span>
+            <FrameCount count={nest.count} total={nest.totalCount} />
             <button
               type="button"
               className="playlist-frame__icon"
@@ -301,7 +309,11 @@ function PlaylistNode({ id, data }) {
         </div>
       ))}
       {data.collapsed || data.count > 0 || (data.nests || []).length ? null : (
-        <p className="playlist-frame__empty">Arrastra un curso o una lista aquí</p>
+        <p className="playlist-frame__empty">
+          {data.filtered && data.totalCount > 0
+            ? 'Ningún curso coincide'
+            : 'Arrastra un curso o una lista aquí'}
+        </p>
       )}
     </div>
   )
@@ -394,6 +406,9 @@ function CourseNode({ data }) {
         className="playlist-course__cover"
         eager
       />
+      {data.inProcess ? (
+        <span className="status-ribbon playlist-course__status">En curso</span>
+      ) : null}
       <div className="playlist-course__text">
         <h3 title={data.why ? `${data.title}. ${data.why}` : data.title}>{data.title}</h3>
         {data.missing ? (
@@ -440,6 +455,18 @@ function CourseNode({ data }) {
   )
 }
 
+function FrameCount({ count, total }) {
+  const narrowed = typeof total === 'number' && total !== count
+  return (
+    <span
+      className="playlist-frame__count"
+      title={narrowed ? `${count} de ${total} cursos` : undefined}
+    >
+      {narrowed ? `${count}/${total}` : count}
+    </span>
+  )
+}
+
 const nodeTypes = { playlist: PlaylistNode, course: CourseNode }
 const SIDEBAR_MIN = 280
 const SIDEBAR_MAX = 1080
@@ -479,7 +506,14 @@ function courseSignatureOf(courses) {
         course.hasCover ? 1 : 0,
         course.coverStamp || '',
         course.isInProcess ? 1 : 0,
-        course.learning?.percent ?? ''
+        course.isNew ? 1 : 0,
+        course.missingProps ? 1 : 0,
+        course.rate ?? '',
+        course.instructor || '',
+        (course.programs || []).join('\u001e'),
+        (course.theme || []).join('\u001e'),
+        course.learning?.percent ?? '',
+        course.learning?.isRecentlyViewed ? 1 : 0
       ].join('\u001f')
     )
     .join('\n')
@@ -495,6 +529,15 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   const [programFilter, setProgramFilter] = useState('')
   const [inProcessOnly, setInProcessOnly] = useState(false)
   const [unlistedOnly, setUnlistedOnly] = useState(false)
+  const [boardQuery, setBoardQuery] = useState('')
+  const [boardInProcess, setBoardInProcess] = useState(false)
+  const [boardNewOnly, setBoardNewOnly] = useState(false)
+  const [boardRecentOnly, setBoardRecentOnly] = useState(false)
+  const [boardMissingOnly, setBoardMissingOnly] = useState(false)
+  const [boardInstitution, setBoardInstitution] = useState('')
+  const [boardProgram, setBoardProgram] = useState('')
+  const [boardTheme, setBoardTheme] = useState('')
+  const [boardMinRate, setBoardMinRate] = useState(0)
   const [bigCover, setBigCover] = useState(readBigCover)
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth)
   const [selectedId, setSelectedId] = useState(null)
@@ -516,9 +559,42 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   const creatingRef = useRef(false)
   const bigCoverRef = useRef(bigCover)
   const sidebarWidthRef = useRef(sidebarWidth)
+  const displayRef = useRef(playlists)
+  const debouncedBoardQuery = useDebouncedValue(boardQuery, 200)
+  const boardFilters = useMemo(
+    () => ({
+      query: debouncedBoardQuery,
+      isInProcessOnly: boardInProcess,
+      isNewOnly: boardNewOnly,
+      recentlyViewedOnly: boardRecentOnly,
+      missingPropsOnly: boardMissingOnly,
+      institution: boardInstitution,
+      program: boardProgram,
+      theme: boardTheme,
+      minRate: boardMinRate
+    }),
+    [
+      debouncedBoardQuery,
+      boardInProcess,
+      boardNewOnly,
+      boardRecentOnly,
+      boardMissingOnly,
+      boardInstitution,
+      boardProgram,
+      boardTheme,
+      boardMinRate
+    ]
+  )
+  const boardFiltersRef = useRef(boardFilters)
   playlistsRef.current = playlists
   bigCoverRef.current = bigCover
   sidebarWidthRef.current = sidebarWidth
+  boardFiltersRef.current = boardFilters
+  displayRef.current = projectPlaylists(
+    playlists,
+    new Map(courses.map((course) => [course.path, course])),
+    boardFilters
+  )
   coursesRef.current = courses
   selectedIdRef.current = selectedId
 
@@ -533,8 +609,15 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
 
   const syncFlow = useCallback(
     (list, covers = bigCoverRef.current) => {
-      const built = buildFlow(list, courseMap(), {
-        cardHeight: covers ? PLAYLIST_COVER_H : PLAYLIST_CARD_H
+      const filters = boardFiltersRef.current
+      const map = courseMap()
+      const locked = libraryFiltersActive(filters)
+      const projected = projectPlaylists(list, map, filters)
+      displayRef.current = projected
+      const built = buildFlow(projected, map, {
+        cardHeight: covers ? PLAYLIST_COVER_H : PLAYLIST_CARD_H,
+        coursesLocked: locked,
+        fullById: locked ? new Map(list.map((playlist) => [playlist.id, playlist])) : null
       })
       setNodes(built.nodes)
       setEdges(built.edges)
@@ -544,7 +627,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
 
   useEffect(() => {
     syncFlow(playlists, bigCover)
-  }, [playlists, courseSignature, bigCover, syncFlow])
+  }, [playlists, courseSignature, bigCover, boardFilters, syncFlow])
 
   useEffect(() => {
     try {
@@ -1070,9 +1153,10 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
             })
           }
           return live.reduce((next, change) => {
-            const playlist = playlistsRef.current.find((item) => item.id === change.id)
+            const source = displayRef.current
+            const playlist = source.find((item) => item.id === change.id)
             if (!playlist) return next
-            return applyCoverWidth(next, playlist, change.dimensions.width, playlistsRef.current)
+            return applyCoverWidth(next, playlist, change.dimensions.width, source)
           }, current)
         })
       }
@@ -1149,6 +1233,17 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
           return
         }
         const position = { x: node.position.x, y: node.position.y }
+        if (libraryFiltersActive(boardFiltersRef.current)) {
+          const width = readNodeSize(node, current.size).width
+          const samePos =
+            Math.abs(position.x - current.position.x) < 0.5 &&
+            Math.abs(position.y - current.position.y) < 0.5
+          const sameWidth = Math.abs(width - current.size.width) < 1
+          if (!samePos || !sameWidth) {
+            persistPlaylist({ ...current, position, size: { ...current.size, width } })
+          }
+          return
+        }
         const measured = readNodeSize(node, current.size)
         const size = {
           width: measured.width,
@@ -1165,6 +1260,10 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
         return
       }
       if (node.type !== 'course') return
+      if (libraryFiltersActive(boardFiltersRef.current)) {
+        syncFlow(list)
+        return
+      }
       const current = list.find((playlist) => playlist.id === node.data.playlistId)
       if (!current) return
       const sectionTop = node.data.sectionTop ?? PLAYLIST_HEADER
@@ -1172,13 +1271,19 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       const columns = node.data.columns || 1
       const nextPaths =
         columns > 1
-          ? reorderCoursePaths(current.coursePaths, node.data.coursePath, node.position.y, cardHeight, {
-              columns,
-              x: node.position.x,
-              inset: node.data.inset,
-              innerWidth: node.data.innerWidth,
-              originY: sectionTop
-            })
+          ? reorderCoursePaths(
+              current.coursePaths,
+              node.data.coursePath,
+              node.position.y,
+              cardHeight,
+              {
+                columns,
+                x: node.position.x,
+                inset: node.data.inset,
+                innerWidth: node.data.innerWidth,
+                originY: sectionTop
+              }
+            )
           : reorderCoursePaths(
               current.coursePaths,
               node.data.coursePath,
@@ -1422,6 +1527,30 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     })
     return [...names].sort((a, b) => a.localeCompare(b))
   }, [courses])
+  const listedCourses = useMemo(() => {
+    const paths = new Set()
+    for (const playlist of playlists) {
+      for (const coursePath of playlist.coursePaths || []) paths.add(coursePath)
+    }
+    if (paths.size === 0) return courses
+    return courses.filter((course) => paths.has(course.path))
+  }, [courses, playlists])
+  const boardFacets = useMemo(() => collectCourseFacets(listedCourses), [listedCourses])
+  const boardStats = useMemo(() => {
+    const byPath = new Map(courses.map((course) => [course.path, course]))
+    const active = libraryFiltersActive(boardFilters)
+    const all = new Set()
+    let visible = 0
+    for (const playlist of playlists) {
+      for (const coursePath of playlist.coursePaths || []) {
+        if (all.has(coursePath)) continue
+        all.add(coursePath)
+        const course = byPath.get(coursePath)
+        if (!active || (course && courseMatchesLibraryFilters(course, boardFilters))) visible += 1
+      }
+    }
+    return { total: all.size, visible: active ? visible : all.size, active }
+  }, [courses, playlists, boardFilters])
   const detailCourse = useMemo(
     () => (detailPath ? courses.find((course) => course.path === detailPath) || null : null),
     [courses, detailPath]
@@ -1643,6 +1772,9 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
                         coverStamp={course.coverStamp}
                         className="playlist-course-row__cover"
                       />
+                      {course.isInProcess ? (
+                        <span className="status-ribbon playlist-course-row__status">En curso</span>
+                      ) : null}
                       <div className="playlist-course-row__text">
                         <span className="playlist-course-row__title">
                           {course.title || course.path}
@@ -1688,67 +1820,97 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
               onKeyDown={onSidebarResizeKey}
             />
           </aside>
-          <div
-            className="playlist-board__canvas"
-            ref={canvasRef}
-            onDragLeave={(event) => {
-              if (event.currentTarget.contains(event.relatedTarget)) return
-              setDropId(null)
-            }}
-          >
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={handleNodesChange}
-              onEdgesChange={onEdgesChange}
-              onNodeDragStop={onNodeDragStop}
-              onNodeClick={onNodeClick}
-              onBeforeDelete={onBeforeDelete}
-              onNodesDelete={onNodesDelete}
-              onNodeDoubleClick={onNodeDoubleClick}
-              onDragOver={onDragOver}
-              onDrop={onDrop}
-              nodeTypes={nodeTypes}
-              style={{ width: '100%', height: '100%' }}
-              colorMode="light"
-              fitView={false}
-              minZoom={0.25}
-              maxZoom={1.75}
-              panOnScroll
-              zoomOnDoubleClick={false}
-              nodesConnectable={false}
-              edgesReconnectable={false}
-              elevateNodesOnSelect={false}
-              deleteKeyCode={['Backspace', 'Delete']}
-              proOptions={{ hideAttribution: false }}
-              defaultEdgeOptions={{ type: 'straight', interactionWidth: 0 }}
+          <div className="playlist-board__stage">
+            <CourseFilterBar
+              idPrefix="board"
+              className="course-filter-bar--board"
+              showSearch
+              query={boardQuery}
+              onQueryChange={setBoardQuery}
+              isInProcessOnly={boardInProcess}
+              onInProcessOnlyChange={setBoardInProcess}
+              isNewOnly={boardNewOnly}
+              onNewOnlyChange={setBoardNewOnly}
+              recentlyViewedOnly={boardRecentOnly}
+              onRecentlyViewedOnlyChange={setBoardRecentOnly}
+              missingPropsOnly={boardMissingOnly}
+              onMissingPropsOnlyChange={setBoardMissingOnly}
+              institutions={boardFacets.institutions}
+              programs={boardFacets.programs}
+              themes={boardFacets.themes}
+              institutionFilter={boardInstitution}
+              onInstitutionFilterChange={setBoardInstitution}
+              programFilter={boardProgram}
+              onProgramFilterChange={setBoardProgram}
+              themeFilter={boardTheme}
+              onThemeFilterChange={setBoardTheme}
+              minRate={boardMinRate}
+              onMinRateChange={setBoardMinRate}
+              courseCount={boardStats.visible}
+              courseTotal={boardStats.total}
+            />
+            <div
+              className="playlist-board__canvas"
+              ref={canvasRef}
+              onDragLeave={(event) => {
+                if (event.currentTarget.contains(event.relatedTarget)) return
+                setDropId(null)
+              }}
             >
-              <Background
-                variant={BackgroundVariant.Dots}
-                gap={22}
-                size={1.4}
-                color="rgba(42, 36, 56, 0.18)"
-              />
-              <Controls position="bottom-left" showInteractive={false} />
-              <MiniMap
-                position="top-right"
-                pannable
-                zoomable
-                maskColor="rgba(250, 248, 246, 0.72)"
-                nodeColor={(node) => (node.type === 'playlist' ? '#e84570' : '#ffffff')}
-                nodeStrokeWidth={2}
-              />
-              {!loading && playlists.length === 0 ? (
-                <Panel position="top-center" className="playlist-board__hint">
-                  Crea una lista, o usa Armar para agrupar cursos parecidos.
-                </Panel>
-              ) : null}
-              {loading ? (
-                <Panel position="top-center" className="playlist-board__hint">
-                  Cargando listas…
-                </Panel>
-              ) : null}
-            </ReactFlow>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={handleNodesChange}
+                onEdgesChange={onEdgesChange}
+                onNodeDragStop={onNodeDragStop}
+                onNodeClick={onNodeClick}
+                onBeforeDelete={onBeforeDelete}
+                onNodesDelete={onNodesDelete}
+                onNodeDoubleClick={onNodeDoubleClick}
+                onDragOver={onDragOver}
+                onDrop={onDrop}
+                nodeTypes={nodeTypes}
+                style={{ width: '100%', height: '100%' }}
+                colorMode="light"
+                fitView={false}
+                minZoom={0.25}
+                maxZoom={1.75}
+                panOnScroll
+                zoomOnDoubleClick={false}
+                nodesConnectable={false}
+                edgesReconnectable={false}
+                elevateNodesOnSelect={false}
+                deleteKeyCode={['Backspace', 'Delete']}
+                proOptions={{ hideAttribution: false }}
+                defaultEdgeOptions={{ type: 'straight', interactionWidth: 0 }}
+              >
+                <Background
+                  variant={BackgroundVariant.Dots}
+                  gap={22}
+                  size={1.4}
+                  color="rgba(42, 36, 56, 0.18)"
+                />
+                <Controls position="bottom-left" showInteractive={false} />
+                <MiniMap
+                  position="top-right"
+                  pannable
+                  zoomable
+                  maskColor="rgba(250, 248, 246, 0.72)"
+                  nodeColor={(node) => (node.type === 'playlist' ? '#e84570' : '#ffffff')}
+                  nodeStrokeWidth={2}
+                />
+                {!loading && playlists.length === 0 ? (
+                  <Panel position="top-center" className="playlist-board__hint">
+                    Crea una lista, o usa Armar para agrupar cursos parecidos.
+                  </Panel>
+                ) : null}
+                {loading ? (
+                  <Panel position="top-center" className="playlist-board__hint">
+                    Cargando listas…
+                  </Panel>
+                ) : null}
+              </ReactFlow>
+            </div>
           </div>
           {detailCourse ? (
             <CourseDetailPanel

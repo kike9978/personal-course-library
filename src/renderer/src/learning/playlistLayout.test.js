@@ -300,6 +300,27 @@ describe('playlist layout', () => {
     assert.equal(closed.nodes[0].data.nests.length, 0)
   })
 
+  it('keeps hidden courses out of the frame and locks their order', () => {
+    const full = {
+      id: 'pl',
+      title: 'Lista',
+      position: { x: 0, y: 0 },
+      size: { width: 320, height: 400 },
+      coursePaths: ['a', 'b', 'c']
+    }
+    const shown = { ...full, coursePaths: ['b'] }
+    const { nodes } = buildFlow([shown], new Map([['b', { path: 'b', title: 'B' }]]), {
+      fullById: new Map([[full.id, full]]),
+      coursesLocked: true
+    })
+    assert.equal(nodes.filter((node) => node.type === 'course').length, 1)
+    assert.equal(nodes[0].data.count, 1)
+    assert.equal(nodes[0].data.totalCount, 3)
+    assert.equal(nodes[0].data.filtered, true)
+    assert.equal(nodes[1].draggable, false)
+    assert.equal(nodes[0].height, contentHeight(1))
+  })
+
   it('wraps portadas into columns when the lista is wide enough', () => {
     const paths = ['a', 'b', 'c', 'd']
     const courses = new Map(paths.map((path) => [path, { path, title: path }]))
@@ -318,7 +339,10 @@ describe('playlist layout', () => {
     )
     const narrowCourses = narrow.nodes.filter((node) => node.type === 'course')
     assert.equal(narrowCourses[0].data.columns, 1)
-    assert.equal(narrowCourses[0].position.y, narrowCourses[1].position.y - (PLAYLIST_COVER_H + PLAYLIST_GAP))
+    assert.equal(
+      narrowCourses[0].position.y,
+      narrowCourses[1].position.y - (PLAYLIST_COVER_H + PLAYLIST_GAP)
+    )
     assert.equal(narrow.nodes[0].height, contentHeight(4, PLAYLIST_COVER_H))
 
     const wide = buildFlow(

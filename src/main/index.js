@@ -57,6 +57,9 @@ import {
   upsertBookmark,
   deleteBookmark,
   listAllNotes,
+  listTopics,
+  upsertTopic,
+  deleteTopic,
   listAllBookmarks,
   listProjects,
   listAllProjects,
@@ -599,7 +602,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('list-notes', (_event, coursePath) => listNotes(coursePath))
   ipcMain.handle('upsert-note', (_event, { coursePath, note }) => {
-    const list = upsertNote(coursePath, note)
+    const list = upsertNote(coursePath || null, note)
     broadcastToWindows('notes-changed', { coursePath })
     return list
   })
@@ -627,6 +630,17 @@ function registerIpcHandlers() {
     deleteBookmark(coursePath, bookmarkId)
   )
   ipcMain.handle('list-all-notes', () => listAllNotes())
+  ipcMain.handle('list-topics', () => listTopics())
+  ipcMain.handle('upsert-topic', (_event, topic) => {
+    const saved = upsertTopic(topic || {})
+    broadcastToWindows('notes-changed', {})
+    return saved
+  })
+  ipcMain.handle('delete-topic', (_event, topicId) => {
+    const topics = deleteTopic(topicId)
+    broadcastToWindows('notes-changed', {})
+    return topics
+  })
   ipcMain.handle('list-all-bookmarks', () => listAllBookmarks())
   ipcMain.handle('get-notes-search-by-course', () => getNotesSearchByCourse())
   ipcMain.handle('reveal-learning-store', () => {

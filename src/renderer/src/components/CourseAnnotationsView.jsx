@@ -18,6 +18,22 @@ function CourseAnnotationsView({
   currentProjectId
 }) {
   const [selectedId, setSelectedId] = useState(null)
+  const [topics, setTopics] = useState([])
+  const [corpus, setCorpus] = useState(annotations)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([window.api.listTopics(), window.api.listAllNotes()])
+      .then(([topicList, allNotes]) => {
+        if (cancelled) return
+        setTopics(topicList || [])
+        setCorpus(allNotes || [])
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [annotations])
 
   useEffect(() => {
     if (!annotations.length) {
@@ -104,6 +120,13 @@ function CourseAnnotationsView({
       onOpenPopOut={onOpenPopOut}
       preferGroupPath={currentTargetPath || null}
       preferGroupProjectId={currentProjectId || null}
+      topics={topics}
+      corpus={corpus}
+      onUpsertTopic={async (topic) => {
+        const saved = await window.api.upsertTopic(topic)
+        setTopics(await window.api.listTopics())
+        return saved
+      }}
     />
   )
 }
