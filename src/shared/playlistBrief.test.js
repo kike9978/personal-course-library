@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { buildPlaylistBrief, parsePlaylistBrief, statusLabel } from './playlistBrief.js'
+import {
+  buildPlaylistBrief,
+  parsePlaylistBrief,
+  selectedPlacement,
+  statusLabel
+} from './playlistBrief.js'
 
 const courses = [
   {
@@ -93,12 +98,15 @@ describe('playlist paste', () => {
 
   it('refuses a reply written for another goal', () => {
     const parsed = parsePlaylistBrief(
-      reply([
-        {
-          title: 'Otra cosa',
-          courses: [{ folder: 'School - Drawing People', why: 'Figura primero.' }]
-        }
-      ], 'otra meta distinta'),
+      reply(
+        [
+          {
+            title: 'Otra cosa',
+            courses: [{ folder: 'School - Drawing People', why: 'Figura primero.' }]
+          }
+        ],
+        'otra meta distinta'
+      ),
       courses,
       { goal: 'armar un reel' }
     )
@@ -183,5 +191,151 @@ describe('playlist paste', () => {
     })
     assert.equal(parsed.ok, false)
     assert.equal(parsed.lists.length, 0)
+  })
+})
+
+const board = [
+  {
+    id: 'path-draw',
+    title: 'Dibujo',
+    why: 'Figura.',
+    parentId: '',
+    childIds: ['step-people'],
+    coursePaths: []
+  },
+  {
+    id: 'step-people',
+    title: 'Personas',
+    why: '',
+    parentId: 'path-draw',
+    childIds: [],
+    coursePaths: ['School - Drawing People']
+  }
+]
+
+describe('playlist update', () => {
+  it('sends the current tree and only the loose courses', () => {
+    const brief = buildPlaylistBrief({
+      courses,
+      goal: 'armar un reel',
+      mode: 'update',
+      board
+    })
+    assert.match(brief, /Current listas/)
+    assert.match(brief, /path-draw/)
+    assert.match(brief, /step-people/)
+    assert.match(brief, /Loose courses \(2\)/)
+    assert.match(brief, /"add"/)
+    assert.match(brief, /"create"/)
+    const loose = brief.split('Loose courses')[1]
+    assert.match(loose, /School - Storyboard Action/)
+    assert.match(loose, /Studio - Product Lighting/)
+    assert.doesNotMatch(loose, /School - Drawing People/)
+  })
+
+  it('places loose courses onto an existing lista and creates the rest', () => {
+    const parsed = parsePlaylistBrief(
+      JSON.stringify({
+        goal: 'armar un reel',
+        add: [
+          {
+            id: 'step-people',
+            courses: [
+              { folder: 'School - Storyboard Action', why: 'Siguiente.' },
+              { folder: 'School - Drawing People', why: 'Ya estaba.' }
+            ]
+          },
+          { id: 'missing', courses: [{ folder: 'Studio - Product Lighting', why: 'Luz.' }] }
+        ],
+        create: [
+          {
+            title: 'Luz',
+            why: 'Producto.',
+            courses: [{ folder: 'Studio - Product Lighting', why: 'Luz de producto.' }]
+          }
+        ]
+      }),
+      courses,
+      { goal: 'armar un reel', mode: 'update', board }
+    )
+    assert.equal(parsed.ok, true)
+    assert.equal(parsed.adds.length, 1)
+    assert.equal(parsed.adds[0].id, 'step-people')
+    assert.deepEqual(parsed.adds[0].coursePaths, ['School - Storyboard Action'])
+    assert.deepEqual(parsed.lists[0].coursePaths, ['Studio - Product Lighting'])
+    assert.equal(
+      parsed.skips.some((skip) => skip.reason.includes('Ya está')),
+      true
+    )
+    assert.equal(
+      parsed.skips.some((skip) => skip.reason.includes('no está en el tablero')),
+      true
+    )
+  })
+
+  it('writes nothing when the update reply is still the example', () => {
+    const brief = buildPlaylistBrief({ courses, goal: 'armar un reel', mode: 'update', board })
+    assert.match(brief, /A short path toward the goal/)
+    const parsed = parsePlaylistBrief(
+      JSON.stringify({
+        goal: 'armar un reel',
+        add: [
+          {
+            id: 'step-people',
+            courses: [
+              {
+                folder: 'School - Storyboard Action',
+                why: 'Why this course is next, in one sentence.'
+              }
+            ]
+          }
+        ],
+        create: [
+          {
+            title: 'A short path toward the goal',
+            why: 'Why these courses belong together, in one sentence.',
+            courses: [
+              {
+                folder: 'Studio - Product Lighting',
+                why: 'Why this course is next, in one sentence.'
+              }
+            ]
+          }
+        ]
+      }),
+      courses,
+      { goal: 'armar un reel', mode: 'update', board }
+    )
+    assert.equal(parsed.ok, false)
+    assert.equal(parsed.adds.length, 0)
+    assert.equal(parsed.lists.length, 0)
+  })
+
+  it('keeps only the courses that stay checked', () => {
+    const parsed = parsePlaylistBrief(
+      JSON.stringify({
+        add: [
+          {
+            id: 'step-people',
+            courses: [{ folder: 'School - Storyboard Action', why: 'Siguiente.' }]
+          }
+        ],
+        create: [
+          {
+            title: 'Luz',
+            why: 'Producto.',
+            courses: [{ folder: 'Studio - Product Lighting', why: 'Luz de producto.' }]
+          }
+        ]
+      }),
+      courses,
+      { mode: 'update', board }
+    )
+    const chosen = selectedPlacement(
+      parsed,
+      new Set(['add:step-people:School - Storyboard Action'])
+    )
+    assert.deepEqual(chosen.adds[0].coursePaths, ['School - Storyboard Action'])
+    assert.equal(chosen.lists.length, 0)
   })
 })

@@ -302,9 +302,59 @@ export function placeWithoutOverlap(playlists, size, preferred = { x: 48, y: 48 
   return { x: right + gap, y: origin.y }
 }
 
+function readingCompare(a, b) {
+  if (a.position.y !== b.position.y) return a.position.y - b.position.y
+  if (a.position.x !== b.position.x) return a.position.x - b.position.x
+  return String(a.id).localeCompare(String(b.id))
+}
+
+function titleCompare(a, b) {
+  const byTitle = String(a.title || '').localeCompare(String(b.title || ''), 'es', {
+    sensitivity: 'base'
+  })
+  if (byTitle) return byTitle
+  return String(a.id).localeCompare(String(b.id))
+}
+
+/**
+ * Most common course theme on a lista, including nested lists.
+ * Ties break toward the earlier theme name. Empty when no course has a theme.
+ */
+export function dominantTheme(playlist, byId, courseByPath) {
+  const counts = new Map()
+  const seen = new Set()
+  const visit = (item) => {
+    if (!item || seen.has(item.id)) return
+    if (item.id) seen.add(item.id)
+    for (const path of item.coursePaths || []) {
+      const course = courseByPath?.get?.(path)
+      const themes = Array.isArray(course?.theme) ? course.theme : []
+      for (const theme of themes) {
+        const label = String(theme || '').trim()
+        if (!label) continue
+        counts.set(label, (counts.get(label) || 0) + 1)
+      }
+    }
+    for (const childId of item.childIds || []) visit(byId?.get?.(childId))
+  }
+  visit(playlist)
+  let best = ''
+  let bestCount = 0
+  for (const [theme, count] of counts) {
+    const earlier =
+      count === bestCount && theme.localeCompare(best, 'es', { sensitivity: 'base' }) < 0
+    if (count > bestCount || earlier) {
+      best = theme
+      bestCount = count
+    }
+  }
+  return best
+}
+
 /**
  * Pack playlists into rows so their frames no longer overlap.
- * Keeps the current reading order (top to bottom, then left to right).
+ * `mode` is `reading` (top to bottom, then left to right), `alpha` (title), or `topic`.
+ * Topic mode starts a new row when the theme changes. Lists with no theme go last.
  */
 export function orderPlaylists(playlists, options = {}) {
   const list = Array.isArray(playlists) ? playlists : []
@@ -313,32 +363,45 @@ export function orderPlaylists(playlists, options = {}) {
   const originX = finite(options.originX, 48)
   const originY = finite(options.originY, 48)
   const maxRowWidth = Math.max(PLAYLIST_DEFAULT_W, finite(options.maxRowWidth, 1280))
+  const mode = options.mode || 'reading'
+  const topicOf = typeof options.topicOf === 'function' ? options.topicOf : () => ''
 
   const roots = list.filter((playlist) => !playlist.parentId)
   const hidden = list.filter((playlist) => playlist.parentId)
   const byId = new Map(list.map((playlist) => [playlist.id, playlist]))
   const fitted = roots.map((playlist) => withFittedHeight(playlist, cardHeight, byId))
   const ordered = [...fitted].sort((a, b) => {
-    if (a.position.y !== b.position.y) return a.position.y - b.position.y
-    if (a.position.x !== b.position.x) return a.position.x - b.position.x
-    return String(a.id).localeCompare(String(b.id))
+    if (mode === 'alpha') return titleCompare(a, b)
+    if (mode === 'topic') {
+      const topicA = String(topicOf(a) || '')
+      const topicB = String(topicOf(b) || '')
+      if (!topicA !== !topicB) return topicA ? -1 : 1
+      const byTopic = topicA.localeCompare(topicB, 'es', { sensitivity: 'base' })
+      if (byTopic) return byTopic
+      return titleCompare(a, b)
+    }
+    return readingCompare(a, b)
   })
 
   let x = originX
   let y = originY
   let rowHeight = 0
+  let previousTopic = null
   const positions = new Map()
 
   for (const playlist of ordered) {
     const { width, height } = playlist.size
-    if (x > originX && x + width > originX + maxRowWidth) {
+    const topic = mode === 'topic' ? String(topicOf(playlist) || '') : null
+    const topicBreak = mode === 'topic' && previousTopic !== null && topic !== previousTopic
+    if (topicBreak || (x > originX && x + width > originX + maxRowWidth)) {
       x = originX
-      y += rowHeight + gap
+      y += rowHeight + (topicBreak ? gap * 2 : gap)
       rowHeight = 0
     }
     positions.set(playlist.id, { x, y })
     x += width + gap
     rowHeight = Math.max(rowHeight, height)
+    previousTopic = topic
   }
 
   const placed = roots.map((playlist) => {
@@ -347,6 +410,42 @@ export function orderPlaylists(playlists, options = {}) {
     return { ...playlist, position }
   })
   return [...placed, ...hidden]
+}
+
+/**
+ * Leave each lista where it is, and move only the ones that overlap.
+ * Earlier frames (top, then left) keep their place. Nested listas stay hidden.
+ */
+export function separateOverlaps(playlists, options = {}) {
+  const list = Array.isArray(playlists) ? playlists : []
+  const gap = options.gap ?? PLAYLIST_PLACE_GAP
+  const cardHeight = options.cardHeight
+  const roots = list.filter((playlist) => !playlist.parentId)
+  const hidden = list.filter((playlist) => playlist.parentId)
+  const byId = new Map(list.map((playlist) => [playlist.id, playlist]))
+  const ordered = roots
+    .map((playlist) => withFittedHeight(playlist, cardHeight, byId))
+    .sort(readingCompare)
+
+  const placed = []
+  const positions = new Map()
+  for (const playlist of ordered) {
+    const position = placeWithoutOverlap([...hidden, ...placed], playlist.size, playlist.position, {
+      gap,
+      cardHeight
+    })
+    placed.push({ ...playlist, position })
+    positions.set(playlist.id, position)
+  }
+
+  return [
+    ...roots.map((playlist) => {
+      const position = positions.get(playlist.id)
+      if (!position) return playlist
+      return { ...playlist, position }
+    }),
+    ...hidden
+  ]
 }
 
 export function playlistAtPoint(playlists, point, options = {}) {

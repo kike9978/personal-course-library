@@ -9,8 +9,10 @@ import {
   contentHeight,
   courseNodeY,
   frameSlots,
+  dominantTheme,
   orderPlaylists,
   placeWithoutOverlap,
+  separateOverlaps,
   playlistAtPoint,
   reorderCoursePaths,
   withFittedHeight
@@ -184,6 +186,125 @@ describe('playlist layout', () => {
     assert.deepEqual(ordered[2].coursePaths, paths('c', 1))
 
     const frames = ordered.map((playlist) => {
+      const fitted = withFittedHeight(playlist)
+      return { ...fitted.position, ...fitted.size }
+    })
+    assert.equal(boxesOverlap(frames[0], frames[1], PLAYLIST_PLACE_GAP), false)
+    assert.equal(boxesOverlap(frames[0], frames[2], PLAYLIST_PLACE_GAP), false)
+    assert.equal(boxesOverlap(frames[1], frames[2], PLAYLIST_PLACE_GAP), false)
+  })
+
+  it('packs titles alphabetically', () => {
+    const lists = [
+      {
+        id: 'z',
+        title: 'Zeta',
+        position: { x: 0, y: 0 },
+        size: { width: 320, height: 200 },
+        coursePaths: []
+      },
+      {
+        id: 'a',
+        title: 'Alfa',
+        position: { x: 400, y: 0 },
+        size: { width: 320, height: 200 },
+        coursePaths: []
+      }
+    ]
+    const ordered = orderPlaylists(lists, {
+      mode: 'alpha',
+      originX: 48,
+      originY: 48,
+      maxRowWidth: 2000
+    })
+    const alfa = ordered.find((playlist) => playlist.id === 'a')
+    const zeta = ordered.find((playlist) => playlist.id === 'z')
+    assert.deepEqual(alfa.position, { x: 48, y: 48 })
+    assert.ok(zeta.position.x > alfa.position.x)
+    assert.equal(zeta.position.y, alfa.position.y)
+  })
+
+  it('groups listas by their most common theme', () => {
+    const courses = new Map([
+      ['draw', { theme: ['Dibujo'] }],
+      ['light', { theme: ['Luz', 'Luz'] }],
+      ['light2', { theme: ['Color', 'Luz', 'Luz'] }]
+    ])
+    const lists = [
+      {
+        id: 'l',
+        title: 'Luz',
+        position: { x: 0, y: 0 },
+        size: { width: 320, height: 200 },
+        coursePaths: ['light']
+      },
+      {
+        id: 'd',
+        title: 'Dibujo',
+        position: { x: 0, y: 10 },
+        size: { width: 320, height: 200 },
+        coursePaths: ['draw']
+      },
+      {
+        id: 'l2',
+        title: 'Más luz',
+        position: { x: 0, y: 20 },
+        size: { width: 320, height: 200 },
+        coursePaths: ['light2']
+      }
+    ]
+    const byId = new Map(lists.map((playlist) => [playlist.id, playlist]))
+    assert.equal(dominantTheme(lists[2], byId, courses), 'Luz')
+    const ordered = orderPlaylists(lists, {
+      mode: 'topic',
+      originX: 0,
+      originY: 0,
+      maxRowWidth: 2000,
+      topicOf: (playlist) => dominantTheme(playlist, byId, courses)
+    })
+    const dibujo = ordered.find((playlist) => playlist.id === 'd')
+    const luz = ordered.find((playlist) => playlist.id === 'l')
+    const mas = ordered.find((playlist) => playlist.id === 'l2')
+    assert.equal(dibujo.position.y, 0)
+    assert.ok(luz.position.y > dibujo.position.y)
+    assert.equal(mas.position.y, luz.position.y)
+    assert.ok(mas.position.x > luz.position.x)
+  })
+
+  it('keeps clear listas in place and shifts only overlaps', () => {
+    const lists = [
+      {
+        id: 'a',
+        title: 'A',
+        position: { x: 40, y: 40 },
+        size: { width: 320, height: 200 },
+        coursePaths: []
+      },
+      {
+        id: 'b',
+        title: 'B',
+        position: { x: 80, y: 60 },
+        size: { width: 320, height: 200 },
+        coursePaths: []
+      },
+      {
+        id: 'c',
+        title: 'C',
+        position: { x: 900, y: 400 },
+        size: { width: 320, height: 200 },
+        coursePaths: []
+      }
+    ]
+    const next = separateOverlaps(lists)
+    assert.deepEqual(
+      next.find((playlist) => playlist.id === 'a').position,
+      { x: 40, y: 40 }
+    )
+    assert.deepEqual(
+      next.find((playlist) => playlist.id === 'c').position,
+      { x: 900, y: 400 }
+    )
+    const frames = next.map((playlist) => {
       const fitted = withFittedHeight(playlist)
       return { ...fitted.position, ...fitted.size }
     })
