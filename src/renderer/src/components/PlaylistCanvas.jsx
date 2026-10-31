@@ -423,8 +423,8 @@ function CourseNode({ data }) {
   const meta = data.missing
     ? 'No está en la biblioteca'
     : [data.institution, typeof data.percent === 'number' ? `${data.percent}%` : '']
-      .filter(Boolean)
-      .join(' · ') || 'Curso'
+        .filter(Boolean)
+        .join(' · ') || 'Curso'
 
   return (
     <article
@@ -756,6 +756,12 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     setSidebarWidth((width) => clampSidebar(width + delta, max))
   }, [])
 
+  const catalogKey = useMemo(
+    () => [...courses.map((course) => course.path)].sort().join('\0'),
+    [courses]
+  )
+  const catalogKeyRef = useRef(null)
+
   useEffect(() => {
     let cancelled = false
     if (!window.api?.listPlaylists) {
@@ -780,6 +786,28 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   }, [])
 
   useEffect(() => {
+    if (catalogKeyRef.current === null) {
+      catalogKeyRef.current = catalogKey
+      return undefined
+    }
+    if (catalogKeyRef.current === catalogKey) return undefined
+    catalogKeyRef.current = catalogKey
+    let cancelled = false
+    window.api
+      .listPlaylists?.()
+      .then((list) => {
+        if (!cancelled && list) {
+          const cardHeight = bigCoverRef.current ? PLAYLIST_COVER_H : PLAYLIST_CARD_H
+          setPlaylists(showPlaylists(list, cardHeight))
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [catalogKey])
+
+  useEffect(() => {
     if (didFit.current) return
     if (initialViewport) {
       didFit.current = true
@@ -801,15 +829,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       cameraReady.current = true
       rememberViewport(getViewport())
     })
-  }, [
-    loading,
-    nodesReady,
-    playlists.length,
-    fitView,
-    getViewport,
-    initialViewport,
-    setViewport
-  ])
+  }, [loading, nodesReady, playlists.length, fitView, getViewport, initialViewport, setViewport])
 
   const onMoveEnd = useCallback((_, viewport) => {
     if (!cameraReady.current) return
@@ -1029,7 +1049,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       .then((next) => {
         if (!cancelled && next) setIntent(next)
       })
-      .catch(() => { })
+      .catch(() => {})
       .finally(() => {
         if (!cancelled) setIntentReady(true)
       })
@@ -1042,7 +1062,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     setIntent(next)
     const save = window.api?.savePlaylistIntent
     if (!save) return
-    save(next).catch(() => { })
+    save(next).catch(() => {})
   }, [])
 
   const cardHeightNow = useCallback(
@@ -1260,64 +1280,67 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     }
   }, [orderMenuOpen])
 
-  const orderBoard = useCallback(async (mode = 'reading') => {
-    const current = playlistsRef.current
-    if (!current.length || ordering) return
-    setOrderMenuOpen(false)
-    const rect = canvasRef.current?.getBoundingClientRect()
-    const zoom = getViewport().zoom || 1
-    const cardHeight = cardHeightNow()
-    let originX = 48
-    let originY = 48
-    let maxRowWidth = 1280
-    if (rect && rect.width > 0) {
-      const origin = screenToFlowPosition({ x: rect.left + 36, y: rect.top + 36 })
-      originX = origin.x
-      originY = origin.y
-      maxRowWidth = Math.max(PLAYLIST_DEFAULT_W, rect.width / zoom - 72)
-    }
-    const byId = new Map(current.map((playlist) => [playlist.id, playlist]))
-    const courseByPath = new Map(coursesRef.current.map((course) => [course.path, course]))
-    const next =
-      mode === 'clean'
-        ? separateOverlaps(current, { cardHeight })
-        : orderPlaylists(current, {
-          cardHeight,
-          originX,
-          originY,
-          maxRowWidth,
-          mode,
-          topicOf: (playlist) => dominantTheme(playlist, byId, courseByPath)
-        })
-    const moved = next.filter((playlist) => {
-      const before = current.find((item) => item.id === playlist.id)
-      if (!before) return false
-      return (
-        Math.abs(playlist.position.x - before.position.x) > 0.5 ||
-        Math.abs(playlist.position.y - before.position.y) > 0.5
-      )
-    })
-    if (!moved.length) {
-      fitView({ padding: 0.16, duration: 250 })
-      return
-    }
-    setOrdering(true)
-    setPlaylists(next)
-    try {
-      await Promise.all(moved.map((playlist) => window.api.upsertPlaylist(playlist)))
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          fitView({ padding: 0.16, duration: 280 })
-        })
+  const orderBoard = useCallback(
+    async (mode = 'reading') => {
+      const current = playlistsRef.current
+      if (!current.length || ordering) return
+      setOrderMenuOpen(false)
+      const rect = canvasRef.current?.getBoundingClientRect()
+      const zoom = getViewport().zoom || 1
+      const cardHeight = cardHeightNow()
+      let originX = 48
+      let originY = 48
+      let maxRowWidth = 1280
+      if (rect && rect.width > 0) {
+        const origin = screenToFlowPosition({ x: rect.left + 36, y: rect.top + 36 })
+        originX = origin.x
+        originY = origin.y
+        maxRowWidth = Math.max(PLAYLIST_DEFAULT_W, rect.width / zoom - 72)
+      }
+      const byId = new Map(current.map((playlist) => [playlist.id, playlist]))
+      const courseByPath = new Map(coursesRef.current.map((course) => [course.path, course]))
+      const next =
+        mode === 'clean'
+          ? separateOverlaps(current, { cardHeight })
+          : orderPlaylists(current, {
+              cardHeight,
+              originX,
+              originY,
+              maxRowWidth,
+              mode,
+              topicOf: (playlist) => dominantTheme(playlist, byId, courseByPath)
+            })
+      const moved = next.filter((playlist) => {
+        const before = current.find((item) => item.id === playlist.id)
+        if (!before) return false
+        return (
+          Math.abs(playlist.position.x - before.position.x) > 0.5 ||
+          Math.abs(playlist.position.y - before.position.y) > 0.5
+        )
       })
-    } catch (err) {
-      toast.error(err.message || 'No se pudieron ordenar las listas')
-      const fresh = await window.api.listPlaylists().catch(() => null)
-      if (fresh) setPlaylists(showPlaylists(fresh))
-    } finally {
-      setOrdering(false)
-    }
-  }, [cardHeightNow, fitView, getViewport, ordering, screenToFlowPosition])
+      if (!moved.length) {
+        fitView({ padding: 0.16, duration: 250 })
+        return
+      }
+      setOrdering(true)
+      setPlaylists(next)
+      try {
+        await Promise.all(moved.map((playlist) => window.api.upsertPlaylist(playlist)))
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            fitView({ padding: 0.16, duration: 280 })
+          })
+        })
+      } catch (err) {
+        toast.error(err.message || 'No se pudieron ordenar las listas')
+        const fresh = await window.api.listPlaylists().catch(() => null)
+        if (fresh) setPlaylists(showPlaylists(fresh))
+      } finally {
+        setOrdering(false)
+      }
+    },
+    [cardHeightNow, fitView, getViewport, ordering, screenToFlowPosition]
+  )
 
   const handleNodesChange = useCallback(
     (changes) => {
@@ -1461,24 +1484,24 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       const nextPaths =
         columns > 1
           ? reorderCoursePaths(
-            current.coursePaths,
-            node.data.coursePath,
-            node.position.y,
-            cardHeight,
-            {
-              columns,
-              x: node.position.x,
-              inset: node.data.inset,
-              innerWidth: node.data.innerWidth,
-              originY: sectionTop
-            }
-          )
+              current.coursePaths,
+              node.data.coursePath,
+              node.position.y,
+              cardHeight,
+              {
+                columns,
+                x: node.position.x,
+                inset: node.data.inset,
+                innerWidth: node.data.innerWidth,
+                originY: sectionTop
+              }
+            )
           : reorderCoursePaths(
-            current.coursePaths,
-            node.data.coursePath,
-            node.position.y - sectionTop + PLAYLIST_HEADER,
-            cardHeight
-          )
+              current.coursePaths,
+              node.data.coursePath,
+              node.position.y - sectionTop + PLAYLIST_HEADER,
+              cardHeight
+            )
       const same = nextPaths.every((coursePath, index) => coursePath === current.coursePaths[index])
       if (same) {
         syncFlow(list)
@@ -1701,7 +1724,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   const programs = useMemo(() => {
     const names = new Set()
     courses.forEach((course) => {
-      ; (course.programs || []).forEach((program) => {
+      ;(course.programs || []).forEach((program) => {
         if (program) names.add(program)
       })
     })
@@ -1710,7 +1733,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   const themes = useMemo(() => {
     const names = new Set()
     courses.forEach((course) => {
-      ; (course.theme || []).forEach((theme) => {
+      ;(course.theme || []).forEach((theme) => {
         if (theme) names.add(theme)
       })
     })
@@ -1791,7 +1814,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     return map
   }, [playlists])
 
-  const inSelected = new Set(selectedPlaylist?.coursePaths || [])
+  const inSelected = new Set(selectedPlaylist?.coursePaths || []) 
 
   return (
     <BoardActions.Provider value={actions}>
@@ -1921,6 +1944,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Buscar cursos…"
                 aria-label="Buscar cursos"
+                title="Buscar (Ctrl+F)"
               />
             </div>
             <div className="playlist-board__filters">

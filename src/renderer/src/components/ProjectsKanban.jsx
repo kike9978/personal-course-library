@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { STATUS_OPTIONS, statusLabel } from './ProjectPanel'
 import AppNav from './AppNav'
@@ -29,6 +29,12 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
   const [draggingId, setDraggingId] = useState(null)
   const [dropColumn, setDropColumn] = useState(null)
 
+  const catalogKey = useMemo(
+    () => [...courses.map((course) => course.path)].sort().join('\0'),
+    [courses]
+  )
+  const catalogKeyRef = useRef(null)
+
   const titleByPath = useMemo(() => {
     const map = {}
     courses.forEach((c) => {
@@ -52,6 +58,16 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    if (catalogKeyRef.current === null) {
+      catalogKeyRef.current = catalogKey
+      return
+    }
+    if (catalogKeyRef.current === catalogKey) return
+    catalogKeyRef.current = catalogKey
+    load()
+  }, [catalogKey, load])
 
   const coursesWithProjects = useMemo(() => {
     const paths = new Set(items.map((p) => p.coursePath))
@@ -198,6 +214,7 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar proyecto…"
               aria-label="Buscar proyectos"
+              title="Buscar (Ctrl+F)"
             />
           </div>
         </div>

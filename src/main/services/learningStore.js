@@ -3,6 +3,13 @@ import path from 'path'
 import { app } from 'electron'
 import { normalizeChildIds, settleNesting } from '../../shared/playlistNest.js'
 import {
+  playlistForDisplay,
+  restoreHiddenCourseWhys,
+  retainHiddenCoursePaths,
+  visibleFinding
+} from '../../shared/courseHide.js'
+import { hiddenCoursePathSet } from './courses.js'
+import {
   findingFromLegacyNote,
   findingsForCourse,
   normalizeAnchor,
@@ -434,8 +441,10 @@ export function getLessonProgress(coursePath, relativePath) {
  */
 export function getAllCourseProgress() {
   const store = readStore()
+  const hidden = hiddenCoursePathSet()
   const out = {}
   for (const [key, value] of Object.entries(store.courses || {})) {
+    if (hidden.has(key)) continue
     out[key] = presentCourse(store, key, value)
   }
   return out
@@ -532,9 +541,15 @@ function targetsTouched(payload) {
 export function listNotes(coursePath) {
   const store = readStore()
   const key = courseKey(coursePath)
-  if (!key) return []
+  const hidden = hiddenCoursePathSet()
+  if (!key || hidden.has(key)) return []
   return findingsForCourse(store.findings, key)
-    .map((finding) => decorateFinding(store, finding))
+    .map((finding) => {
+      const visible = visibleFinding(finding, hidden)
+      if (!visible) return null
+      return decorateFinding(store, projectFinding(visible, key))
+    })
+    .filter(Boolean)
     .sort(compareStudyItems)
 }
 
@@ -733,8 +748,14 @@ export function deleteBookmark(coursePath, bookmarkId) {
  */
 export function listAllNotes() {
   const store = readStore()
+  const hidden = hiddenCoursePathSet()
   return (store.findings || [])
-    .map((finding) => decorateFinding(store, projectFinding(finding)))
+    .map((finding) => {
+      const visible = visibleFinding(finding, hidden)
+      if (!visible) return null
+      return decorateFinding(store, projectFinding(visible))
+    })
+    .filter(Boolean)
     .sort((a, b) => {
       const courseCmp = String(a.coursePath || '').localeCompare(String(b.coursePath || ''))
       if (courseCmp !== 0) return courseCmp
@@ -778,6 +799,8 @@ function decorateProject(project) {
 }
 
 export function listProjects(coursePath) {
+  const key = courseKey(coursePath)
+  if (key && hiddenCoursePathSet().has(key)) return []
   const store = readStore()
   const { course } = getMutableCourse(store, coursePath)
   return [...course.projects]
@@ -795,8 +818,10 @@ export function listProjects(coursePath) {
  */
 export function listAllProjects() {
   const store = readStore()
+  const hidden = hiddenCoursePathSet()
   const items = []
   for (const [coursePath, value] of Object.entries(store.courses || {})) {
+    if (hidden.has(coursePath)) continue
     const course = ensureArrays(value)
     for (const project of course.projects) {
       items.push({
@@ -910,9 +935,12 @@ export function getProjectLinkedPath(coursePath, projectId) {
  */
 export function getNotesSearchByCourse() {
   const store = readStore()
+  const hidden = hiddenCoursePathSet()
   const map = {}
   const topicTitle = (id) => store.topics.find((topic) => topic.id === id)?.title || ''
-  for (const key of Object.keys(store.courses || {})) map[key] = ''
+  for (const key of Object.keys(store.courses || {})) {
+    if (!hidden.has(key)) map[key] = ''
+  }
   for (const finding of store.findings || []) {
     const chunks = [finding.title, finding.body, ...(finding.topicIds || []).map(topicTitle)]
       .filter(Boolean)
@@ -921,7 +949,9 @@ export function getNotesSearchByCourse() {
       (finding.anchors || []).map((anchor) => anchor.coursePath).filter(Boolean)
     )
     for (const coursePath of courses) {
-      map[coursePath] = `${map[coursePath] || ''}\n${chunks}`.trim().toLowerCase()
+      const key = courseKey(coursePath)
+      if (!key || hidden.has(key)) continue
+      map[key] = `${map[key] || ''}\n${chunks}`.trim().toLowerCase()
     }
   }
   return map
@@ -990,22 +1020,28 @@ function normalizePlaylist(input, existing) {
   const rawPaths = Array.isArray(source.coursePaths)
     ? source.coursePaths
     : existing?.coursePaths || []
-  const coursePaths = []
+  const collected = []
   const seen = new Set()
   for (const item of rawPaths) {
     const name = path.basename(String(item || '').trim())
     if (!name || name === '.' || name === '..' || seen.has(name)) continue
     seen.add(name)
-    coursePaths.push(name)
+    collected.push(name)
   }
+  const hidden = hiddenCoursePathSet()
+  const coursePaths = retainHiddenCoursePaths(collected, existing?.coursePaths, hidden)
   const why = clipText(source.why !== undefined ? source.why : existing?.why, 280)
   const childIds = normalizeChildIds(
     source.childIds !== undefined ? source.childIds : existing?.childIds,
     id
   )
-  const courseWhys = normalizeCourseWhys(
-    source.courseWhys !== undefined ? source.courseWhys : existing?.courseWhys,
-    coursePaths
+  const courseWhys = restoreHiddenCourseWhys(
+    normalizeCourseWhys(
+      source.courseWhys !== undefined ? source.courseWhys : existing?.courseWhys,
+      coursePaths
+    ),
+    existing?.courseWhys,
+    hidden
   )
   const now = Date.now()
   return {
@@ -1035,10 +1071,16 @@ export function savePlaylistIntent(payload) {
   return store.playlistIntent
 }
 
+function playlistsForDisplay(playlists) {
+  const hidden = hiddenCoursePathSet()
+  if (!hidden.size) return playlists
+  return playlists.map((playlist) => playlistForDisplay(playlist, hidden))
+}
+
 export function listPlaylists() {
   const store = readStore()
-  return settleNesting(
-    (store.playlists || []).map((playlist) => normalizePlaylist(playlist, playlist))
+  return playlistsForDisplay(
+    settleNesting((store.playlists || []).map((playlist) => normalizePlaylist(playlist, playlist)))
   )
 }
 
@@ -1054,7 +1096,7 @@ export function upsertPlaylist(payload) {
     store.playlists.push(next)
   }
   writeStore(store)
-  return next
+  return playlistForDisplay(next, hiddenCoursePathSet())
 }
 
 export function deletePlaylist(playlistId) {

@@ -49,6 +49,7 @@ dirs.forEach((extension) => {
     instructor: '',
     isIncomplete: false,
     isInProcess: false,
+    hide: false,
     rate: 0,
     description: null
   }

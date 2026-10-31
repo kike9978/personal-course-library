@@ -155,6 +155,7 @@ function CourseFilterBar({
             placeholder="Buscar título, academia, instructor, temas, notas…"
             onChange={(event) => onQueryChange(event.target.value)}
             aria-label="Buscar cursos en las listas"
+            title="Buscar (Ctrl+F)"
           />
         </div>
       ) : null}

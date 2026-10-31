@@ -25,12 +25,14 @@ import {
   nextColumnSort
 } from './utils/courseTable'
 import { exportViaDialog } from './utils/exportHelpers'
+import { isCourseHidden } from '../../shared/courseHide.js'
 import { stringifyCourseCatalog } from './utils/courseExport'
 import {
   collectCourseFacets,
   courseMatchesLibraryFilters,
   useDebouncedValue
 } from './utils/courseFilters'
+import { focusSearchOnShortcut } from './utils/focusSearchBar'
 
 const COVER_BANNER_DISMISS_KEY = 'pcl.banner.dismiss.covers'
 const DESCRIPTION_BANNER_DISMISS_KEY = 'pcl.banner.dismiss.descriptions'
@@ -736,19 +738,31 @@ function App() {
   const activeCoursePathRef = useRef(null)
   activeCoursePathRef.current = activeCoursePath
 
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      focusSearchOnShortcut(event)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+
+  const coursesRef = useRef(courses)
+  coursesRef.current = courses
+
   const mergeLearning = useCallback(async (list) => {
+    const visible = (list || []).filter((course) => !isCourseHidden(course))
     try {
       const [progressMap, notesMap] = await Promise.all([
         window.api.getAllCourseProgress(),
         window.api.getNotesSearchByCourse()
       ])
-      return list.map((course) => ({
+      return visible.map((course) => ({
         ...course,
         learning: progressMap[course.path] || null,
         notesSearchText: notesMap[course.path] || ''
       }))
     } catch {
-      return list.map((course) => ({
+      return visible.map((course) => ({
         ...course,
         learning: null,
         notesSearchText: ''
@@ -872,6 +886,16 @@ function App() {
     loadCourses()
 
     const unsubscribeUpdated = window.api.onCourseUpdated((update) => {
+      const hidden =
+        isCourseHidden(update.fullData) || (update.property === 'hide' && update.value === true)
+      if (hidden) {
+        if (activeCoursePathRef.current === update.coursePath) {
+          setActiveCoursePath(null)
+          setResumeTarget(null)
+        }
+        setCourses((prev) => prev.filter((course) => course.path !== update.coursePath))
+        return
+      }
       setCourses((prev) =>
         prev.map((course) => {
           if (course.path !== update.coursePath) return course
@@ -902,6 +926,7 @@ function App() {
       ? null
       : window.api.onAnnotationsJump?.((payload) => {
           if (!payload?.coursePath) return
+          if (!coursesRef.current.some((course) => course.path === payload.coursePath)) return
           returnStudyRef.current = null
           setLibraryStudyMode(null)
           const target = {
@@ -938,12 +963,17 @@ function App() {
   const activeCourse = useMemo(() => {
     if (!activeCoursePath) return null
     return (
-      courses.find((c) => c.path === activeCoursePath) || {
-        path: activeCoursePath,
-        title: activeCoursePath
-      }
+      courses.find((course) => course.path === activeCoursePath && !isCourseHidden(course)) || null
     )
   }, [courses, activeCoursePath])
+
+  useEffect(() => {
+    if (isLoading || !activeCoursePath) return
+    if (!courses.some((course) => course.path === activeCoursePath && !isCourseHidden(course))) {
+      setActiveCoursePath(null)
+      setResumeTarget(null)
+    }
+  }, [courses, activeCoursePath, isLoading])
 
   const navigateApp = useCallback((section) => {
     setActiveCoursePath(null)

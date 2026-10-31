@@ -439,6 +439,7 @@ function AnnotationsWorkspace({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar…"
               aria-label="Buscar anotaciones"
+              title="Buscar (Ctrl+F)"
             />
           </div>
           <button

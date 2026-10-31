@@ -5,6 +5,7 @@ import { shell } from 'electron'
 import { getLibraryPath, isLibraryPathValid } from './config.js'
 import { resolveCourseFile } from './courseScan.js'
 import { storedDescription } from '../../shared/courseDescription.js'
+import { isCourseHidden } from '../../shared/courseHide.js'
 
 const COVER_FORMATS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']
 const READ_CONCURRENCY = 12
@@ -36,6 +37,7 @@ export const THEME_SUGGESTIONS = [
 ]
 
 const courseCache = new Map()
+let hiddenPathCache = null
 
 function requireLibraryPath() {
   const libraryPath = getLibraryPath()
@@ -57,6 +59,7 @@ function courseFolderPath(courseDir) {
 }
 
 function invalidateCache(courseDir) {
+  hiddenPathCache = null
   if (courseDir) {
     courseCache.delete(courseDir)
   } else {
@@ -100,6 +103,7 @@ export function buildCoursePropsFromFolderName(folderName) {
     instructor: '',
     isIncomplete: false,
     isInProcess: false,
+    hide: false,
     rate: 0,
     description: null
   }
@@ -141,6 +145,7 @@ function normalizeCourseRecord(courseDir, data, meta = {}) {
     rate,
     isInProcess: Boolean(data?.isInProcess),
     isIncomplete: Boolean(data?.isIncomplete),
+    hide: isCourseHidden(data),
     description: storedDescription(data?.description),
     hasCover: Boolean(meta.hasCover),
     hasProps: meta.hasProps !== false,
@@ -166,6 +171,34 @@ function folderTimesSync(courseDir) {
 
 function folderMtimeMsSync(courseDir) {
   return folderTimesSync(courseDir).folderMtimeMs
+}
+
+/** Folder names whose courseProps.json has `hide: true`. */
+export function hiddenCoursePathSet() {
+  if (hiddenPathCache) return hiddenPathCache
+  const hidden = new Set()
+  hiddenPathCache = hidden
+  const libraryPath = getLibraryPath()
+  if (!isLibraryPathValid(libraryPath)) return hidden
+  let entries
+  try {
+    entries = fsSync.readdirSync(libraryPath, { withFileTypes: true })
+  } catch {
+    return hidden
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    try {
+      const raw = fsSync.readFileSync(
+        path.join(libraryPath, entry.name, 'courseProps.json'),
+        'utf8'
+      )
+      if (isCourseHidden(JSON.parse(raw))) hidden.add(entry.name)
+    } catch {
+      // Missing or unreadable props stay in the catalog.
+    }
+  }
+  return hidden
 }
 
 export async function listCourseDirs() {
@@ -224,7 +257,7 @@ export async function loadCourseRecord(courseDir) {
   })
 }
 
-export async function listCourses() {
+export async function listCourses({ includeHidden = false } = {}) {
   const dirs = await listCourseDirs()
   const courses = await mapWithConcurrency(dirs, READ_CONCURRENCY, async (courseDir) => {
     const times = folderTimesSync(courseDir)
@@ -247,7 +280,9 @@ export async function listCourses() {
     }
   })
 
-  return courses.filter(Boolean)
+  const listed = courses.filter(Boolean)
+  if (includeHidden) return listed
+  return listed.filter((course) => !isCourseHidden(course))
 }
 
 /**
@@ -312,6 +347,7 @@ export async function repairCourseProps(courseDir) {
     rate: normalizeRate(existing.rate ?? defaults.rate),
     isIncomplete: Boolean(existing.isIncomplete),
     isInProcess: Boolean(existing.isInProcess),
+    hide: existing.hide === true,
     description: storedDescription(existing.description)
   }
   delete data.themes
@@ -371,6 +407,9 @@ function sanitizeUpdates(updates = {}) {
   }
   if (Object.prototype.hasOwnProperty.call(next, 'description')) {
     next.description = storedDescription(next.description)
+  }
+  if (Object.prototype.hasOwnProperty.call(next, 'hide')) {
+    next.hide = next.hide === true
   }
   return next
 }

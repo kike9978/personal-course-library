@@ -27,6 +27,7 @@ describe('library course filters', () => {
     assert.equal(courseMatchesLibraryFilters(lighting, { query: 'rim' }), true)
     assert.equal(courseMatchesLibraryFilters(lighting, { query: 'ada' }), true)
     assert.equal(courseMatchesLibraryFilters(lighting, { query: 'missing' }), false)
+    assert.equal(courseMatchesLibraryFilters({ ...lighting, hide: true }, {}), false)
   })
 
   it('applies status, facet, and rating checks together', () => {

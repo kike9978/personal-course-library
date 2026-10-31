@@ -45,6 +45,7 @@ function CourseEditModal({
   )
   const [localThemes, setLocalThemes] = useState(Array.isArray(course.theme) ? course.theme : [])
   const [rate, setRate] = useState(Number(course.rate) || 0)
+  const [hide, setHide] = useState(course.hide === true)
   const [isSaving, setIsSaving] = useState(false)
   const [coverImg, setCoverImg] = useState(absoluteAssetUrl(getCoverFallback()))
   const [writingDescription, setWritingDescription] = useState(false)
@@ -57,6 +58,7 @@ function CourseEditModal({
     setInstructor(course.instructor || '')
     setInstitution(course.institution || '')
     setRate(Number(course.rate) || 0)
+    setHide(course.hide === true)
     setWritingDescription(false)
     setLocalDescription(null)
 
@@ -124,7 +126,8 @@ function CourseEditModal({
         theme: themesArray,
         rate,
         instructor,
-        institution
+        institution,
+        hide
       }
 
       const result = await window.api.updateCourse(course.path, updates)
@@ -132,7 +135,7 @@ function CourseEditModal({
         throw new Error(result.error || 'Failed to update course')
       }
 
-      toast.success('Curso actualizado')
+      toast.success(hide ? 'Curso oculto' : 'Curso actualizado')
       if (onCourseUpdated) {
         onCourseUpdated(course.path, {
           ...result.data,
@@ -249,6 +252,22 @@ function CourseEditModal({
               {description
                 ? description.summary
                 : 'Sin descripción. El encargo usa la ficha, el temario y una búsqueda en tu chat.'}
+            </p>
+          </div>
+
+          <div className="field">
+            <label className="course-edit__hide" htmlFor="course-hide">
+              <input
+                id="course-hide"
+                type="checkbox"
+                checked={hide}
+                onChange={(e) => setHide(e.target.checked)}
+              />
+              <span>Ocultar</span>
+            </label>
+            <p className="course-edit__hide-note">
+              No entra en las listas ni en el resto de la app. Para volver a verlo, pon{' '}
+              <code>hide</code> en <code>false</code> dentro de courseProps.json.
             </p>
           </div>
 

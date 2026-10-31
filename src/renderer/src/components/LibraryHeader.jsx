@@ -106,6 +106,7 @@ function LibraryHeader({
             placeholder="Buscar título, academia, instructor, temas, notas…"
             onChange={(e) => onFilterTextChange(e.target.value)}
             aria-label="Buscar"
+            title="Buscar (Ctrl+F)"
           />
         </div>
 

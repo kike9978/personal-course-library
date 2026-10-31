@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import AnnotationsWorkspace from './AnnotationsWorkspace'
 import AppNav from './AppNav'
@@ -9,6 +9,12 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
   const [selectedId, setSelectedId] = useState(null)
   const [courseFilter, setCourseFilter] = useState('')
   const [loading, setLoading] = useState(true)
+
+  const catalogKey = useMemo(
+    () => [...courses.map((course) => course.path)].sort().join('\0'),
+    [courses]
+  )
+  const catalogKeyRef = useRef(null)
 
   const titleByPath = useMemo(() => {
     const map = {}
@@ -47,6 +53,16 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (catalogKeyRef.current === null) {
+      catalogKeyRef.current = catalogKey
+      return
+    }
+    if (catalogKeyRef.current === catalogKey) return
+    catalogKeyRef.current = catalogKey
+    refresh().catch(() => {})
+  }, [catalogKey])
 
   useEffect(() => {
     const unsub = window.api.onNotesChanged?.(() => {

@@ -53,6 +53,11 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
           refreshCourseNotes()
         ])
         if (cancelled) return
+        if (courseData?.hide === true) {
+          setCourse({ path: coursePath, title: courseData.title || coursePath, hide: true })
+          setAnnotations([])
+          return
+        }
         setCourse(
           courseData ||
             courses.find((c) => c.path === coursePath) || {
@@ -95,23 +100,34 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
     return () => unsub?.()
   }, [coursePath, refreshCourseNotes, refreshLibraryNotes])
 
-  const handleJump = useCallback(async (item) => {
-    try {
-      await window.api.annotationsJump({
-        coursePath: item.coursePath || coursePath,
-        lessonRelativePath: item.lessonRelativePath || null,
-        timeSec: item.timeSec ?? null,
-        projectId: item.projectId || null
-      })
-    } catch (err) {
-      toast.error(err.message || 'No se pudo abrir la lección')
-    }
-  }, [coursePath])
+  const handleJump = useCallback(
+    async (item) => {
+      try {
+        await window.api.annotationsJump({
+          coursePath: item.coursePath || coursePath,
+          lessonRelativePath: item.lessonRelativePath || null,
+          timeSec: item.timeSec ?? null,
+          projectId: item.projectId || null
+        })
+      } catch (err) {
+        toast.error(err.message || 'No se pudo abrir la lección')
+      }
+    },
+    [coursePath]
+  )
 
   if (loading) {
     return (
       <div className="annotations-popout annotations-popout--loading">
         <Loader />
+      </div>
+    )
+  }
+
+  if (coursePath && course?.hide === true) {
+    return (
+      <div className="annotations-popout annotations-popout--loading">
+        <p>Este curso está oculto.</p>
       </div>
     )
   }
@@ -197,9 +213,7 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
             await window.api.deleteNote(item.coursePath, item.id)
             const all = await refreshLibraryNotes()
             const scoped = courseFilter ? all.filter((a) => a.coursePath === courseFilter) : all
-            setSelectedId(
-              scoped[0] ? { id: scoped[0].id, coursePath: scoped[0].coursePath } : null
-            )
+            setSelectedId(scoped[0] ? { id: scoped[0].id, coursePath: scoped[0].coursePath } : null)
             toast.success('Eliminada')
           } catch (err) {
             toast.error(err.message || 'Error')

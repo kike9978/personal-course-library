@@ -25,6 +25,7 @@ import {
   generateMissingCourseProps,
   generateCoursePropsBatch
 } from './services/courses.js'
+import { isCourseHidden } from '../shared/courseHide.js'
 import { saveCourseDescription, saveCourseDescriptionBatch } from './services/courseDescription.js'
 import {
   searchCoverCandidates,
@@ -384,6 +385,12 @@ function registerCourseMediaProtocol() {
   })
 }
 
+async function listCatalogCourses() {
+  if (!isLibraryPathValid()) return []
+  const all = await listCourses({ includeHidden: true })
+  return withAddedDates(all, NEW_COURSE_MS).filter((course) => !isCourseHidden(course))
+}
+
 function registerIpcHandlers() {
   ipcMain.handle('get-library-path', () => {
     const libraryPath = getLibraryPath()
@@ -418,12 +425,7 @@ function registerIpcHandlers() {
     return { canceled: false, path: pathSet, valid: true }
   })
 
-  ipcMain.handle('list-courses', async () => {
-    if (!isLibraryPathValid()) {
-      return []
-    }
-    return withAddedDates(await listCourses(), NEW_COURSE_MS)
-  })
+  ipcMain.handle('list-courses', async () => listCatalogCourses())
 
   ipcMain.handle('get-course', async (_event, courseDir) => {
     return getCourse(courseDir)
@@ -556,10 +558,7 @@ function registerIpcHandlers() {
   ipcMain.handle('refresh-courses', async () => {
     clearCourseCache()
     scanCache.clear()
-    if (!isLibraryPathValid()) {
-      return []
-    }
-    return withAddedDates(await listCourses(), NEW_COURSE_MS)
+    return listCatalogCourses()
   })
 
   ipcMain.handle('scan-course', async (_event, { coursePath, force }) => {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isCourseHidden } from '../../../shared/courseHide.js'
 
 export function useDebouncedValue(value, delay = 200) {
   const [debounced, setDebounced] = useState(value)
@@ -11,6 +12,7 @@ export function useDebouncedValue(value, delay = 200) {
 
 /** Same course match the library header uses. Column filters stay with the table. */
 export function courseMatchesLibraryFilters(course, filters = {}) {
+  if (isCourseHidden(course)) return false
   const searchLower = String(filters.query || '')
     .trim()
     .toLowerCase()
