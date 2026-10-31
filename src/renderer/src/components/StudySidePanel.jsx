@@ -1,6 +1,31 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import NoteEditor, { NoteBody } from './NoteEditor'
 import { sortWithinGroup } from '../utils/annotationGroups'
+
+const PANEL_MIN = 260
+const PANEL_MAX = 720
+const PANEL_DEFAULT = 340
+const PANEL_WIDTH_KEY = 'study-panel-width'
+
+function clampPanelWidth(width, maxAvailable = PANEL_MAX) {
+  const max = Math.max(PANEL_MIN, Math.min(PANEL_MAX, maxAvailable))
+  return Math.min(max, Math.max(PANEL_MIN, Math.round(width)))
+}
+
+function readPanelWidth() {
+  try {
+    const stored = Number(localStorage.getItem(PANEL_WIDTH_KEY))
+    if (Number.isFinite(stored)) return clampPanelWidth(stored)
+  } catch {
+    // Width is only a layout preference.
+  }
+  return PANEL_DEFAULT
+}
+
+function roomMaxWidth(el) {
+  const room = el?.closest('.course-room__body')
+  return (room?.clientWidth || PANEL_MAX) - 420
+}
 
 function formatTime(sec) {
   if (sec == null || !Number.isFinite(sec)) return '0:00'
@@ -92,15 +117,57 @@ function StudySidePanel({
   onJump,
   onExpand,
   onCollapse,
-  onOpenFullPage,
-  onOpenPopOut,
   currentTargetPath = null,
-  currentTargetTitle = null,
   currentProjectId = null,
   hasLesson = false,
   hasTarget = false,
   targetKind = null
 }) {
+  const [panelWidth, setPanelWidth] = useState(readPanelWidth)
+  const [resizing, setResizing] = useState(false)
+  const [scopeOpen, setScopeOpen] = useState(false)
+  const panelWidthRef = useRef(panelWidth)
+  panelWidthRef.current = panelWidth
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth))
+    } catch {
+      // Ignore storage failures; the width still applies for this session.
+    }
+  }, [panelWidth])
+
+  const onResizeStart = useCallback((event) => {
+    if (event.button != null && event.button !== 0) return
+    event.preventDefault()
+    const handle = event.currentTarget
+    handle.setPointerCapture(event.pointerId)
+    const startX = event.clientX
+    const startWidth = panelWidthRef.current
+    const max = roomMaxWidth(handle)
+    setResizing(true)
+
+    const onMove = (moveEvent) => {
+      setPanelWidth(clampPanelWidth(startWidth + startX - moveEvent.clientX, max))
+    }
+    const onUp = () => {
+      setResizing(false)
+      handle.removeEventListener('pointermove', onMove)
+      handle.removeEventListener('pointerup', onUp)
+    }
+    handle.addEventListener('pointermove', onMove)
+    handle.addEventListener('pointerup', onUp)
+  }, [])
+
+  const onResizeKey = useCallback((event) => {
+    const step = event.shiftKey ? 48 : 16
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const max = roomMaxWidth(event.currentTarget)
+    const delta = event.key === 'ArrowLeft' ? step : -step
+    setPanelWidth((width) => clampPanelWidth(width + delta, max))
+  }, [])
+
   const targetNotes = useMemo(() => {
     if (currentProjectId) {
       return annotations
@@ -122,12 +189,22 @@ function StudySidePanel({
   const canSave = Boolean(draftText.trim()) || Boolean(editingId)
   const isResource = targetKind === 'resource'
   const isProject = targetKind === 'project'
-  const panelLabel = isProject ? 'Este proyecto' : isResource ? 'Este archivo' : 'Esta lección'
+  const panelLabel = isProject
+    ? 'Notas de este proyecto'
+    : isResource
+      ? 'Notas de este archivo'
+      : 'Notas de esta lección'
   const fileScopeLabel = isProject ? 'En este proyecto' : 'En este archivo'
+  const scopeSummary =
+    noteScope === 'moment'
+      ? `En ${formatTime(currentTimeSec)}`
+      : noteScope === 'file'
+        ? fileScopeLabel
+        : 'Del curso'
 
   const placeholder =
     noteScope === 'moment'
-      ? 'Qué recordar en este momento…'
+      ? `Qué recordar en ${formatTime(currentTimeSec)}…`
       : noteScope === 'file'
         ? isProject
           ? 'Nota sobre este proyecto…'
@@ -135,7 +212,24 @@ function StudySidePanel({
         : 'Nota general del curso…'
 
   return (
-    <div className={`study-dock${expanded ? ' is-open' : ''}`}>
+    <div
+      className={`study-dock${expanded ? ' is-open' : ''}${resizing ? ' is-resizing' : ''}`}
+      style={expanded ? { '--study-panel-w': `${panelWidth}px` } : undefined}
+    >
+      {expanded ? (
+        <div
+          className="study-dock__resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Ancho del panel de notas"
+          aria-valuemin={PANEL_MIN}
+          aria-valuemax={PANEL_MAX}
+          aria-valuenow={panelWidth}
+          tabIndex={0}
+          onPointerDown={onResizeStart}
+          onKeyDown={onResizeKey}
+        />
+      ) : null}
       <div className="study-rail" aria-label="Marcas de esta lección">
         <button
           type="button"
@@ -175,26 +269,30 @@ function StudySidePanel({
           )}
         </button>
 
-        <div className="study-rail__count" title={`${timedNotes.length} marcas`}>
-          {hasLesson ? timedNotes.length : '·'}
-        </div>
+        {!expanded && hasLesson && timedNotes.length > 0 ? (
+          <div className="study-rail__count" title={`${timedNotes.length} marcas`}>
+            {timedNotes.length}
+          </div>
+        ) : null}
 
-        <ul className="study-rail__marks">
-          {hasLesson
-            ? timedNotes.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className="study-rail__mark"
-                    onClick={() => onJump?.(item)}
-                    title={item.body || formatTime(item.timeSec)}
-                  >
-                    {formatTimeShort(item.timeSec)}
-                  </button>
-                </li>
-              ))
-            : null}
-        </ul>
+        {!expanded ? (
+          <ul className="study-rail__marks">
+            {hasLesson
+              ? timedNotes.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className="study-rail__mark"
+                      onClick={() => onJump?.(item)}
+                      title={item.body || formatTime(item.timeSec)}
+                    >
+                      {formatTimeShort(item.timeSec)}
+                    </button>
+                  </li>
+                ))
+              : null}
+          </ul>
+        ) : null}
       </div>
 
       {expanded ? (
@@ -202,115 +300,68 @@ function StudySidePanel({
           <div className="study-panel__header">
             <h2 className="study-panel__title">
               {panelLabel}
-              <span className="study-panel__count">{hasTarget ? targetNotes.length : 0}</span>
-            </h2>
-            <div className="study-panel__header-actions">
-              {onOpenPopOut ? (
-                <button
-                  type="button"
-                  className="study-panel__icon-btn"
-                  onClick={onOpenPopOut}
-                  title="Abrir anotaciones en una ventana aparte"
-                  aria-label="Abrir anotaciones en ventana aparte"
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.25"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M18 3h3v3" />
-                    <path d="M11 13L21 3" />
-                    <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
-                  </svg>
-                </button>
+              {hasTarget && targetNotes.length > 0 ? (
+                <span className="study-panel__count">{targetNotes.length}</span>
               ) : null}
-              <button
-                type="button"
-                className="study-panel__icon-btn"
-                onClick={onOpenFullPage}
-                title="Ver todas las anotaciones del curso"
-              >
-                Todas
-              </button>
-            </div>
+            </h2>
           </div>
 
           <div className="study-panel__body">
-            <p className="study-panel__explain">
-              {isProject ? (
-                <>
-                  Notas de este proyecto. <kbd>N</kbd> · Todas para el resto del curso.
-                </>
-              ) : isResource ? (
-                <>
-                  Notas de este archivo (sin tiempo). <kbd>N</kbd> · Todas para el resto del curso.
-                </>
-              ) : (
-                <>
-                  Marcas de este video o notas del archivo. <kbd>N</kbd> · <kbd>B</kbd> pin · Todas
-                  para el resto del curso.
-                </>
-              )}
-            </p>
-
             <div className="study-panel__composer">
               {editingId ? (
                 <p className="study-panel__hint">Editando anotación</p>
               ) : (
-                <div className="study-scope" role="group" aria-label="Dónde guardar">
-                  {hasLesson ? (
-                    <button
-                      type="button"
-                      className={noteScope === 'moment' ? 'is-active' : ''}
-                      onClick={() => onNoteScopeChange('moment')}
-                    >
-                      En el video · {formatTime(currentTimeSec)}
-                    </button>
-                  ) : null}
-                  {hasTarget ? (
-                    <button
-                      type="button"
-                      className={noteScope === 'file' ? 'is-active' : ''}
-                      onClick={() => onNoteScopeChange('file')}
-                    >
-                      {fileScopeLabel}
-                    </button>
-                  ) : null}
+                <div className="study-scope-wrap">
                   <button
                     type="button"
-                    className={noteScope === 'course' ? 'is-active' : ''}
-                    onClick={() => onNoteScopeChange('course')}
+                    className="study-scope-toggle"
+                    aria-expanded={scopeOpen}
+                    aria-controls="study-scope-options"
+                    onClick={() => setScopeOpen((open) => !open)}
                   >
-                    Del curso
+                    {scopeSummary}
+                    <span aria-hidden="true"> ▾</span>
                   </button>
+                  {scopeOpen ? (
+                    <div className="study-scope" id="study-scope-options" role="group" aria-label="Dónde guardar">
+                      {hasLesson ? (
+                        <button
+                          type="button"
+                          className={noteScope === 'moment' ? 'is-active' : ''}
+                          onClick={() => {
+                            onNoteScopeChange('moment')
+                            setScopeOpen(false)
+                          }}
+                        >
+                          En el video · {formatTime(currentTimeSec)}
+                        </button>
+                      ) : null}
+                      {hasTarget ? (
+                        <button
+                          type="button"
+                          className={noteScope === 'file' ? 'is-active' : ''}
+                          onClick={() => {
+                            onNoteScopeChange('file')
+                            setScopeOpen(false)
+                          }}
+                        >
+                          {fileScopeLabel}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={noteScope === 'course' ? 'is-active' : ''}
+                        onClick={() => {
+                          onNoteScopeChange('course')
+                          setScopeOpen(false)
+                        }}
+                      >
+                        Del curso
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               )}
-
-              {!editingId && noteScope === 'moment' && hasLesson ? (
-                <p className="study-panel__hint">
-                  “{currentTargetTitle}” @ {formatTime(currentTimeSec)}
-                </p>
-              ) : null}
-
-              {!editingId && noteScope === 'file' && hasTarget ? (
-                <p className="study-panel__hint">
-                  {isProject
-                    ? `Se guarda en el proyecto “${currentTargetTitle}”.`
-                    : `Se guarda en “${currentTargetTitle}” sin marca de tiempo.`}
-                </p>
-              ) : null}
-
-              {!editingId && noteScope === 'course' ? (
-                <p className="study-panel__hint">
-                  Se guarda en el curso (aparece en la página Todas).
-                </p>
-              ) : null}
 
               <NoteEditor
                 key={editorKey}
@@ -319,6 +370,7 @@ function StudySidePanel({
                 bodyJson={typeof draft === 'object' ? draft?.json : null}
                 autofocus={Boolean(editingId)}
                 placeholder={placeholder}
+                compactToolbar
                 onChange={onDraftChange}
                 currentTimeSec={currentTimeSec}
                 enableTimestamp={enableTimestamp || hasLesson}
@@ -331,16 +383,17 @@ function StudySidePanel({
                   <button type="button" className="btn btn--ghost" onClick={onCancelEdit}>
                     Cancelar
                   </button>
-                ) : (
+                ) : hasLesson ? (
                   <button
                     type="button"
-                    className="btn btn--ghost"
+                    className="study-action"
                     onClick={onQuickPin}
-                    disabled={!hasLesson}
-                    title="Pin sin texto en el tiempo actual (B)"
+                    title="Marca sin texto en el tiempo actual (B)"
                   >
-                    Solo pin
+                    Marcar momento
                   </button>
+                ) : (
+                  <span />
                 )}
                 <button
                   type="button"
@@ -353,19 +406,7 @@ function StudySidePanel({
               </div>
             </div>
 
-            {!hasTarget ? (
-              <p className="study-panel__empty">
-                Selecciona un video, archivo o proyecto para ver sus notas.
-              </p>
-            ) : targetNotes.length === 0 ? (
-              <p className="study-panel__empty">
-                {isProject
-                  ? 'Ninguna anotación en este proyecto aún.'
-                  : isResource
-                    ? 'Ninguna anotación en este archivo aún.'
-                    : 'Ninguna marca en este video aún.'}
-              </p>
-            ) : (
+            {hasTarget && targetNotes.length > 0 ? (
               <ul className="study-panel__list">
                 {targetNotes.map((item) => (
                   <AnnotationCard
@@ -378,7 +419,7 @@ function StudySidePanel({
                   />
                 ))}
               </ul>
-            )}
+            ) : null}
           </div>
         </aside>
       ) : null}

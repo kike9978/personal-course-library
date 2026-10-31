@@ -6,7 +6,8 @@ import {
   findingsForCourse,
   groupFindingsByTopic,
   parseMentions,
-  relatedFindings
+  relatedFindings,
+  siblingFindings
 } from './knowledgeGraph.js'
 
 describe('knowledge graph', () => {
@@ -120,5 +121,96 @@ describe('knowledge graph', () => {
       'topic:appeal'
     ])
     assert.equal(graph.edges.length, 4)
+    const course = graph.nodes.find((node) => node.id === 'course:course-a')
+    assert.equal(course.data.fullLabel, 'Course A')
+  })
+
+  it('labels a course node with the course title, not the folder path', () => {
+    const folder = 'Rad How To Class - Concept Art and World Building for Animation'
+    const graph = buildLocalGraph({
+      focusType: 'topic',
+      focusId: 'appeal',
+      findings: [
+        {
+          id: 'a',
+          title: 'Red',
+          topicIds: ['appeal'],
+          anchors: [{ coursePath: `E:/Courses/${folder}` }]
+        }
+      ],
+      topics: [{ id: 'appeal', title: 'Appeal' }],
+      courseTitles: { [folder]: 'Concept Art and World Building for Animation' },
+      depth: 2
+    })
+    const course = graph.nodes.find((node) => node.data.kind === 'course')
+    assert.equal(course.data.fullLabel, 'Concept Art and World Building for Animation')
+  })
+
+  it('does not draw a lone course beside a note with no other links', () => {
+    const graph = buildLocalGraph({
+      focusType: 'finding',
+      focusId: 'a',
+      findings: [
+        {
+          id: 'a',
+          title: 'Red',
+          topicIds: [],
+          anchors: [{ coursePath: 'course-a', lessonRelativePath: '01.mp4' }]
+        }
+      ],
+      topics: [],
+      courseTitles: { 'course-a': 'ISawItOnGlass - Concept Art and World' }
+    })
+    assert.deepEqual(
+      graph.nodes.map((node) => node.id),
+      ['finding:a']
+    )
+  })
+
+  it('keeps each course when a note is anchored in more than one', () => {
+    const graph = buildLocalGraph({
+      focusType: 'finding',
+      focusId: 'a',
+      findings: [
+        {
+          id: 'a',
+          title: 'Appeal',
+          topicIds: [],
+          anchors: [{ coursePath: 'course-a' }, { coursePath: 'course-b' }]
+        }
+      ],
+      topics: [],
+      courseTitles: { 'course-a': 'Course A', 'course-b': 'Course B' }
+    })
+    assert.deepEqual(graph.nodes.map((node) => node.id).sort(), [
+      'course:course-a',
+      'course:course-b',
+      'finding:a'
+    ])
+  })
+
+  it('lists other notes on the same lesson', () => {
+    const current = {
+      id: 'a',
+      title: 'Red',
+      anchors: [{ coursePath: 'course-a', lessonRelativePath: '01.mp4' }]
+    }
+    const siblings = siblingFindings(current, [
+      current,
+      {
+        id: 'b',
+        title: 'Blue',
+        anchors: [{ coursePath: 'course-a', lessonRelativePath: '01.mp4' }]
+      },
+      {
+        id: 'c',
+        title: 'Other file',
+        anchors: [{ coursePath: 'course-a', lessonRelativePath: '02.mp4' }]
+      }
+    ])
+    assert.deepEqual(
+      siblings.map((item) => item.id),
+      ['b']
+    )
   })
 })

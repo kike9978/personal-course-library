@@ -36,15 +36,41 @@ export function topicKey(title) {
   return normalizeTopicTitle(title).toLowerCase()
 }
 
+function courseFolderName(coursePath) {
+  return String(coursePath || '').split(/[\\/]/).filter(Boolean).pop() || ''
+}
+
 export function sameCourse(a, b) {
   const left = String(a || '')
   const right = String(b || '')
   if (!left || !right) return false
   if (left === right) return true
-  const base = (value) => value.split(/[\\/]/).filter(Boolean).pop()
-  const leftBase = base(left)
-  const rightBase = base(right)
+  const leftBase = courseFolderName(left)
+  const rightBase = courseFolderName(right)
   return leftBase === right || rightBase === left || leftBase === rightBase
+}
+
+/** Title from courseProps.json, matched by folder even when the stored path differs. */
+export function resolveCourseTitle(coursePath, courseTitles = {}) {
+  const folder = courseFolderName(coursePath)
+  const named = (title) => {
+    const value = String(title || '').trim()
+    if (!value || value === coursePath || (folder && value === folder)) return ''
+    return value
+  }
+  const direct = named(courseTitles[coursePath]) || (folder ? named(courseTitles[folder]) : '')
+  if (direct) return direct
+  for (const [key, title] of Object.entries(courseTitles)) {
+    if (!sameCourse(key, coursePath)) continue
+    const value = named(title)
+    if (value) return value
+  }
+  return (
+    String(courseTitles[coursePath] || '').trim() ||
+    (folder ? String(courseTitles[folder] || '').trim() : '') ||
+    folder ||
+    String(coursePath || '')
+  )
 }
 
 export function normalizeAnchor(anchor = {}, coursePath = null) {
@@ -195,10 +221,37 @@ function findingLabel(finding) {
   return line || 'Sin título'
 }
 
-function clip(text, max = 42) {
+function clip(text, max = 24) {
   const value = String(text || '').trim()
   if (value.length <= max) return value
   return `${value.slice(0, max - 1)}…`
+}
+
+export function anchorKeys(finding) {
+  const keys = []
+  const add = (key) => {
+    if (key && !keys.includes(key)) keys.push(key)
+  }
+  for (const anchor of finding?.anchors || []) {
+    if (anchor.projectId) add(`project:${anchor.coursePath || ''}:${anchor.projectId}`)
+    else if (anchor.lessonRelativePath) add(`lesson:${anchor.coursePath || ''}:${anchor.lessonRelativePath}`)
+  }
+  if (!keys.length) {
+    if (finding?.projectId) add(`project:${finding.coursePath || ''}:${finding.projectId}`)
+    else if (finding?.lessonRelativePath) {
+      add(`lesson:${finding.coursePath || ''}:${finding.lessonRelativePath}`)
+    }
+  }
+  return keys
+}
+
+/** Other notes attached to the same lesson or project. */
+export function siblingFindings(finding, findings, limit = 8) {
+  const keys = new Set(anchorKeys(finding))
+  if (!keys.size) return []
+  return (findings || [])
+    .filter((other) => other.id !== finding?.id && anchorKeys(other).some((key) => keys.has(key)))
+    .slice(0, limit)
 }
 
 function ringPositions(count, radius) {
@@ -259,7 +312,7 @@ export function buildLocalGraph({
       link(center, findingNode)
       for (const anchor of finding.anchors || []) {
         if (!anchor.coursePath) continue
-        courses.set(anchor.coursePath, courseTitles[anchor.coursePath] || anchor.coursePath)
+        courses.set(anchor.coursePath, resolveCourseTitle(anchor.coursePath, courseTitles))
       }
       if (depth >= 2) {
         for (const topicId of finding.topicIds || []) {
@@ -300,13 +353,6 @@ export function buildLocalGraph({
     for (const anchor of finding.anchors || []) {
       if (!anchor.coursePath || coursePaths.includes(anchor.coursePath)) continue
       coursePaths.push(anchor.coursePath)
-      const courseNode = add(
-        'course',
-        anchor.coursePath,
-        courseTitles[anchor.coursePath] || anchor.coursePath,
-        { ring: 1 }
-      )
-      link(center, courseNode)
     }
     if (depth >= 2 && topicIds.length) {
       const related = findings
@@ -320,6 +366,17 @@ export function buildLocalGraph({
         for (const topicId of other.topicIds || []) {
           if (topicIds.includes(topicId)) link(`topic:${topicId}`, otherNode)
         }
+      }
+    }
+    if (coursePaths.length > 1) {
+      for (const coursePath of coursePaths) {
+        const courseNode = add(
+          'course',
+          coursePath,
+          resolveCourseTitle(coursePath, courseTitles),
+          { ring: 1 }
+        )
+        link(center, courseNode)
       }
     }
   }
@@ -346,6 +403,7 @@ export function buildLocalGraph({
         kind: item.kind,
         kindLabel: kindLabel[item.kind] || item.kind,
         label: clip(item.label),
+        fullLabel: String(item.label || '').trim() || clip(item.label),
         refId: item.id,
         active: item.nodeId === `${focusType}:${focusId}`
       },

@@ -1,10 +1,16 @@
-import { useEffect, useMemo, useState, Fragment } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from 'react'
 import { toast } from 'react-hot-toast'
 import NoteEditor from './NoteEditor'
 import KnowledgeGraphView from './KnowledgeGraphView'
 import { formatTime } from './StudySidePanel'
 import { groupAnnotationsByTarget } from '../utils/annotationGroups'
-import { buildLocalGraph, groupFindingsByTopic, relatedFindings } from '../../../shared/knowledgeGraph.js'
+import {
+  buildLocalGraph,
+  groupFindingsByTopic,
+  relatedFindings,
+  resolveCourseTitle,
+  siblingFindings
+} from '../../../shared/knowledgeGraph.js'
 
 function noteTitleFallback(item) {
   if (!item) return 'Sin título'
@@ -44,6 +50,29 @@ function sameSelection(item, selectedId) {
   return item.id === selectedId
 }
 
+function noteKey(item) {
+  if (!item) return null
+  return `${item.coursePath || ''}::${item.id}`
+}
+
+function snapshotMatchesCurrent(snapshot, draft, draftTitle, draftTopics) {
+  const snapBody = String(snapshot?.draft?.markdown || snapshot?.draft?.text || '').trim()
+  const curBody = String(draft?.markdown || draft?.text || '').trim()
+  const snapTitle = String(snapshot?.title || '').trim()
+  const curTitle = String(draftTitle || '').trim()
+  const snapTopics = JSON.stringify(snapshot?.topics || [])
+  const curTopics = JSON.stringify(draftTopics || [])
+  return snapBody === curBody && snapTitle === curTitle && snapTopics === curTopics
+}
+
+function saveStatusLabel(status) {
+  if (status === 'unsaved') return 'Sin guardar'
+  if (status === 'saving') return 'Guardando…'
+  if (status === 'saved') return 'Guardado'
+  if (status === 'error') return 'No se pudo guardar'
+  return ''
+}
+
 function formatDateTime(ts) {
   if (!ts) return '—'
   try {
@@ -60,7 +89,7 @@ function formatDateTime(ts) {
 }
 
 /**
- * Page list, note, and local graph. The graph stays beside the note.
+ * Page list, note, and the connections beside the note.
  */
 function AnnotationsWorkspace({
   title = 'Anotaciones',
@@ -92,15 +121,21 @@ function AnnotationsWorkspace({
   const [editorKey, setEditorKey] = useState(0)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('idle')
   const [groupMode, setGroupMode] = useState('target')
   const [overlapOnly, setOverlapOnly] = useState(false)
   const [graphFocus, setGraphFocus] = useState(null)
+  const [jsonTitles, setJsonTitles] = useState({})
+  const titles = useMemo(
+    () => ({ ...courseTitleByPath, ...jsonTitles }),
+    [courseTitleByPath, jsonTitles]
+  )
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return annotations
     return annotations.filter((item) => {
-      const course = (courseTitleByPath[item.coursePath] || item.coursePath || '').toLowerCase()
+      const course = resolveCourseTitle(item.coursePath, titles).toLowerCase()
       const hay = [
         item.title,
         item.body,
@@ -115,9 +150,48 @@ function AnnotationsWorkspace({
         .toLowerCase()
       return hay.includes(q)
     })
-  }, [annotations, query, courseTitleByPath])
+  }, [annotations, query, titles])
 
   const libraryFindings = corpus || annotations
+
+  useEffect(() => {
+    const pending = []
+    const seen = new Set()
+    for (const finding of libraryFindings) {
+      for (const anchor of finding.anchors || []) {
+        const coursePath = anchor.coursePath
+        if (!coursePath || seen.has(coursePath)) continue
+        seen.add(coursePath)
+        const known = resolveCourseTitle(coursePath, courseTitleByPath)
+        const folder = String(coursePath).split(/[\\/]/).filter(Boolean).pop()
+        if (known && known !== coursePath && known !== folder) continue
+        pending.push(coursePath)
+      }
+    }
+    if (!pending.length || !window.api?.getCourse) return undefined
+    let cancelled = false
+    Promise.all(
+      pending.map(async (coursePath) => {
+        try {
+          const data = await window.api.getCourse(coursePath)
+          const title = String(data?.title || '').trim()
+          return title ? [coursePath, title] : null
+        } catch {
+          return null
+        }
+      })
+    ).then((pairs) => {
+      if (cancelled) return
+      const next = {}
+      for (const pair of pairs) {
+        if (pair) next[pair[0]] = pair[1]
+      }
+      setJsonTitles(next)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [libraryFindings, courseTitleByPath])
 
   const groups = useMemo(() => {
     if (groupMode === 'topic') {
@@ -148,6 +222,62 @@ function AnnotationsWorkspace({
     if (!selectedId) return null
     return annotations.find((item) => sameSelection(item, selectedId)) || null
   }, [annotations, selectedId])
+
+  const selectedRef = useRef(null)
+  const draftRef = useRef(draft)
+  const draftTitleRef = useRef(draftTitle)
+  const draftTopicsRef = useRef(draftTopics)
+  const topicQueryRef = useRef(topicQuery)
+  const topicsRef = useRef(topics)
+  const dirtyRef = useRef(dirty)
+  const savingRef = useRef(saving)
+  const persistRef = useRef(null)
+  const pendingFlushRef = useRef(null)
+  const saveTimerRef = useRef(null)
+
+  draftRef.current = draft
+  draftTitleRef.current = draftTitle
+  draftTopicsRef.current = draftTopics
+  topicQueryRef.current = topicQuery
+  topicsRef.current = topics
+  dirtyRef.current = dirty
+  savingRef.current = saving
+
+  const commitTopicTitle = (title) => {
+    const next = String(title || '').trim()
+    const current = draftTopicsRef.current || []
+    if (!next) return current
+    if (current.some((item) => item.toLowerCase() === next.toLowerCase())) return current
+    const updated = [...current, next]
+    draftTopicsRef.current = updated
+    setDraftTopics(updated)
+    return updated
+  }
+
+  const flushPendingTopic = () => {
+    const pending = String(topicQueryRef.current || '').trim()
+    if (pending) {
+      commitTopicTitle(pending)
+      topicQueryRef.current = ''
+      setTopicQuery('')
+    }
+    return draftTopicsRef.current || []
+  }
+
+  const currentSnapshot = () => ({
+    title: draftTitleRef.current,
+    draft: draftRef.current,
+    topics: flushPendingTopic()
+  })
+
+  const scheduleSave = () => {
+    clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      const item = selectedRef.current
+      if (!item || !dirtyRef.current) return
+      void persistRef.current?.(item, currentSnapshot(), { silent: true })
+    }, 800)
+  }
 
   const mentionItems = useMemo(() => {
     const map = new Map()
@@ -187,24 +317,109 @@ function AnnotationsWorkspace({
     return [...map.values()]
   }, [annotations, topics])
 
+  const persistNote = useCallback(
+    async (item, incoming, { silent = true } = {}) => {
+      if (!item) return
+      const key = noteKey(item)
+      const snapshot =
+        noteKey(selectedRef.current) === key ? currentSnapshot() : incoming
+      if (savingRef.current) {
+        pendingFlushRef.current = { item, snapshot, silent }
+        return
+      }
+      savingRef.current = true
+      if (noteKey(selectedRef.current) === key) {
+        setSaving(true)
+        setSaveStatus('saving')
+      }
+      try {
+        const topicIds = []
+        const known = [...(topicsRef.current || [])]
+        for (const title of snapshot.topics || []) {
+          const topicKey = title.trim().toLowerCase()
+          if (!topicKey) continue
+          let topic = known.find((entry) => String(entry.title || '').trim().toLowerCase() === topicKey)
+          if (!topic && onUpsertTopic) {
+            topic = await onUpsertTopic({ title: title.trim() })
+            if (topic) known.push(topic)
+          }
+          if (topic?.id && !topicIds.includes(topic.id)) topicIds.push(topic.id)
+        }
+        await onSave?.(item, {
+          title: String(snapshot.title || '').trim() || null,
+          body: String(snapshot.draft?.markdown || snapshot.draft?.text || '').trim(),
+          bodyHtml: null,
+          bodyJson: null,
+          topicIds
+        })
+        if (noteKey(selectedRef.current) === key) {
+          if (
+            snapshotMatchesCurrent(
+              snapshot,
+              draftRef.current,
+              draftTitleRef.current,
+              draftTopicsRef.current
+            )
+          ) {
+            setDirty(false)
+            setSaveStatus('saved')
+          } else {
+            setSaveStatus('unsaved')
+          }
+        }
+        if (!silent) toast.success('Guardado')
+      } catch (err) {
+        if (noteKey(selectedRef.current) === key) {
+          setSaveStatus('error')
+        }
+        toast.error(err.message || 'No se pudo guardar')
+      } finally {
+        savingRef.current = false
+        if (noteKey(selectedRef.current) === key) {
+          setSaving(false)
+        }
+        const queued = pendingFlushRef.current
+        pendingFlushRef.current = null
+        if (queued) {
+          void persistRef.current?.(queued.item, queued.snapshot, { silent: queued.silent })
+        } else if (dirtyRef.current && noteKey(selectedRef.current) === key) {
+          scheduleSave()
+        }
+      }
+    },
+    [onSave, onUpsertTopic]
+  )
+
+  persistRef.current = persistNote
+
   useEffect(() => {
-    if (!selected) {
+    const prev = selectedRef.current
+    const next = selected
+    if (dirtyRef.current && prev && noteKey(prev) !== noteKey(next)) {
+      clearTimeout(saveTimerRef.current)
+      void persistRef.current?.(prev, currentSnapshot(), { silent: true })
+    }
+    selectedRef.current = next
+
+    if (!next) {
       setDraftTitle('')
       setDraftTopics([])
       setDraft({ text: '', markdown: '', json: null })
       setDirty(false)
+      setSaveStatus('idle')
       return
     }
-    setDraftTitle(selected.title || '')
-    setDraftTopics(topicTitlesOf(selected, topics))
+    setDraftTitle(next.title || '')
+    setDraftTopics(topicTitlesOf(next, topics))
     setTopicQuery('')
     setDraft({
-      text: selected.body || '',
-      markdown: selected.body || '',
-      json: selected.bodyJson || null
+      text: next.body || '',
+      markdown: next.body || '',
+      json: next.bodyJson || null
     })
     setEditorKey((k) => k + 1)
     setDirty(false)
+    setSaveStatus('idle')
     // Only remount when switching notes — not after every save (updatedAt).
   }, [selected?.id, selected?.coursePath])
 
@@ -212,18 +427,48 @@ function AnnotationsWorkspace({
     setGraphFocus(null)
   }, [selected?.id, selected?.coursePath])
 
+  useEffect(() => {
+    if (saveStatus !== 'saved') return
+    const timer = setTimeout(() => {
+      setSaveStatus((current) => (current === 'saved' ? 'idle' : current))
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [saveStatus])
+
+  useEffect(() => {
+    const onLeave = () => {
+      if (!dirtyRef.current || !selectedRef.current) return
+      void persistRef.current?.(selectedRef.current, currentSnapshot(), { silent: true })
+    }
+    window.addEventListener('beforeunload', onLeave)
+    return () => {
+      window.removeEventListener('beforeunload', onLeave)
+      onLeave()
+    }
+  }, [])
+
+  const markDirty = () => {
+    setDirty(true)
+    setSaveStatus('unsaved')
+    scheduleSave()
+  }
+
   const handleDraftChange = (next) => {
+    const text = next.markdown || next.text || ''
+    const prev = draftRef.current?.markdown || draftRef.current?.text || ''
+    if (text === prev) return
     setDraft({
-      text: next.markdown || next.text || '',
-      markdown: next.markdown || next.text || '',
+      text,
+      markdown: text,
       json: null
     })
-    setDirty(true)
+    markDirty()
   }
 
   const handleTitleChange = (value) => {
+    draftTitleRef.current = value
     setDraftTitle(value)
-    setDirty(true)
+    markDirty()
   }
 
   const displayName = (item) => {
@@ -234,36 +479,10 @@ function AnnotationsWorkspace({
     return noteTitle(item)
   }
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!selected) return
-    setSaving(true)
-    try {
-      const topicIds = []
-      const known = [...topics]
-      for (const title of draftTopics) {
-        const key = title.trim().toLowerCase()
-        if (!key) continue
-        let topic = known.find((item) => String(item.title || '').trim().toLowerCase() === key)
-        if (!topic && onUpsertTopic) {
-          topic = await onUpsertTopic({ title: title.trim() })
-          if (topic) known.push(topic)
-        }
-        if (topic?.id && !topicIds.includes(topic.id)) topicIds.push(topic.id)
-      }
-      await onSave?.(selected, {
-        title: draftTitle.trim() || null,
-        body: (draft.markdown || draft.text || '').trim(),
-        bodyHtml: null,
-        bodyJson: null,
-        topicIds
-      })
-      setDirty(false)
-      toast.success('Guardado')
-    } catch (err) {
-      toast.error(err.message || 'No se pudo guardar')
-    } finally {
-      setSaving(false)
-    }
+    clearTimeout(saveTimerRef.current)
+    void persistNote(selected, currentSnapshot(), { silent: true })
   }
 
   const handleExport = async () => {
@@ -297,7 +516,7 @@ function AnnotationsWorkspace({
         title: titleText,
         bodyMarkdown: portableBody,
         meta: {
-          curso: courseTitleByPath[selected.coursePath] || selected.coursePath || null,
+          curso: selected.coursePath ? resolveCourseTitle(selected.coursePath, titles) : null,
           archivo: selected.lessonTitle || selected.projectTitle || 'Del curso',
           proyecto: selected.projectTitle || null,
           tiempo:
@@ -332,7 +551,7 @@ function AnnotationsWorkspace({
       return group.courseCount > 1 ? `${group.title} · ${group.courseCount} cursos` : group.title
     }
     if (courseColumn && group.coursePath) {
-      const courseName = courseTitleByPath[group.coursePath] || group.coursePath
+      const courseName = resolveCourseTitle(group.coursePath, titles)
       if (group.projectId) return `${courseName} · ${group.title}`
       if (!group.path) return `${courseName} · Del curso`
       return `${courseName} · ${group.title}`
@@ -365,6 +584,11 @@ function AnnotationsWorkspace({
     return relatedFindings(selected, libraryFindings, topics)
   }, [selected, libraryFindings, topics])
 
+  const siblings = useMemo(() => {
+    if (!selected || graphFocus?.type === 'topic') return []
+    return siblingFindings(selected, libraryFindings)
+  }, [selected, libraryFindings, graphFocus])
+
   const graph = useMemo(() => {
     const focusType = graphFocus?.type || (selected ? 'finding' : null)
     const focusId = graphFocus?.id || selected?.id
@@ -373,10 +597,10 @@ function AnnotationsWorkspace({
       focusId,
       findings: libraryFindings,
       topics,
-      courseTitles: courseTitleByPath,
+      courseTitles: titles,
       depth: 2
     })
-  }, [graphFocus, selected, libraryFindings, topics, courseTitleByPath])
+  }, [graphFocus, selected, libraryFindings, topics, titles])
 
   const topicSuggestions = useMemo(() => {
     const q = topicQuery.trim().toLowerCase()
@@ -391,12 +615,11 @@ function AnnotationsWorkspace({
   const addTopicTitle = (title) => {
     const next = String(title || '').trim()
     if (!next) return
-    setDraftTopics((current) => {
-      if (current.some((item) => item.toLowerCase() === next.toLowerCase())) return current
-      return [...current, next]
-    })
+    const before = draftTopicsRef.current || []
+    const updated = commitTopicTitle(next)
+    topicQueryRef.current = ''
     setTopicQuery('')
-    setDirty(true)
+    if (updated !== before) markDirty()
   }
 
   const handleGraphNode = (node) => {
@@ -414,6 +637,7 @@ function AnnotationsWorkspace({
   const createTopic = async (title) => {
     if (!onUpsertTopic) return null
     const topic = await onUpsertTopic({ title })
+    if (topic?.title) addTopicTitle(topic.title)
     return topic
   }
 
@@ -535,7 +759,7 @@ function AnnotationsWorkspace({
                           {courseColumn ? (
                             <small>
                               {item.coursePath
-                                ? courseTitleByPath[item.coursePath] || item.coursePath
+                                ? resolveCourseTitle(item.coursePath, titles)
                                 : 'Sin curso'}
                             </small>
                           ) : null}
@@ -570,14 +794,36 @@ function AnnotationsWorkspace({
                   ) : null}
                 </div>
                 <div className="annotations-doc__toolbar-right">
-                  {dirty ? (
+                  {saveStatus !== 'idle' ? (
+                    saveStatus === 'error' ? (
+                      <button
+                        type="button"
+                        className="annotations-doc__save-status is-error"
+                        onClick={handleSave}
+                        disabled={saving}
+                      >
+                        {saveStatusLabel(saveStatus)}
+                      </button>
+                    ) : (
+                      <span
+                        className={`annotations-doc__save-status is-${saveStatus}`}
+                        aria-live="polite"
+                      >
+                        {saveStatus === 'saving' ? (
+                          <span className="annotations-doc__save-dot" aria-hidden="true" />
+                        ) : null}
+                        {saveStatusLabel(saveStatus)}
+                      </span>
+                    )
+                  ) : null}
+                  {dirty && saveStatus !== 'saving' ? (
                     <button
                       type="button"
                       className="btn btn--primary"
                       onClick={handleSave}
                       disabled={saving}
                     >
-                      {saving ? 'Guardando…' : 'Guardar'}
+                      Guardar
                     </button>
                   ) : null}
                   <button type="button" className="btn btn--ghost" onClick={handleExport}>
@@ -613,7 +859,7 @@ function AnnotationsWorkspace({
                     <span className="annotations-doc__prop-label">Curso</span>
                     <span>
                       {selected.coursePath
-                        ? courseTitleByPath[selected.coursePath] || selected.coursePath
+                        ? resolveCourseTitle(selected.coursePath, titles)
                         : 'Sin curso'}
                     </span>
                   </div>
@@ -642,7 +888,7 @@ function AnnotationsWorkspace({
                     <span>
                       {selected.anchors
                         .filter((anchor) => anchor.coursePath && anchor.coursePath !== selected.coursePath)
-                        .map((anchor) => courseTitleByPath[anchor.coursePath] || anchor.coursePath)
+                        .map((anchor) => resolveCourseTitle(anchor.coursePath, titles))
                         .join(' · ') || 'varios puntos'}
                     </span>
                   </div>
@@ -658,8 +904,10 @@ function AnnotationsWorkspace({
                       type="button"
                       className="annotations-topics__chip"
                       onClick={() => {
-                        setDraftTopics((current) => current.filter((item) => item !== title))
-                        setDirty(true)
+                        const updated = (draftTopicsRef.current || []).filter((item) => item !== title)
+                        draftTopicsRef.current = updated
+                        setDraftTopics(updated)
+                        markDirty()
                       }}
                       title="Quitar tema"
                     >
@@ -673,6 +921,10 @@ function AnnotationsWorkspace({
                     placeholder="Añadir tema"
                     aria-label="Añadir tema"
                     onChange={(event) => setTopicQuery(event.target.value)}
+                    onBlur={(event) => {
+                      if (event.relatedTarget?.closest?.('.annotations-topics')) return
+                      if (topicQueryRef.current.trim()) addTopicTitle(topicQueryRef.current)
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ',') {
                         event.preventDefault()
@@ -725,7 +977,7 @@ function AnnotationsWorkspace({
                           <strong>{noteTitle(finding)}</strong>
                           <span>
                             {(finding.anchors || [])
-                              .map((anchor) => courseTitleByPath[anchor.coursePath] || anchor.coursePath)
+                              .map((anchor) => resolveCourseTitle(anchor.coursePath, titles))
                               .filter(Boolean)
                               .filter((value, index, all) => all.indexOf(value) === index)
                               .join(' · ')}
@@ -741,21 +993,67 @@ function AnnotationsWorkspace({
           )}
         </main>
 
-        <aside className="annotations-graph-pane" aria-label="Grafo de la anotación">
+        <aside className="annotations-graph-pane" aria-label="Conexiones de la anotación">
           <div className="annotations-graph-pane__bar">
-            <span>Grafo</span>
+            <span>Conexiones</span>
             {graphFocus?.type === 'topic' ? (
               <button type="button" className="btn btn--ghost" onClick={() => setGraphFocus(null)}>
                 Volver
               </button>
             ) : null}
           </div>
-          <KnowledgeGraphView
-            nodes={graph.nodes}
-            edges={graph.edges}
-            truncated={graph.truncated}
-            onNodeClick={handleGraphNode}
-          />
+          {!selected && graphFocus?.type !== 'topic' ? (
+            <div className="knowledge-graph--empty">
+              <p>Selecciona una anotación para ver con qué se conecta.</p>
+            </div>
+          ) : graph.nodes.some((node) => !node.data?.active) ? (
+            <>
+              <ul className="knowledge-graph__legend">
+                <li>
+                  <i data-kind="finding" /> Nota
+                </li>
+                <li>
+                  <i data-kind="topic" /> Tema
+                </li>
+                <li>
+                  <i data-kind="course" /> Curso
+                </li>
+              </ul>
+              <KnowledgeGraphView
+                nodes={graph.nodes}
+                edges={graph.edges}
+                truncated={graph.truncated}
+                onNodeClick={handleGraphNode}
+              />
+            </>
+          ) : (
+            <div className="knowledge-graph--empty">
+              {graphFocus?.type === 'topic' ? (
+                <p>Este tema todavía no tiene notas.</p>
+              ) : siblings.length ? (
+                <p>Esta nota no comparte temas. Las del mismo archivo están abajo.</p>
+              ) : (
+                <>
+                  <p>Todavía no hay conexiones.</p>
+                  <p>Añade un tema para ver otras notas que lo comparten.</p>
+                </>
+              )}
+            </div>
+          )}
+          {siblings.length ? (
+            <div className="annotations-links">
+              <span className="annotations-links__label">En el mismo archivo</span>
+              <ul>
+                {siblings.map((finding) => (
+                  <li key={finding.id}>
+                    <button type="button" onClick={() => onSelect?.(finding)}>
+                      {noteTitle(finding)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </aside>
       </div>
     </div>

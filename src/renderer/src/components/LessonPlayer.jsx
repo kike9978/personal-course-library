@@ -478,50 +478,6 @@ const LessonPlayer = forwardRef(function LessonPlayer(
         <h2 className="lesson-player__title" title={lesson.relativePath}>
           {lesson.title}
         </h2>
-        <div className="lesson-player__controls">
-          <button
-            type="button"
-            className="icon-btn icon-btn--ghost"
-            onClick={onPrev}
-            disabled={!hasPrev}
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            className="icon-btn icon-btn--ghost"
-            onClick={onNext}
-            disabled={!hasNext}
-          >
-            Siguiente
-          </button>
-          <button
-            type="button"
-            className={`icon-btn ${isCompleted ? 'icon-btn--teal' : 'icon-btn--ghost'}`}
-            onClick={() => onToggleComplete?.(!isCompleted)}
-            title="Marcar completada (M)"
-          >
-            {isCompleted ? 'Completada' : 'Completar'}
-          </button>
-          <button
-            type="button"
-            className="icon-btn icon-btn--ghost"
-            onClick={cycleRate}
-            title="Velocidad (, .)"
-          >
-            {rate}×
-          </button>
-          {subtitleTracks.length > 0 ? (
-            <button
-              type="button"
-              className={`icon-btn ${subsEnabled ? 'icon-btn--teal' : 'icon-btn--ghost'}`}
-              onClick={() => setSubsEnabled((v) => !v)}
-              title={subsEnabled ? 'Ocultar subtítulos (C)' : 'Subtítulos (C)'}
-            >
-              CC
-            </button>
-          ) : null}
-        </div>
       </div>
 
       <div className={`lesson-player__media${isFullscreen ? ' is-fullscreen' : ''}`} ref={stageRef}>
@@ -580,6 +536,26 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           >
             {playing ? '❚❚' : '▶'}
           </button>
+          <button
+            type="button"
+            className="playhead__icon-btn"
+            onClick={onPrev}
+            disabled={!hasPrev}
+            aria-label="Lección anterior"
+            title="Lección anterior ([)"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            className="playhead__icon-btn"
+            onClick={onNext}
+            disabled={!hasNext}
+            aria-label="Lección siguiente"
+            title="Lección siguiente (])"
+          >
+            ›
+          </button>
 
           <span className="playhead__time">
             {formatTime(currentTime)} / {formatTime(duration)}
@@ -624,6 +600,35 @@ const LessonPlayer = forwardRef(function LessonPlayer(
               </div>
             ) : null}
           </div>
+
+          <button
+            type="button"
+            className="playhead__icon-btn"
+            onClick={cycleRate}
+            title="Velocidad (, .)"
+          >
+            {rate}×
+          </button>
+          <button
+            type="button"
+            className={`playhead__icon-btn${isCompleted ? ' is-done' : ''}`}
+            onClick={() => onToggleComplete?.(!isCompleted)}
+            title={isCompleted ? 'Completada (M)' : 'Marcar completada (M)'}
+            aria-pressed={isCompleted}
+          >
+            {isCompleted ? '✓' : '○'}
+          </button>
+          {subtitleTracks.length > 0 ? (
+            <button
+              type="button"
+              className={`playhead__icon-btn${subsEnabled ? ' is-done' : ''}`}
+              onClick={() => setSubsEnabled((v) => !v)}
+              title={subsEnabled ? 'Ocultar subtítulos (C)' : 'Subtítulos (C)'}
+              aria-pressed={subsEnabled}
+            >
+              CC
+            </button>
+          ) : null}
 
           <div className="playhead__volume">
             <button

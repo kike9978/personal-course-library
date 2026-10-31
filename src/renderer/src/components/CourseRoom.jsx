@@ -6,6 +6,7 @@ import ResourceViewer from './ResourceViewer'
 import ProjectPanel from './ProjectPanel'
 import StudySidePanel from './StudySidePanel'
 import CourseAnnotationsView from './CourseAnnotationsView'
+import { InstitutionMark } from './InstitutionMark'
 import Loader from './Loader'
 
 function collectAllResources(tree) {
@@ -22,6 +23,7 @@ function collectAllResources(tree) {
 
 function CourseRoom({
   course,
+  courses = [],
   onBack,
   onOpenExplorer,
   onProgressChange,
@@ -51,7 +53,9 @@ function CourseRoom({
   const [currentTimeSec, setCurrentTimeSec] = useState(0)
   const [pendingSeek, setPendingSeek] = useState(null)
   const playerRef = useRef(null)
+  const moreMenuRef = useRef(null)
   const resumeApplied = useRef(false)
+  const [moreOpen, setMoreOpen] = useState(false)
 
   const applyProgress = useCallback(
     (next) => {
@@ -506,7 +510,7 @@ function CourseRoom({
           return
         }
         if (!body) {
-          toast.error('Escribe algo o usa “Solo pin”')
+          toast.error('Escribe algo o usa “Marcar momento”')
           return
         }
         const list = await window.api.upsertNote(coursePath, {
@@ -738,6 +742,24 @@ function CourseRoom({
     showCourseAnnotations
   ])
 
+  useEffect(() => {
+    if (!moreOpen) return undefined
+    const onPointerDown = (event) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
+        setMoreOpen(false)
+      }
+    }
+    const onKey = (event) => {
+      if (event.key === 'Escape') setMoreOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [moreOpen])
+
   const emptyContent =
     !loading &&
     tree &&
@@ -755,17 +777,9 @@ function CourseRoom({
         </button>
         <div className="course-room__heading">
           <h1 title={course.title}>{course.title}</h1>
-          {course.institution ? <span>{course.institution}</span> : null}
+          <InstitutionMark institution={course.institution} />
         </div>
         <div className="course-room__actions">
-          {progress ? (
-            <span
-              className="count-badge"
-              title={`${progress.completedCount}/${progress.playableCount}`}
-            >
-              {percent}% · {progress.completedCount}/{progress.playableCount || '—'}
-            </span>
-          ) : null}
           <button
             type="button"
             className="icon-btn icon-btn--ghost"
@@ -778,17 +792,47 @@ function CourseRoom({
             Anotaciones
             {annotations.length ? ` (${annotations.length})` : ''}
           </button>
-          <button
-            type="button"
-            className="icon-btn icon-btn--ghost"
-            onClick={() => load(true)}
-            disabled={loading}
-          >
-            Rescanear
-          </button>
-          <button type="button" className="icon-btn icon-btn--ghost" onClick={handleOpenExplorer}>
-            Abrir en explorador
-          </button>
+          <div className="header-menu" ref={moreMenuRef}>
+            <button
+              type="button"
+              className="icon-btn icon-btn--ghost"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((open) => !open)}
+              title="Más acciones"
+            >
+              ···
+            </button>
+            {moreOpen ? (
+              <div className="header-popover" role="menu" aria-label="Acciones del curso">
+                <button
+                  type="button"
+                  className="header-popover__item"
+                  role="menuitem"
+                  disabled={loading}
+                  onClick={() => {
+                    setMoreOpen(false)
+                    load(true)
+                  }}
+                >
+                  <span>Rescanear</span>
+                  <small>Vuelve a leer la carpeta del curso</small>
+                </button>
+                <button
+                  type="button"
+                  className="header-popover__item"
+                  role="menuitem"
+                  onClick={() => {
+                    setMoreOpen(false)
+                    handleOpenExplorer()
+                  }}
+                >
+                  <span>Abrir en explorador</span>
+                  <small>Archivos reales de esta carpeta</small>
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -830,6 +874,7 @@ function CourseRoom({
         <CourseAnnotationsView
           coursePath={coursePath}
           courseTitle={course.title}
+          courses={courses}
           annotations={annotations}
           currentTargetPath={activeTarget?.path}
           currentTargetTitle={activeTarget?.title}
@@ -866,6 +911,8 @@ function CourseRoom({
               onAddProject={handleAddProject}
               onToggleLessonComplete={toggleLessonComplete}
               progressByLesson={progress?.lessons || {}}
+              completedCount={progress?.completedCount ?? 0}
+              playableCount={progress?.playableCount ?? 0}
             />
           </aside>
           <main className="course-room__main">
@@ -951,15 +998,6 @@ function CourseRoom({
             onJump={jumpTo}
             onExpand={() => setStudyOpen(true)}
             onCollapse={() => setStudyOpen(false)}
-            onOpenFullPage={() => {
-              setStudyOpen(false)
-              setShowCourseAnnotations(true)
-            }}
-            onOpenPopOut={() => {
-              window.api.openAnnotationsWindow({ coursePath }).catch((err) => {
-                toast.error(err.message || 'No se pudo abrir la ventana')
-              })
-            }}
             currentTargetPath={activeTarget?.path}
             currentTargetTitle={activeTarget?.title}
             currentProjectId={activeTarget?.projectId || null}

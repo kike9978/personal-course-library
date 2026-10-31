@@ -396,11 +396,12 @@ function normalizeLinkUrl(raw) {
   return `https://${url}`
 }
 
-function ToolbarPlugin({ enableTimestamp = false, currentTimeSec = 0 }) {
+function ToolbarPlugin({ enableTimestamp = false, currentTimeSec = 0, compact = false }) {
   const [editor] = useLexicalComposerContext()
   const [formats, setFormats] = useState(emptyToolbarState)
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState('https://')
+  const [toolsOpen, setToolsOpen] = useState(!compact)
   const linkInputRef = useRef(null)
 
   useEffect(() => {
@@ -563,7 +564,28 @@ function ToolbarPlugin({ enableTimestamp = false, currentTimeSec = 0 }) {
   }
 
   return (
-    <div className="note-editor__toolbar" role="toolbar" aria-label="Formato">
+    <div
+      className={`note-editor__toolbar${compact ? ' note-editor__toolbar--compact' : ''}${
+        compact && !toolsOpen ? ' is-collapsed' : ''
+      }`}
+      role="toolbar"
+      aria-label="Formato"
+    >
+      {compact ? (
+        <button
+          type="button"
+          className={toolsOpen ? 'is-active' : ''}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setToolsOpen((open) => !open)}
+          title="Formato"
+          aria-expanded={toolsOpen}
+          aria-label="Mostrar formato"
+        >
+          Aa
+        </button>
+      ) : null}
+      {compact && !toolsOpen ? null : (
+        <>
       <button
         type="button"
         className={formats.bold ? 'is-active' : ''}
@@ -653,7 +675,7 @@ function ToolbarPlugin({ enableTimestamp = false, currentTimeSec = 0 }) {
         title="Bloque de código"
         aria-pressed={formats.block === 'code'}
       >
-        Code
+        Código
       </button>
       <span className="note-editor__toolbar-sep" aria-hidden="true" />
       <button
@@ -703,7 +725,7 @@ function ToolbarPlugin({ enableTimestamp = false, currentTimeSec = 0 }) {
         title="Enlace"
         aria-pressed={formats.link || linkOpen}
       >
-        Link
+        Enlace
       </button>
       <button
         type="button"
@@ -711,7 +733,7 @@ function ToolbarPlugin({ enableTimestamp = false, currentTimeSec = 0 }) {
         onClick={insertImage}
         title="Adjuntar imagen"
       >
-        Img
+        Imagen
       </button>
       <button
         type="button"
@@ -719,7 +741,7 @@ function ToolbarPlugin({ enableTimestamp = false, currentTimeSec = 0 }) {
         onClick={insertExcalidraw}
         title="Dibujo Excalidraw"
       >
-        Draw
+        Dibujo
       </button>
       <button
         type="button"
@@ -727,7 +749,7 @@ function ToolbarPlugin({ enableTimestamp = false, currentTimeSec = 0 }) {
         onClick={insertTable}
         title="Insertar tabla"
       >
-        Table
+        Tabla
       </button>
       {enableTimestamp ? (
         <button
@@ -736,10 +758,12 @@ function ToolbarPlugin({ enableTimestamp = false, currentTimeSec = 0 }) {
           onClick={insertTimestamp}
           title="Marca de tiempo del video"
         >
-          Time
+          Tiempo
         </button>
       ) : null}
-      {linkOpen ? (
+        </>
+      )}
+      {linkOpen && (!compact || toolsOpen) ? (
         <form
           className="note-editor__link-form"
           onSubmit={(e) => {
@@ -833,6 +857,7 @@ function NoteEditor({
   placeholder = 'Escribe…',
   autofocus = false,
   variant = 'compact',
+  compactToolbar = false,
   onChange,
   onSeekTimestamp = null,
   currentTimeSec = 0,
@@ -878,6 +903,7 @@ function NoteEditor({
           <ToolbarPlugin
             enableTimestamp={enableTimestamp}
             currentTimeSec={currentTimeSec}
+            compact={compactToolbar}
           />
           <div className="note-editor__shell">
             <div

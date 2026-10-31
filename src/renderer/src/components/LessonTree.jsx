@@ -69,7 +69,9 @@ function LessonTree({
   onSelectProject,
   onAddProject,
   onToggleLessonComplete,
-  progressByLesson = {}
+  progressByLesson = {},
+  completedCount = 0,
+  playableCount = 0
 }) {
   const visibleCourseResources = visibleResources(courseResources)
   const hasLessons = sections.some((s) => s.lessons?.length)
@@ -103,6 +105,14 @@ function LessonTree({
   return (
     <nav className="lesson-tree" aria-label="Contenido del curso">
       <div className="lesson-tree__toolbar">
+        {playableCount > 0 ? (
+          <span
+            className="lesson-tree__progress"
+            title={`${completedCount} de ${playableCount} lecciones`}
+          >
+            {completedCount} de {playableCount}
+          </span>
+        ) : null}
         <button
           type="button"
           className="lesson-tree__add-project"

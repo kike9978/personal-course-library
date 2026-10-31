@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import AnnotationsWorkspace from './AnnotationsWorkspace'
 
@@ -15,8 +15,17 @@ function CourseAnnotationsView({
   onOpenPopOut,
   currentTargetPath,
   currentTargetTitle,
-  currentProjectId
+  currentProjectId,
+  courses = []
 }) {
+  const courseTitleByPath = useMemo(() => {
+    const map = {}
+    for (const item of courses) {
+      if (item?.path && item.title) map[item.path] = item.title
+    }
+    if (coursePath && courseTitle) map[coursePath] = courseTitle
+    return map
+  }, [courses, coursePath, courseTitle])
   const [selectedId, setSelectedId] = useState(null)
   const [topics, setTopics] = useState([])
   const [corpus, setCorpus] = useState(annotations)
@@ -122,6 +131,7 @@ function CourseAnnotationsView({
       preferGroupProjectId={currentProjectId || null}
       topics={topics}
       corpus={corpus}
+      courseTitleByPath={courseTitleByPath}
       onUpsertTopic={async (topic) => {
         const saved = await window.api.upsertTopic(topic)
         setTopics(await window.api.listTopics())

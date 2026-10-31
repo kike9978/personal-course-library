@@ -13,6 +13,11 @@ const FILL = {
   course: '#6b6578'
 }
 
+function labelHalf(node) {
+  const chars = String(node?.label || '').length
+  return Math.min(78, 12 + chars * 3.3)
+}
+
 /**
  * Local graph in the Logseq / Obsidian pattern: circles, labels, and lines.
  * A force simulation pulls linked nodes together. Dragging a node rearranges the rest.
@@ -50,11 +55,13 @@ function KnowledgeGraphView({ nodes = [], edges = [], truncated = false, onNodeC
         id: node.id,
         kind: node.data?.kind || 'finding',
         label: node.data?.label || '',
+        fullLabel: node.data?.fullLabel || node.data?.label || '',
+        kindLabel: node.data?.kindLabel || '',
         refId: node.data?.refId,
         active: Boolean(node.data?.active),
         r: node.data?.active ? 8 : node.data?.kind === 'course' ? 4.5 : 6,
-        x: width / 2 + Math.cos(angle) * 48,
-        y: height / 2 + Math.sin(angle) * 48
+        x: width / 2 + Math.cos(angle) * 110,
+        y: height / 2 + Math.sin(angle) * 110
       }
     })
     const ids = new Set(simNodes.map((node) => node.id))
@@ -80,14 +87,16 @@ function KnowledgeGraphView({ nodes = [], edges = [], truncated = false, onNodeC
           'link',
           forceLink(simLinks)
             .id((node) => node.id)
-            .distance(78)
-            .strength(0.6)
+            .distance((link) => 36 + labelHalf(link.source) + labelHalf(link.target))
+            .strength(0.55)
         )
-        .force('charge', forceManyBody().strength(-280))
+        .force('charge', forceManyBody().strength(-180))
         .force('center', forceCenter(width / 2, height / 2))
         .force(
           'collide',
-          forceCollide().radius((node) => node.r + 18)
+          forceCollide()
+            .radius((node) => Math.max(node.r + 28, labelHalf(node) + 16))
+            .iterations(3)
         )
         .alpha(1)
         .on('tick', () => {
@@ -199,6 +208,7 @@ function KnowledgeGraphView({ nodes = [], edges = [], truncated = false, onNodeC
 
   const drawnNodes = nodesRef.current
   const drawnLinks = linksRef.current
+  const hover = hoverId ? drawnNodes.find((node) => node.id === hoverId) : null
   const hoverNeighbors = (() => {
     if (!hoverId || !drawnNodes.some((node) => node.id === hoverId)) return null
     const set = new Set([hoverId])
@@ -261,7 +271,7 @@ function KnowledgeGraphView({ nodes = [], edges = [], truncated = false, onNodeC
                   onPointerLeave={() => setHoverId((current) => (current === node.id ? null : current))}
                 >
                   <circle r={node.r} fill={FILL[node.kind] || FILL.finding} />
-                  <text x={node.r + 6} y={4}>
+                  <text x={0} y={node.r + 14} textAnchor="middle">
                     {node.label}
                   </text>
                 </g>
@@ -270,6 +280,18 @@ function KnowledgeGraphView({ nodes = [], edges = [], truncated = false, onNodeC
           </g>
         </svg>
       )}
+      {hover && typeof hover.x === 'number' ? (
+        <div
+          className="knowledge-graph__tip"
+          style={{
+            left: camera.x + hover.x * camera.k,
+            top: camera.y + hover.y * camera.k
+          }}
+        >
+          {hover.kindLabel ? <span>{hover.kindLabel}</span> : null}
+          <strong>{hover.fullLabel}</strong>
+        </div>
+      ) : null}
       {truncated ? <p className="knowledge-graph__note">Mostrando los vecinos más cercanos.</p> : null}
     </div>
   )

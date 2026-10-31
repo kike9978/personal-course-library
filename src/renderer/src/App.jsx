@@ -1030,6 +1030,7 @@ function App() {
       ) : activeCourse ? (
         <CourseRoom
           course={activeCourse}
+          courses={courses}
           resumeTarget={resumeTarget}
           liveJump={liveJump}
           onBack={() => {

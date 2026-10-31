@@ -138,6 +138,7 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
         <CourseAnnotationsView
           coursePath={coursePath}
           courseTitle={course?.title || coursePath}
+          courses={courses}
           annotations={annotations}
           onChange={setAnnotations}
           onJump={handleJump}
