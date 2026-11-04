@@ -10,7 +10,6 @@ import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin'
 import { ClickableLinkPlugin } from '@lexical/react/LexicalClickableLinkPlugin'
 import { AutoLinkPlugin } from '@lexical/react/LexicalAutoLinkPlugin'
 import { TabIndentationPlugin } from '@lexical/react/LexicalTabIndentationPlugin'
-import { HashtagPlugin } from '@lexical/react/LexicalHashtagPlugin'
 import { TablePlugin } from '@lexical/react/LexicalTablePlugin'
 import { HorizontalRulePlugin } from '@lexical/react/LexicalHorizontalRulePlugin'
 import { MarkdownShortcutPlugin } from '@lexical/react/LexicalMarkdownShortcutPlugin'
@@ -95,6 +94,7 @@ import { NoteEditorContext } from './noteEditor/NoteEditorContext'
 import FloatingLinkEditorPlugin from './noteEditor/FloatingLinkEditor'
 import SlashMenuPlugin from './noteEditor/SlashMenuPlugin'
 import MentionsPlugin from './noteEditor/MentionsPlugin'
+import HashtagMenuPlugin from './noteEditor/HashtagMenuPlugin'
 
 const AUTO_LINK_MATCHERS = [autoLinkUrlMatcher, autoLinkEmailMatcher]
 
@@ -924,6 +924,7 @@ function NoteEditor({
   currentTimeSec = 0,
   enableTimestamp = false,
   mentionItems = [],
+  programs = [],
   onCreateTopic = null,
   onOpenMention = null,
   onCaptureFrame = null,
@@ -1002,7 +1003,6 @@ function NoteEditor({
           <ClickableLinkPlugin newTab />
           <AutoLinkPlugin matchers={AUTO_LINK_MATCHERS} />
           <TabIndentationPlugin />
-          <HashtagPlugin />
           <TablePlugin hasCellMerge hasCellBackgroundColor={false} hasHorizontalScroll />
           <HorizontalRulePlugin />
           <MarkdownShortcutPlugin transformers={NOTE_TRANSFORMERS} />
@@ -1014,6 +1014,11 @@ function NoteEditor({
             onCaptureFrame={onCaptureFrame}
           />
           <MentionsPlugin mentionItems={mentionItems} onCreateTopic={onCreateTopic} />
+          <HashtagMenuPlugin
+            mentionItems={mentionItems}
+            programs={programs}
+            onCreateTopic={onCreateTopic}
+          />
           <MentionClickPlugin onOpenMention={onOpenMention} />
           <OnChangePlugin onChange={handleChange} ignoreSelectionChange />
           {autofocus ? <AutoFocusPlugin /> : null}

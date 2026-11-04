@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import AnnotationsWorkspace from './AnnotationsWorkspace'
+import { collectCourseFacets } from '../utils/courseFilters'
 
 /**
  * Full-page annotations for one course (table + document).
@@ -26,6 +27,7 @@ function CourseAnnotationsView({
     if (coursePath && courseTitle) map[coursePath] = courseTitle
     return map
   }, [courses, coursePath, courseTitle])
+  const programs = useMemo(() => collectCourseFacets(courses).programs, [courses])
   const [selectedId, setSelectedId] = useState(null)
   const [topics, setTopics] = useState([])
   const [corpus, setCorpus] = useState(annotations)
@@ -130,6 +132,7 @@ function CourseAnnotationsView({
       preferGroupPath={currentTargetPath || null}
       preferGroupProjectId={currentProjectId || null}
       topics={topics}
+      programs={programs}
       corpus={corpus}
       courseTitleByPath={courseTitleByPath}
       onUpsertTopic={async (topic) => {

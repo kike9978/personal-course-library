@@ -16,7 +16,7 @@
     "build:mac": "npm run build && electron-builder --mac --config",
     "build:linux": "npm run build && electron-builder --linux --config",
     "generate:json": "node src/scripts/jsonGenerator.js",
-    "test": "node --experimental-detect-module --test src/shared/courseDescription.test.js src/shared/courseHide.test.js src/shared/playlistBrief.test.js src/shared/playlistNest.test.js src/shared/playlistSemantic.test.js src/shared/knowledgeGraph.test.js src/shared/courseExportSelection.test.js src/main/services/zipFolders.test.js src/main/services/courseOutline.test.js src/renderer/src/utils/courseExport.test.js src/renderer/src/utils/courseFilters.test.js src/renderer/src/utils/focusSearchBar.test.js src/renderer/src/learning/playlistLayout.test.js src/renderer/src/utils/annotationTree.test.js"
+    "test": "node --experimental-detect-module --test src/shared/courseDescription.test.js src/shared/courseHide.test.js src/shared/playlistBrief.test.js src/shared/playlistNest.test.js src/shared/playlistSemantic.test.js src/shared/knowledgeGraph.test.js src/shared/courseExportSelection.test.js src/main/services/zipFolders.test.js src/main/services/courseOutline.test.js src/renderer/src/utils/courseExport.test.js src/renderer/src/utils/courseFilters.test.js src/renderer/src/utils/focusSearchBar.test.js src/renderer/src/learning/playlistLayout.test.js src/renderer/src/utils/annotationTree.test.js src/renderer/src/components/noteEditor/hashtagMenu.test.js"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",

@@ -3,6 +3,7 @@ import { toast } from 'react-hot-toast'
 import AnnotationsWorkspace from './AnnotationsWorkspace'
 import CourseAnnotationsView from './CourseAnnotationsView'
 import Loader from './Loader'
+import { collectCourseFacets } from '../utils/courseFilters'
 
 /**
  * Standalone annotations window (Electron secondary BrowserWindow).
@@ -24,6 +25,8 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
     })
     return map
   }, [courses])
+
+  const programs = useMemo(() => collectCourseFacets(courses).programs, [courses])
 
   const refreshCourseNotes = useCallback(async () => {
     if (!coursePath) return []
@@ -224,6 +227,7 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
         courseColumn
         courseTitleByPath={titleByPath}
         topics={topics}
+        programs={programs}
         corpus={items}
         onUpsertTopic={async (topic) => {
           const saved = await window.api.upsertTopic(topic)

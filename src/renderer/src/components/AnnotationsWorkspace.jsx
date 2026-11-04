@@ -209,6 +209,7 @@ function AnnotationsWorkspace({
   preferGroupProjectId = null,
   loading = false,
   topics = [],
+  programs = [],
   corpus = null,
   onUpsertTopic
 }) {
@@ -1301,6 +1302,7 @@ function AnnotationsWorkspace({
                       : null
                   }
                   mentionItems={mentionItems}
+                  programs={programs}
                   onOpenMention={(mention) => {
                     if (mention?.type !== 'note') return
                     openFinding(libraryFindings.find((item) => item.id === mention.id))

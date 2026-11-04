@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import AnnotationsWorkspace from './AnnotationsWorkspace'
 import AppNav from './AppNav'
+import { collectCourseFacets } from '../utils/courseFilters'
 
 function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
   const [items, setItems] = useState([])
@@ -23,6 +24,8 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
     })
     return map
   }, [courses])
+
+  const programs = useMemo(() => collectCourseFacets(courses).programs, [courses])
 
   const refresh = async () => {
     const [list, topicList] = await Promise.all([
@@ -201,6 +204,7 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
         courseTitleByPath={titleByPath}
         loading={loading}
         topics={topics}
+        programs={programs}
         corpus={items}
         onUpsertTopic={async (topic) => {
           const saved = await window.api.upsertTopic(topic)

@@ -9,6 +9,7 @@ import ProjectPanel, { placementForFile, sectionForPath } from './ProjectPanel'
 import StudySidePanel, { formatTime } from './StudySidePanel'
 import CourseAnnotationsView from './CourseAnnotationsView'
 import { InstitutionMark } from './InstitutionMark'
+import { collectCourseFacets } from '../utils/courseFilters'
 import Loader from './Loader'
 
 function waitForEditorApi(apiRef, timeoutMs = 1600) {
@@ -203,6 +204,8 @@ function CourseRoom({
   }, [coursePath, refreshStudy])
 
   const flatLessons = useMemo(() => flattenLessons(tree?.sections), [tree])
+
+  const programs = useMemo(() => collectCourseFacets(courses).programs, [courses])
 
   const mentionItems = useMemo(() => {
     const items = flatLessons.map((lesson) => ({
@@ -1215,6 +1218,7 @@ function CourseRoom({
             onSeekTimestamp={handleSeekTimestamp}
             enableTimestamp={Boolean(selectedLesson) && panelMode === 'lesson'}
             mentionItems={mentionItems}
+            programs={programs}
             onOpenMention={(mention) => {
               if (mention?.type !== 'note') return
               const note = annotations.find((item) => item.id === mention.id)
