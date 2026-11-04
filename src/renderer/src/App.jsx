@@ -12,6 +12,7 @@ import AnnotationsPopoutView from './components/AnnotationsPopoutView'
 import ProjectsKanban from './components/ProjectsKanban'
 import PlaylistCanvas from './components/PlaylistCanvas'
 import LibraryHeader from './components/LibraryHeader'
+import CourseZipBar from './components/CourseZipBar'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
 import { Toaster, toast } from 'react-hot-toast'
@@ -27,6 +28,8 @@ import {
 import { exportViaDialog } from './utils/exportHelpers'
 import { isCourseHidden } from '../../shared/courseHide.js'
 import { stringifyCourseCatalog } from './utils/courseExport'
+import { useCourseZipExport } from './utils/courseZipExport'
+import { applyCoursePick } from '../../shared/courseExportSelection.js'
 import {
   collectCourseFacets,
   courseMatchesLibraryFilters,
@@ -157,7 +160,8 @@ function FilterableCoursesGrid({
   onRefresh,
   onChangeLibrary,
   onOpenCourse,
-  onNavigate
+  onNavigate,
+  zipExport
 }) {
   const [filterText, setFilterText] = useState('')
   const [isCardLayout, setIsCardLayout] = useState(true)
@@ -173,6 +177,8 @@ function FilterableCoursesGrid({
   const [columnSort, setColumnSort] = useState(null)
   const [columnFilters, setColumnFilters] = useState(EMPTY_COLUMN_FILTERS)
   const [selectedPath, setSelectedPath] = useState(null)
+  const [pickedPaths, setPickedPaths] = useState(() => new Set())
+  const pickAnchorRef = useRef(null)
   const [focusIndex, setFocusIndex] = useState(-1)
   const [editingCourse, setEditingCourse] = useState(null)
   const [isExporting, setIsExporting] = useState(false)
@@ -302,6 +308,53 @@ function FilterableCoursesGrid({
     setSelectedPath(course.path)
   }, [])
 
+  const visiblePaths = useMemo(() => sortedCourses.map((course) => course.path), [sortedCourses])
+  const allVisiblePicked =
+    visiblePaths.length > 0 && visiblePaths.every((coursePath) => pickedPaths.has(coursePath))
+  const someVisiblePicked = visiblePaths.some((coursePath) => pickedPaths.has(coursePath))
+  const exportPaths = useMemo(() => {
+    const known = new Set(courses.map((course) => course.path))
+    return [...pickedPaths].filter((coursePath) => known.has(coursePath))
+  }, [courses, pickedPaths])
+
+  const handleTogglePick = useCallback(
+    (course, { range = false } = {}) => {
+      if (!course?.path) return
+      setPickedPaths((current) => {
+        const result = applyCoursePick(current, visiblePaths, course.path, {
+          range,
+          anchor: pickAnchorRef.current
+        })
+        pickAnchorRef.current = result.anchor
+        return result.selected
+      })
+    },
+    [visiblePaths]
+  )
+
+  const toggleVisiblePicks = useCallback(() => {
+    setPickedPaths((current) => {
+      const next = new Set(current)
+      if (allVisiblePicked) {
+        for (const coursePath of visiblePaths) next.delete(coursePath)
+      } else {
+        for (const coursePath of visiblePaths) next.add(coursePath)
+      }
+      return next
+    })
+    pickAnchorRef.current = visiblePaths.at(-1) || null
+  }, [allVisiblePicked, visiblePaths])
+
+  const clearPicks = useCallback(() => {
+    setPickedPaths(new Set())
+    pickAnchorRef.current = null
+  }, [])
+
+  const handleExportZip = useCallback(async () => {
+    const result = await zipExport.run(exportPaths)
+    if (result?.ok) clearPicks()
+  }, [clearPicks, exportPaths, zipExport])
+
   const handleOpenCourse = useCallback(
     (course, target = null) => {
       if (course && onOpenCourse) onOpenCourse(course, target)
@@ -398,6 +451,11 @@ function FilterableCoursesGrid({
           setEditingCourse(null)
           return
         }
+        if (pickedPaths.size) {
+          setPickedPaths(new Set())
+          pickAnchorRef.current = null
+          return
+        }
         setSelectedPath(null)
         return
       }
@@ -429,7 +487,14 @@ function FilterableCoursesGrid({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sortedCourses, editingCourse, importMissingOpen, selectedPath, handleOpenCourse])
+  }, [
+    sortedCourses,
+    editingCourse,
+    importMissingOpen,
+    selectedPath,
+    pickedPaths.size,
+    handleOpenCourse
+  ])
 
   const selectedCourse = useMemo(() => {
     if (!selectedPath) return null
@@ -609,6 +674,14 @@ function FilterableCoursesGrid({
                 <span>
                   {sortedCourses.length} resultado{sortedCourses.length === 1 ? '' : 's'}
                 </span>
+                <button
+                  type="button"
+                  className="btn btn--ghost course-table__clear"
+                  onClick={toggleVisiblePicks}
+                  disabled={!sortedCourses.length || zipExport.exporting}
+                >
+                  {allVisiblePicked ? 'Quitar selección' : 'Seleccionar resultados'}
+                </button>
                 {!isCardLayout && hasColumnFilters(columnFilters) ? (
                   <button
                     type="button"
@@ -637,7 +710,12 @@ function FilterableCoursesGrid({
                 courses={sortedCourses}
                 isCardLayout={isCardLayout}
                 selectedPath={selectedPath}
+                pickedPaths={pickedPaths}
                 onSelectCourse={handleSelectCourse}
+                onTogglePick={handleTogglePick}
+                allVisiblePicked={allVisiblePicked}
+                someVisiblePicked={someVisiblePicked}
+                onToggleVisible={toggleVisiblePicks}
                 onOpenCourse={handleOpenCourse}
                 onOpenModal={handleOpenEdit}
                 onToggleInProcess={handleToggleInProcess}
@@ -654,6 +732,14 @@ function FilterableCoursesGrid({
                 programs={programs}
                 themes={themes}
               />
+
+              {zipExport.exporting ? null : (
+                <CourseZipBar
+                  count={exportPaths.length}
+                  onClear={clearPicks}
+                  onExport={handleExportZip}
+                />
+              )}
 
               {editingCourse && (
                 <CourseEditModal
@@ -734,6 +820,7 @@ function App() {
   const libraryStudyModeRef = useRef(null)
   const returnStudyRef = useRef(null)
   libraryStudyModeRef.current = libraryStudyMode
+  const zipExport = useCourseZipExport()
   const loadingRef = useRef(false)
   const activeCoursePathRef = useRef(null)
   activeCoursePathRef.current = activeCoursePath
@@ -1026,7 +1113,12 @@ function App() {
       ) : libraryStudyMode === 'projects' ? (
         <ProjectsKanban courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'playlists' ? (
-        <PlaylistCanvas courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
+        <PlaylistCanvas
+          courses={courses}
+          onNavigate={navigateApp}
+          onOpenCourse={openCourse}
+          zipExport={zipExport}
+        />
       ) : activeCourse ? (
         <CourseRoom
           course={activeCourse}
@@ -1053,8 +1145,18 @@ function App() {
           onChangeLibrary={handleChangeLibrary}
           onNavigate={navigateApp}
           onOpenCourse={openCourse}
+          zipExport={zipExport}
         />
       )}
+      {zipExport.exporting ? (
+        <CourseZipBar
+          count={zipExport.count}
+          listCount={zipExport.listCount}
+          exporting
+          progress={zipExport.progress}
+          onCancel={zipExport.cancel}
+        />
+      ) : null}
     </ErrorBoundary>
   )
 }

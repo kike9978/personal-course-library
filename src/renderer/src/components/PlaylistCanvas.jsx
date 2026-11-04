@@ -29,6 +29,8 @@ import {
 import '@xyflow/react/dist/style.css'
 import AppNav from './AppNav'
 import CourseDetailPanel from './CourseDetailPanel'
+import CoursePickBox from './CoursePickBox'
+import CourseZipBar from './CourseZipBar'
 import CourseFilterBar from './CourseFilterBar'
 import CourseEditModal from './CourseEditModal'
 import CoverSearchModal from './CoverSearchModal'
@@ -36,6 +38,7 @@ import PlaylistBuilder from './PlaylistBuilder'
 import brandMark from '../assets/img/brand-mark.svg'
 import { InstitutionMark } from './InstitutionMark'
 import { MAX_NESTED, settleNesting } from '../../../shared/playlistNest.js'
+import { applyCoursePick, collectExportCoursePaths } from '../../../shared/courseExportSelection.js'
 import {
   PLAYLIST_CARD_H,
   PLAYLIST_COVER_H,
@@ -250,7 +253,7 @@ function PlaylistNode({ id, data }) {
 
   return (
     <div
-      className={`playlist-frame${dropHere ? ' is-drop-target' : ''}${current ? ' is-current' : ''}`}
+      className={`playlist-frame${dropHere ? ' is-drop-target' : ''}${current ? ' is-current' : ''}${actions?.isListPicked?.(id) ? ' is-picked' : ''}`}
       data-playlist-id={id}
     >
       <NodeResizer
@@ -274,6 +277,12 @@ function PlaylistNode({ id, data }) {
             <path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
           </svg>
         </button>
+        <CoursePickBox
+          className="nodrag nopan"
+          checked={Boolean(actions?.isListPicked?.(id))}
+          label={`Seleccionar lista ${data.title}`}
+          onPick={() => actions?.toggleListPick(id)}
+        />
         <ListTitle id={id} title={data.title} />
         <FrameCount count={data.count} total={data.totalCount} />
         <button
@@ -312,6 +321,11 @@ function PlaylistNode({ id, data }) {
                 <path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
               </svg>
             </button>
+            <CoursePickBox
+              checked={Boolean(actions?.isListPicked?.(nest.childId))}
+              label={`Seleccionar lista ${nest.title}`}
+              onPick={() => actions?.toggleListPick(nest.childId)}
+            />
             <button
               type="button"
               className="playlist-nest__title"
@@ -428,8 +442,14 @@ function CourseNode({ data }) {
 
   return (
     <article
-      className={`playlist-course${data.missing ? ' is-missing' : ''}${data.inProcess ? ' is-active' : ''}${data.continues ? ' has-next' : ''}${data.bigCover ? ' is-cover' : ''}${actions?.detailPath === data.coursePath ? ' is-preview' : ''}`}
+      className={`playlist-course${data.missing ? ' is-missing' : ''}${data.inProcess ? ' is-active' : ''}${data.continues ? ' has-next' : ''}${data.bigCover ? ' is-cover' : ''}${actions?.detailPath === data.coursePath ? ' is-preview' : ''}${actions?.isCoursePicked?.(data.coursePath) ? ' is-picked' : ''}`}
     >
+      <CoursePickBox
+        className="nodrag nopan"
+        checked={Boolean(actions?.isCoursePicked?.(data.coursePath))}
+        label={`Seleccionar ${data.title}`}
+        onPick={(pick) => actions?.toggleCoursePick(data.coursePath, pick)}
+      />
       <CourseCover
         coursePath={data.missing ? '' : data.coursePath}
         hasCover={data.hasCover}
@@ -593,7 +613,7 @@ function courseSignatureOf(courses) {
     .join('\n')
 }
 
-function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
+function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
   const [playlists, setPlaylists] = useState([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -622,6 +642,8 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   const [editingCourse, setEditingCourse] = useState(null)
   const [coverSearch, setCoverSearch] = useState(null)
   const [builderOpen, setBuilderOpen] = useState(false)
+  const [pickedCourses, setPickedCourses] = useState(() => new Set())
+  const [pickedLists, setPickedLists] = useState(() => new Set())
   const [intentReady, setIntentReady] = useState(!window.api?.getPlaylistIntent)
   const [intent, setIntent] = useState({ goal: '', interests: [] })
   const [nodes, setNodes, onNodesChange] = useNodesState([])
@@ -629,6 +651,8 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
   const playlistsRef = useRef(playlists)
   const coursesRef = useRef(courses)
   const selectedIdRef = useRef(selectedId)
+  const pickAnchorRef = useRef(null)
+  const visiblePathsRef = useRef([])
   const canvasRef = useRef(null)
   const orderMenuRef = useRef(null)
   const didFit = useRef(false)
@@ -1620,11 +1644,57 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     [addCourse, screenToFlowPosition]
   )
 
+  const toggleCoursePick = useCallback((coursePath, { range = false } = {}) => {
+    setPickedCourses((current) => {
+      const result = applyCoursePick(current, visiblePathsRef.current, coursePath, {
+        range,
+        anchor: pickAnchorRef.current
+      })
+      pickAnchorRef.current = result.anchor
+      return result.selected
+    })
+  }, [])
+
+  const toggleListPick = useCallback((playlistId) => {
+    setPickedLists((current) => {
+      const next = new Set(current)
+      if (next.has(playlistId)) next.delete(playlistId)
+      else next.add(playlistId)
+      return next
+    })
+  }, [])
+
+  const toggleVisibleCoursePicks = useCallback(() => {
+    const paths = visiblePathsRef.current
+    setPickedCourses((current) => {
+      const next = new Set(current)
+      const all = paths.length > 0 && paths.every((coursePath) => next.has(coursePath))
+      if (all) {
+        for (const coursePath of paths) next.delete(coursePath)
+      } else {
+        for (const coursePath of paths) next.add(coursePath)
+      }
+      return next
+    })
+    pickAnchorRef.current = paths.at(-1) || null
+  }, [])
+
+  const clearExportPicks = useCallback(() => {
+    setPickedCourses(new Set())
+    setPickedLists(new Set())
+    pickAnchorRef.current = null
+  }, [])
+
   const onNodeClick = useCallback(
-    (_event, node) => {
-      if (node.type === 'course') previewCourse(node.data.coursePath)
+    (event, node) => {
+      if (node.type !== 'course') return
+      if (event.shiftKey || event.metaKey || event.ctrlKey) {
+        toggleCoursePick(node.data.coursePath, { range: event.shiftKey })
+        return
+      }
+      previewCourse(node.data.coursePath)
     },
-    [previewCourse]
+    [previewCourse, toggleCoursePick]
   )
 
   const onNodeDoubleClick = useCallback(
@@ -1696,7 +1766,11 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       removeCourse,
       openCourse,
       selectPlaylist,
-      unnestPlaylist
+      unnestPlaylist,
+      isCoursePicked: (coursePath) => pickedCourses.has(coursePath),
+      isListPicked: (playlistId) => pickedLists.has(playlistId),
+      toggleCoursePick,
+      toggleListPick
     }),
     [
       dropId,
@@ -1709,7 +1783,11 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
       removeCourse,
       openCourse,
       selectPlaylist,
-      unnestPlaylist
+      unnestPlaylist,
+      pickedCourses,
+      pickedLists,
+      toggleCoursePick,
+      toggleListPick
     ]
   )
 
@@ -1804,6 +1882,29 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     selectedPlaylist
   ])
 
+  visiblePathsRef.current = visibleCourses.map((course) => course.path)
+  const allSidebarPicked =
+    visibleCourses.length > 0 && visibleCourses.every((course) => pickedCourses.has(course.path))
+
+  const liveListIds = useMemo(() => {
+    const ids = new Set(playlists.map((playlist) => playlist.id))
+    return [...pickedLists].filter((id) => ids.has(id))
+  }, [playlists, pickedLists])
+
+  const exportPaths = useMemo(
+    () =>
+      collectExportCoursePaths(playlists, {
+        coursePaths: [...pickedCourses],
+        playlistIds: liveListIds
+      }),
+    [playlists, pickedCourses, liveListIds]
+  )
+
+  const handleExportZip = useCallback(async () => {
+    const result = await zipExport.run(exportPaths, { listCount: liveListIds.length })
+    if (result?.ok) clearExportPicks()
+  }, [clearExportPicks, exportPaths, liveListIds.length, zipExport])
+
   const membership = useMemo(() => {
     const map = new Map()
     for (const playlist of playlists) {
@@ -1814,7 +1915,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
     return map
   }, [playlists])
 
-  const inSelected = new Set(selectedPlaylist?.coursePaths || []) 
+  const inSelected = new Set(selectedPlaylist?.coursePaths || [])
 
   return (
     <BoardActions.Provider value={actions}>
@@ -1925,6 +2026,14 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
                   ? `${visibleCourses.length} · añadir a «${selectedPlaylist.title}»`
                   : `${visibleCourses.length} cursos`}
               </p>
+              <button
+                type="button"
+                className="btn btn--ghost playlist-board__pick"
+                onClick={toggleVisibleCoursePicks}
+                disabled={!visibleCourses.length || zipExport.exporting}
+              >
+                {allSidebarPicked ? 'Quitar selección' : 'Seleccionar visibles'}
+              </button>
               {selectedPlaylist?.why ? (
                 <p className="playlist-board__why">{selectedPlaylist.why}</p>
               ) : null}
@@ -2007,11 +2116,15 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
                   return (
                     <div
                       key={course.path}
-                      className={`playlist-course-row${member ? ' is-member' : ''}${detailPath === course.path ? ' is-preview' : ''}`}
+                      className={`playlist-course-row${member ? ' is-member' : ''}${detailPath === course.path ? ' is-preview' : ''}${pickedCourses.has(course.path) ? ' is-picked' : ''}`}
                       role="listitem"
                       draggable
                       onClick={(event) => {
-                        if (event.target.closest('button')) return
+                        if (event.target.closest('button, label, input')) return
+                        if (event.shiftKey || event.metaKey || event.ctrlKey) {
+                          toggleCoursePick(course.path, { range: event.shiftKey })
+                          return
+                        }
                         previewCourse(course.path)
                       }}
                       onDragStart={(event) => {
@@ -2024,6 +2137,11 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
                         event.dataTransfer.effectAllowed = 'copy'
                       }}
                     >
+                      <CoursePickBox
+                        checked={pickedCourses.has(course.path)}
+                        label={`Seleccionar ${course.title || course.path}`}
+                        onPick={(pick) => toggleCoursePick(course.path, pick)}
+                      />
                       <CourseCover
                         coursePath={course.path}
                         hasCover={course.hasCover}
@@ -2216,6 +2334,14 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse }) {
             onClose={() => setCoverSearch(null)}
           />
         ) : null}
+        {zipExport.exporting ? null : (
+          <CourseZipBar
+            count={exportPaths.length}
+            listCount={liveListIds.length}
+            onClear={clearExportPicks}
+            onExport={handleExportZip}
+          />
+        )}
       </div>
     </BoardActions.Provider>
   )

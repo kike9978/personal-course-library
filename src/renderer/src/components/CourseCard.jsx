@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import { InstitutionMark } from './InstitutionMark'
+import CoursePickBox from './CoursePickBox'
 import brandMark from '../assets/img/brand-mark.svg'
 
 function useCoverImage(coursePath, hasCover, coverStamp) {
@@ -68,6 +69,8 @@ function CourseCard({
   onSelect,
   onToggleInProcess,
   isSelected,
+  isPicked = false,
+  onTogglePick,
   tabIndex,
   onError,
   showLearningMeta = true
@@ -128,7 +131,11 @@ function CourseCard({
     }
   }
 
-  const handleSelect = () => {
+  const handleSelect = (event) => {
+    if (event?.shiftKey || event?.metaKey || event?.ctrlKey) {
+      onTogglePick?.(course, { range: Boolean(event.shiftKey) })
+      return
+    }
     onSelect?.(course)
   }
 
@@ -148,7 +155,7 @@ function CourseCard({
   return (
     <article
       ref={ref}
-      className={`course-card${isSelected ? ' is-selected' : ''}`}
+      className={`course-card${isSelected ? ' is-selected' : ''}${isPicked ? ' is-picked' : ''}`}
       onClick={handleSelect}
       onDoubleClick={(e) => {
         e.preventDefault()
@@ -166,6 +173,12 @@ function CourseCard({
             <img src={brandMark} alt="" width={28} height={28} />
           </div>
         )}
+
+        <CoursePickBox
+          checked={isPicked}
+          label={`Seleccionar ${courseTitle || coursePath}`}
+          onPick={(pick) => onTogglePick?.(course, pick)}
+        />
 
         <div className="course-card__marks">
           <button

@@ -396,7 +396,40 @@ function normalizeLinkUrl(raw) {
   return `https://${url}`
 }
 
-function ToolbarPlugin({ enableTimestamp = false, currentTimeSec = 0, compact = false }) {
+function EditorApiPlugin({ apiRef }) {
+  const [editor] = useLexicalComposerContext()
+
+  useEffect(() => {
+    if (!apiRef) return undefined
+    apiRef.current = {
+      insertImage: (payload) => {
+        const src = payload?.src
+        if (!src) return
+        editor.focus()
+        editor.update(() => {
+          const selection = $getSelection()
+          if (!$isRangeSelection(selection)) $getRoot().selectEnd()
+        })
+        editor.dispatchCommand(INSERT_IMAGE_COMMAND, {
+          src,
+          altText: payload.altText || ''
+        })
+      }
+    }
+    return () => {
+      if (apiRef.current) apiRef.current = null
+    }
+  }, [apiRef, editor])
+
+  return null
+}
+
+function ToolbarPlugin({
+  enableTimestamp = false,
+  currentTimeSec = 0,
+  compact = false,
+  onCaptureFrame = null
+}) {
   const [editor] = useLexicalComposerContext()
   const [formats, setFormats] = useState(emptyToolbarState)
   const [linkOpen, setLinkOpen] = useState(false)
@@ -761,6 +794,16 @@ function ToolbarPlugin({ enableTimestamp = false, currentTimeSec = 0, compact = 
           Tiempo
         </button>
       ) : null}
+      {onCaptureFrame ? (
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onCaptureFrame}
+          title="Captura del video en este momento"
+        >
+          Captura
+        </button>
+      ) : null}
         </>
       )}
       {linkOpen && (!compact || toolsOpen) ? (
@@ -863,7 +906,11 @@ function NoteEditor({
   currentTimeSec = 0,
   enableTimestamp = false,
   mentionItems = [],
-  onCreateTopic = null
+  onCreateTopic = null,
+  onCaptureFrame = null,
+  editorApiRef = null,
+  onFocus = null,
+  onBlur = null
 }) {
   const [anchorElem, setAnchorElem] = useState(null)
 
@@ -904,6 +951,7 @@ function NoteEditor({
             enableTimestamp={enableTimestamp}
             currentTimeSec={currentTimeSec}
             compact={compactToolbar}
+            onCaptureFrame={onCaptureFrame}
           />
           <div className="note-editor__shell">
             <div
@@ -918,6 +966,8 @@ function NoteEditor({
                     className="note-editor__input"
                     aria-placeholder={placeholder}
                     placeholder={<div className="note-editor__placeholder">{placeholder}</div>}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
                   />
                 }
                 ErrorBoundary={LexicalErrorBoundary}
@@ -938,9 +988,11 @@ function NoteEditor({
           <HorizontalRulePlugin />
           <MarkdownShortcutPlugin transformers={NOTE_TRANSFORMERS} />
           <ImagesPlugin />
+          <EditorApiPlugin apiRef={editorApiRef} />
           <SlashMenuPlugin
             currentTimeSec={currentTimeSec}
             enableTimestamp={enableTimestamp}
+            onCaptureFrame={onCaptureFrame}
           />
           <MentionsPlugin mentionItems={mentionItems} onCreateTopic={onCreateTopic} />
           <OnChangePlugin onChange={handleChange} ignoreSelectionChange />

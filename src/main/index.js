@@ -43,6 +43,7 @@ import {
   loadNoteDrawing,
   resolveExistingNoteAttachments
 } from './services/noteAttachments.js'
+import { exportCourseFolders } from './services/courseZip.js'
 import {
   getCourseProgress,
   setLessonProgress,
@@ -83,6 +84,7 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       secure: true,
       supportFetchAPI: true,
+      corsEnabled: true,
       bypassCSP: true,
       stream: true
     }
@@ -93,6 +95,7 @@ let mainWindow = null
 let annotationsWindow = null
 let libraryWatcher = null
 let watchDebounceTimer = null
+let activeCourseZip = null
 const scanCache = new Map()
 
 function getRendererEntry(hash = '') {
@@ -268,6 +271,14 @@ function nodeStreamToWeb(nodeStream) {
   return Readable.toWeb(nodeStream)
 }
 
+function withCors(headers) {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': '*',
+    ...headers
+  }
+}
+
 async function serveFileWithRanges(request, filePath, mime) {
   const stat = await fsPromises.stat(filePath)
   const fileSize = stat.size
@@ -283,38 +294,48 @@ async function serveFileWithRanges(request, filePath, mime) {
     if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= fileSize) {
       return new Response('Range Not Satisfiable', {
         status: 416,
-        headers: { 'Content-Range': `bytes */${fileSize}` }
+        headers: withCors({ 'Content-Range': `bytes */${fileSize}` })
       })
     }
     const chunkSize = end - start + 1
     const nodeStream = fs.createReadStream(filePath, { start, end })
     return new Response(nodeStreamToWeb(nodeStream), {
       status: 206,
-      headers: {
+      headers: withCors({
         'Content-Type': mime,
         'Content-Length': String(chunkSize),
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'no-cache'
-      }
+      })
     })
   }
 
   const nodeStream = fs.createReadStream(filePath)
   return new Response(nodeStreamToWeb(nodeStream), {
     status: 200,
-    headers: {
+    headers: withCors({
       'Content-Type': mime,
       'Content-Length': String(fileSize),
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-cache'
-    }
+    })
   })
 }
 
 function registerCourseMediaProtocol() {
   protocol.handle('course-media', async (request) => {
     try {
+      if (request.method === 'OPTIONS') {
+        return new Response(null, {
+          status: 204,
+          headers: withCors({
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Max-Age': '86400'
+          })
+        })
+      }
+
       const url = new URL(request.url)
       const courseDir = url.searchParams.get('course')
 
@@ -327,10 +348,10 @@ function registerCourseMediaProtocol() {
         const data = await fsPromises.readFile(imagePath)
         const mime = COVER_MIME[extname(imagePath).toLowerCase()] || 'application/octet-stream'
         return new Response(data, {
-          headers: {
+          headers: withCors({
             'Content-Type': mime,
             'Cache-Control': 'public, max-age=3600'
-          }
+          })
         })
       }
 
@@ -350,10 +371,10 @@ function registerCourseMediaProtocol() {
           const vtt = srtToWebVtt(raw)
           return new Response(vtt, {
             status: 200,
-            headers: {
+            headers: withCors({
               'Content-Type': 'text/vtt; charset=utf-8',
               'Cache-Control': 'no-cache'
-            }
+            })
           })
         }
         const mime = getLessonMime(absolute)
@@ -370,10 +391,10 @@ function registerCourseMediaProtocol() {
         const data = await fsPromises.readFile(absolute)
         const mime = getNoteAttachmentMime(absolute)
         return new Response(data, {
-          headers: {
+          headers: withCors({
             'Content-Type': mime,
             'Cache-Control': 'public, max-age=31536000'
-          }
+          })
         })
       }
 
@@ -696,6 +717,34 @@ function registerIpcHandlers() {
     }
   })
 
+  ipcMain.handle('capture-window-region', async (event, rect) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win) return { ok: false, error: 'Ventana no disponible' }
+      const bounds = win.getContentBounds()
+      const x = Math.max(0, Math.round(Number(rect?.x) || 0))
+      const y = Math.max(0, Math.round(Number(rect?.y) || 0))
+      const width = Math.min(
+        Math.max(0, bounds.width - x),
+        Math.max(1, Math.round(Number(rect?.width) || 0))
+      )
+      const height = Math.min(
+        Math.max(0, bounds.height - y),
+        Math.max(1, Math.round(Number(rect?.height) || 0))
+      )
+      if (width < 2 || height < 2) return { ok: false, error: 'El video no está visible' }
+      const image = await win.capturePage({ x, y, width, height })
+      if (image.isEmpty()) return { ok: false, error: 'Captura vacía' }
+      return {
+        ok: true,
+        dataBase64: image.toPNG().toString('base64'),
+        mimeType: 'image/png'
+      }
+    } catch (error) {
+      return { ok: false, error: error.message || 'No se pudo capturar' }
+    }
+  })
+
   ipcMain.handle('save-note-image', (_event, payload) => {
     try {
       return { ok: true, ...saveNoteAttachmentFromData(payload || {}) }
@@ -718,6 +767,60 @@ function registerIpcHandlers() {
     } catch (error) {
       return { ok: false, error: error.message }
     }
+  })
+
+  ipcMain.handle('export-courses-zip', async (event, coursePaths) => {
+    if (activeCourseZip) {
+      return { ok: false, error: 'Ya hay una exportación en curso' }
+    }
+    const paths = Array.isArray(coursePaths) ? coursePaths : []
+    const job = { canceled: false }
+    activeCourseZip = job
+    let destPath = ''
+    try {
+      const parent = BrowserWindow.fromWebContents(event.sender) || mainWindow
+      const stamp = new Date().toISOString().slice(0, 10)
+      const result = await dialog.showSaveDialog(parent, {
+        title: 'Exportar cursos',
+        defaultPath: `cursos-${stamp}.zip`,
+        filters: [
+          { name: 'ZIP', extensions: ['zip'] },
+          { name: 'Todos', extensions: ['*'] }
+        ]
+      })
+      if (result.canceled || !result.filePath || job.canceled) return { canceled: true }
+      destPath = result.filePath.toLowerCase().endsWith('.zip')
+        ? result.filePath
+        : `${result.filePath}.zip`
+      let lastSent = 0
+      const summary = await exportCourseFolders(paths, destPath, {
+        isCanceled: () => job.canceled,
+        registerAbort: (abort) => {
+          job.abort = abort
+        },
+        onProgress: (progress) => {
+          const now = Date.now()
+          if (now - lastSent < 250) return
+          lastSent = now
+          if (!event.sender.isDestroyed()) event.sender.send('course-zip-progress', progress)
+        }
+      })
+      if (job.canceled) return { canceled: true }
+      return { ok: true, canceled: false, path: destPath, ...summary }
+    } catch (error) {
+      if (error.code === 'CANCELED' || job.canceled) return { canceled: true }
+      return { ok: false, error: error.message, skipped: error.skipped || [] }
+    } finally {
+      if (activeCourseZip === job) activeCourseZip = null
+    }
+  })
+
+  ipcMain.handle('cancel-course-zip', () => {
+    const job = activeCourseZip
+    if (!job) return { ok: true }
+    job.canceled = true
+    job.abort?.()
+    return { ok: true }
   })
 
   ipcMain.handle('export-file', async (_event, payload = {}) => {

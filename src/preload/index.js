@@ -70,10 +70,18 @@ const api = {
   savePlaylistIntent: (intent) => ipcRenderer.invoke('save-playlist-intent', intent),
   pickProjectFolder: () => ipcRenderer.invoke('pick-project-folder'),
   pickNoteImage: () => ipcRenderer.invoke('pick-note-image'),
+  captureWindowRegion: (rect) => ipcRenderer.invoke('capture-window-region', rect),
   saveNoteImage: (payload) => ipcRenderer.invoke('save-note-image', payload),
   saveNoteDrawing: (payload) => ipcRenderer.invoke('save-note-drawing', payload),
   loadNoteDrawing: (drawingId) => ipcRenderer.invoke('load-note-drawing', drawingId),
   exportFile: (payload) => ipcRenderer.invoke('export-file', payload),
+  exportCoursesZip: (coursePaths) => ipcRenderer.invoke('export-courses-zip', coursePaths),
+  cancelCourseZip: () => ipcRenderer.invoke('cancel-course-zip'),
+  onCourseZipProgress: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('course-zip-progress', listener)
+    return () => ipcRenderer.removeListener('course-zip-progress', listener)
+  },
   exportMarkdownBundle: (payload) => ipcRenderer.invoke('export-markdown-bundle', payload),
   openProjectLink: (coursePath, projectId) =>
     ipcRenderer.invoke('open-project-link', { coursePath, projectId }),

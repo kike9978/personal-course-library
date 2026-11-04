@@ -1,9 +1,79 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
+import { flattenLessons } from '../../../shared/courseTree.js'
 import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import { InstitutionMark } from './InstitutionMark'
 import CourseDescription from './CourseDescription'
 import brandMark from '../assets/img/brand-mark.svg'
+
+function OutlineSections({
+  sections,
+  depth,
+  showSectionTitles,
+  course,
+  currentPath,
+  currentRef,
+  onOpenLesson
+}) {
+  return (sections || []).map((section) => {
+    const lessons = section.lessons || []
+    const nested = section.sections || []
+    if (!lessons.length && !nested.length) return null
+    return (
+      <div
+        key={section.id}
+        className="detail-outline__section"
+        style={depth > 0 ? { marginLeft: '0.75rem' } : undefined}
+      >
+        {showSectionTitles ? (
+          <h4 className="detail-outline__section-title" title={section.title}>
+            {section.title}
+          </h4>
+        ) : null}
+        {lessons.length > 0 ? (
+          <ol className="detail-outline__list">
+            {lessons.map((lesson, index) => {
+              const done = Boolean(course.learning?.lessons?.[lesson.relativePath]?.completed)
+              const current = lesson.relativePath === currentPath
+              const status = [done ? 'completada' : '', current ? 'última' : '']
+                .filter(Boolean)
+                .join(', ')
+              return (
+                <li key={lesson.relativePath}>
+                  <button
+                    type="button"
+                    ref={current ? currentRef : null}
+                    className={`detail-outline__lesson${done ? ' is-done' : ''}${
+                      current ? ' is-current' : ''
+                    }`}
+                    aria-current={current ? 'true' : undefined}
+                    aria-label={status ? `${lesson.title}, ${status}` : lesson.title}
+                    title={lesson.title}
+                    onClick={() => onOpenLesson(lesson)}
+                  >
+                    <span className="detail-outline__mark" aria-hidden="true">
+                      {done ? '✓' : index + 1}
+                    </span>
+                    <span className="detail-outline__label">{lesson.title}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
+        ) : null}
+        <OutlineSections
+          sections={nested}
+          depth={depth + 1}
+          showSectionTitles={showSectionTitles}
+          course={course}
+          currentPath={currentPath}
+          currentRef={currentRef}
+          onOpenLesson={onOpenLesson}
+        />
+      </div>
+    )
+  })
+}
 
 function CourseOutline({ course, onOpenLesson }) {
   const [outline, setOutline] = useState(null)
@@ -39,8 +109,8 @@ function CourseOutline({ course, onOpenLesson }) {
     currentRef.current?.scrollIntoView({ block: 'nearest' })
   }, [outline, currentPath])
 
-  const sections = (outline?.sections || []).filter((section) => section.lessons?.length)
-  const lessonCount = sections.reduce((count, section) => count + section.lessons.length, 0)
+  const sections = outline?.sections || []
+  const lessonCount = flattenLessons(sections).length
   const showSectionTitles =
     sections.length > 1 || (sections.length === 1 && sections[0].id !== '__root__')
 
@@ -55,44 +125,15 @@ function CourseOutline({ course, onOpenLesson }) {
       {!loading && !error && lessonCount === 0 ? (
         <p className="detail-outline__note">Este curso no tiene lecciones.</p>
       ) : null}
-      {sections.map((section) => (
-        <div key={section.id} className="detail-outline__section">
-          {showSectionTitles ? (
-            <h4 className="detail-outline__section-title" title={section.title}>
-              {section.title}
-            </h4>
-          ) : null}
-          <ol className="detail-outline__list">
-            {section.lessons.map((lesson, index) => {
-              const done = Boolean(course.learning?.lessons?.[lesson.relativePath]?.completed)
-              const current = lesson.relativePath === currentPath
-              const status = [done ? 'completada' : '', current ? 'última' : '']
-                .filter(Boolean)
-                .join(', ')
-              return (
-                <li key={lesson.relativePath}>
-                  <button
-                    type="button"
-                    ref={current ? currentRef : null}
-                    className={`detail-outline__lesson${done ? ' is-done' : ''}${
-                      current ? ' is-current' : ''
-                    }`}
-                    aria-current={current ? 'true' : undefined}
-                    aria-label={status ? `${lesson.title}, ${status}` : lesson.title}
-                    title={lesson.title}
-                    onClick={() => onOpenLesson(lesson)}
-                  >
-                    <span className="detail-outline__mark" aria-hidden="true">
-                      {done ? '✓' : index + 1}
-                    </span>
-                    <span className="detail-outline__label">{lesson.title}</span>
-                  </button>
-                </li>
-              )
-            })}
-          </ol>
-        </div>
-      ))}
+      <OutlineSections
+        sections={sections}
+        depth={0}
+        showSectionTitles={showSectionTitles}
+        course={course}
+        currentPath={currentPath}
+        currentRef={currentRef}
+        onOpenLesson={onOpenLesson}
+      />
     </section>
   )
 }

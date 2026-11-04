@@ -125,15 +125,33 @@ export function outlineForBrief(outline, limits = {}) {
   let omitted = 0
   let sectionsKept = 0
 
-  for (const section of sections) {
-    const lessons = (Array.isArray(section?.lessons) ? section.lessons : [])
+  const lessonTitles = (section) =>
+    (Array.isArray(section?.lessons) ? section.lessons : [])
       .map((lesson) => fact(lesson?.title))
       .filter(Boolean)
-    if (!lessons.length) continue
+
+  const countTitles = (section) =>
+    lessonTitles(section).length +
+    (Array.isArray(section?.sections) ? section.sections : []).reduce(
+      (sum, child) => sum + countTitles(child),
+      0
+    )
+
+  const visit = (section) => {
+    const lessons = lessonTitles(section)
+    const children = Array.isArray(section?.sections) ? section.sections : []
+    if (!lessons.length && !children.length) return
+
+    if (!lessons.length) {
+      lines.push(fact(section?.title) || 'Lessons')
+      lines.push('')
+      for (const child of children) visit(child)
+      return
+    }
 
     if (sectionsKept >= maxSections || kept >= maxLessons) {
-      omitted += lessons.length
-      continue
+      omitted += countTitles(section)
+      return
     }
 
     const room = maxLessons - kept
@@ -146,7 +164,10 @@ export function outlineForBrief(outline, limits = {}) {
     kept += take
     omitted += lessons.length - take
     sectionsKept += 1
+    for (const child of children) visit(child)
   }
+
+  for (const section of sections) visit(section)
 
   return { text: lines.join('\n').trim(), kept, omitted }
 }

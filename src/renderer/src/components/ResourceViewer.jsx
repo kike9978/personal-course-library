@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
+import LinkProjectMenu from './LinkProjectMenu'
 
 const PREVIEWABLE_EXT = new Set([
   '.pdf',
@@ -43,7 +44,16 @@ function isInlinePreview(resource) {
   return PREVIEWABLE_EXT.has(ext)
 }
 
-function ResourceViewer({ coursePath, resource }) {
+function ResourceViewer({
+  coursePath,
+  resource,
+  projects = [],
+  linkSectionId = null,
+  linkSectionTitle = '',
+  onToggleProjectLink,
+  onToggleSectionLink,
+  onCreateProject
+}) {
   const [src, setSrc] = useState(null)
   const [textBody, setTextBody] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -126,6 +136,17 @@ function ResourceViewer({ coursePath, resource }) {
           <span className="resource-viewer__kind">{kindLabel(resource.kind)}</span>
         </div>
         <div className="resource-viewer__actions">
+          {onToggleProjectLink ? (
+            <LinkProjectMenu
+              projects={projects}
+              activePath={resource.relativePath}
+              sectionId={linkSectionId}
+              sectionTitle={linkSectionTitle}
+              onToggleFile={onToggleProjectLink}
+              onToggleSection={onToggleSectionLink}
+              onCreate={onCreateProject}
+            />
+          ) : null}
           <button type="button" className="icon-btn icon-btn--ghost" onClick={openExternal}>
             Abrir externamente
           </button>

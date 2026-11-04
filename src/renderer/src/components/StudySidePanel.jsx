@@ -48,7 +48,7 @@ function formatTimeShort(sec) {
   return `${m}:${String(r).padStart(2, '0')}`
 }
 
-function AnnotationCard({ item, showLesson, onJump, onEdit, onDelete }) {
+function AnnotationCard({ item, showLesson, onJump, onEdit, onDelete, onUpdateTime }) {
   const timed = typeof item.timeSec === 'number'
   const hasPath = Boolean(item.lessonRelativePath)
   const hasProject = Boolean(item.projectId)
@@ -81,6 +81,16 @@ function AnnotationCard({ item, showLesson, onJump, onEdit, onDelete }) {
             Ir
           </button>
         ) : null}
+        {timed && onUpdateTime ? (
+          <button
+            type="button"
+            className="study-action"
+            onClick={() => onUpdateTime(item)}
+            title="Mover esta nota al tiempo actual del video"
+          >
+            Ahora
+          </button>
+        ) : null}
         <button type="button" className="study-action" onClick={() => onEdit(item)}>
           Editar
         </button>
@@ -104,6 +114,10 @@ function StudySidePanel({
   noteScope,
   onNoteScopeChange,
   currentTimeSec = 0,
+  momentTimeSec = null,
+  momentFrozen = false,
+  onComposerFocus = null,
+  onComposerBlur = null,
   onSeekTimestamp = null,
   enableTimestamp = false,
   mentionItems = [],
@@ -114,7 +128,11 @@ function StudySidePanel({
   editingId,
   onCancelEdit,
   onQuickPin,
+  onCaptureFrame,
+  capturingFrame = false,
+  editorApiRef = null,
   onJump,
+  onUpdateTime = null,
   onExpand,
   onCollapse,
   currentTargetPath = null,
@@ -195,16 +213,17 @@ function StudySidePanel({
       ? 'Notas de este archivo'
       : 'Notas de esta lección'
   const fileScopeLabel = isProject ? 'En este proyecto' : 'En este archivo'
+  const shownMomentSec = momentTimeSec == null ? currentTimeSec : momentTimeSec
   const scopeSummary =
     noteScope === 'moment'
-      ? `En ${formatTime(currentTimeSec)}`
+      ? `En ${formatTime(shownMomentSec)}`
       : noteScope === 'file'
         ? fileScopeLabel
         : 'Del curso'
 
   const placeholder =
     noteScope === 'moment'
-      ? `Qué recordar en ${formatTime(currentTimeSec)}…`
+      ? `Qué recordar en ${formatTime(shownMomentSec)}…`
       : noteScope === 'file'
         ? isProject
           ? 'Nota sobre este proyecto…'
@@ -317,6 +336,11 @@ function StudySidePanel({
                     className="study-scope-toggle"
                     aria-expanded={scopeOpen}
                     aria-controls="study-scope-options"
+                    title={
+                      noteScope === 'moment' && momentFrozen
+                        ? 'Momento fijado al empezar la nota'
+                        : undefined
+                    }
                     onClick={() => setScopeOpen((open) => !open)}
                   >
                     {scopeSummary}
@@ -333,7 +357,7 @@ function StudySidePanel({
                             setScopeOpen(false)
                           }}
                         >
-                          En el video · {formatTime(currentTimeSec)}
+                          En el video · {formatTime(shownMomentSec)}
                         </button>
                       ) : null}
                       {hasTarget ? (
@@ -372,29 +396,44 @@ function StudySidePanel({
                 placeholder={placeholder}
                 compactToolbar
                 onChange={onDraftChange}
+                onFocus={onComposerFocus}
+                onBlur={onComposerBlur}
                 currentTimeSec={currentTimeSec}
                 enableTimestamp={enableTimestamp || hasLesson}
                 onSeekTimestamp={onSeekTimestamp}
                 mentionItems={mentionItems}
                 onCreateTopic={onCreateTopic}
+                onCaptureFrame={hasLesson ? onCaptureFrame : null}
+                editorApiRef={editorApiRef}
               />
               <div className="study-panel__composer-actions">
-                {editingId ? (
-                  <button type="button" className="btn btn--ghost" onClick={onCancelEdit}>
-                    Cancelar
-                  </button>
-                ) : hasLesson ? (
-                  <button
-                    type="button"
-                    className="study-action"
-                    onClick={onQuickPin}
-                    title="Marca sin texto en el tiempo actual (B)"
-                  >
-                    Marcar momento
-                  </button>
-                ) : (
-                  <span />
-                )}
+                <div className="study-panel__composer-side">
+                  {editingId ? (
+                    <button type="button" className="btn btn--ghost" onClick={onCancelEdit}>
+                      Cancelar
+                    </button>
+                  ) : hasLesson ? (
+                    <button
+                      type="button"
+                      className="study-action"
+                      onClick={onQuickPin}
+                      title="Marca sin texto en el tiempo actual (B)"
+                    >
+                      Marcar momento
+                    </button>
+                  ) : null}
+                  {hasLesson ? (
+                    <button
+                      type="button"
+                      className="study-action"
+                      onClick={onCaptureFrame}
+                      disabled={capturingFrame || !onCaptureFrame}
+                      title="Insertar una captura del video en este momento"
+                    >
+                      {capturingFrame ? 'Capturando…' : 'Captura'}
+                    </button>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   className="btn btn--primary"
@@ -416,6 +455,7 @@ function StudySidePanel({
                     onJump={onJump}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    onUpdateTime={onUpdateTime}
                   />
                 ))}
               </ul>

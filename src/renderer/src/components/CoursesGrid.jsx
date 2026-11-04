@@ -7,7 +7,12 @@ export default function CoursesGrid({
   courses,
   isCardLayout,
   selectedPath,
+  pickedPaths,
   onSelectCourse,
+  onTogglePick,
+  allVisiblePicked,
+  someVisiblePicked,
+  onToggleVisible,
   onOpenCourse,
   onOpenModal,
   onToggleInProcess,
@@ -65,6 +70,8 @@ export default function CoursesGrid({
               onSelect={onSelectCourse}
               onToggleInProcess={onToggleInProcess}
               isSelected={selectedPath === course.path}
+              isPicked={pickedPaths?.has(course.path)}
+              onTogglePick={onTogglePick}
               tabIndex={focusIndex === index ? 0 : -1}
               onError={setError}
             />
@@ -73,7 +80,12 @@ export default function CoursesGrid({
           <CourseTable
             courses={courses}
             selectedPath={selectedPath}
+            pickedPaths={pickedPaths}
             onSelectCourse={onSelectCourse}
+            onTogglePick={onTogglePick}
+            allVisiblePicked={allVisiblePicked}
+            someVisiblePicked={someVisiblePicked}
+            onToggleVisible={onToggleVisible}
             onOpenCourse={onOpenCourse}
             onOpenModal={onOpenModal}
             onToggleInProcess={onToggleInProcess}

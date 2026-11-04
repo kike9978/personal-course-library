@@ -169,7 +169,7 @@ function LibraryHeader({
                     onExportCourses()
                   }}
                 >
-                  <span>{isExporting ? 'Exportando…' : 'Exportar cursos'}</span>
+                  <span>{isExporting ? 'Exportando…' : 'Exportar metadatos de cursos'}</span>
                   <small>JSON con metadatos</small>
                 </button>
                 {missingCoverCount > 0 || missingDescriptionCount > 0 ? (

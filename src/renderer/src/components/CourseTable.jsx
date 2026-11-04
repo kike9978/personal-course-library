@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import { InstitutionMark } from './InstitutionMark'
+import CoursePickBox from './CoursePickBox'
 import brandMark from '../assets/img/brand-mark.svg'
 import { courseViewedAt, formatCourseDate } from '../utils/courseTable'
 
@@ -235,8 +236,10 @@ function DateCell({ ms }) {
 function TableRow({
   course,
   isSelected,
+  isPicked = false,
   tabIndex,
   onSelect,
+  onTogglePick,
   onOpenCourse,
   onOpenModal,
   onToggleInProcess,
@@ -273,10 +276,16 @@ function TableRow({
 
   return (
     <tr
-      className={`course-table__row${isSelected ? ' is-selected' : ''}`}
+      className={`course-table__row${isSelected ? ' is-selected' : ''}${isPicked ? ' is-picked' : ''}`}
       data-course-path={course.path}
       tabIndex={tabIndex ?? -1}
-      onClick={() => onSelect?.(course)}
+      onClick={(event) => {
+        if (event.shiftKey || event.metaKey || event.ctrlKey) {
+          onTogglePick?.(course, { range: event.shiftKey })
+          return
+        }
+        onSelect?.(course)
+      }}
       onDoubleClick={() => onOpenCourse?.(course)}
       onKeyDown={(event) => {
         if (event.key === 'Enter') {
@@ -291,6 +300,13 @@ function TableRow({
         }
       }}
     >
+      <td className="course-table__pick">
+        <CoursePickBox
+          checked={isPicked}
+          label={`Seleccionar ${course.title || course.path}`}
+          onPick={(pick) => onTogglePick?.(course, pick)}
+        />
+      </td>
       <td className="course-table__cover">
         <div className="course-table__thumb">
           <Thumb coursePath={course.path} hasCover={course.hasCover} />
@@ -402,7 +418,12 @@ function TableRow({
 export default function CourseTable({
   courses,
   selectedPath,
+  pickedPaths,
   onSelectCourse,
+  onTogglePick,
+  allVisiblePicked = false,
+  someVisiblePicked = false,
+  onToggleVisible,
   onOpenCourse,
   onOpenModal,
   onToggleInProcess,
@@ -421,6 +442,14 @@ export default function CourseTable({
       <table className="course-table">
         <thead>
           <tr>
+            <th scope="col" className="course-table__pick">
+              <CoursePickBox
+                checked={allVisiblePicked}
+                indeterminate={someVisiblePicked && !allVisiblePicked}
+                label="Seleccionar resultados"
+                onPick={() => onToggleVisible?.()}
+              />
+            </th>
             {COLUMNS.map((column) => {
               const active = columnSort?.key === column.key
               return (
@@ -462,7 +491,7 @@ export default function CourseTable({
         <tbody>
           {courses.length === 0 ? (
             <tr>
-              <td className="course-table__empty" colSpan={COLUMNS.length}>
+              <td className="course-table__empty" colSpan={COLUMNS.length + 1}>
                 Ningún curso coincide con estos filtros.
               </td>
             </tr>
@@ -472,8 +501,10 @@ export default function CourseTable({
                 key={course.path}
                 course={course}
                 isSelected={selectedPath === course.path}
+                isPicked={pickedPaths?.has(course.path)}
                 tabIndex={focusIndex === index ? 0 : -1}
                 onSelect={onSelectCourse}
+                onTogglePick={onTogglePick}
                 onOpenCourse={onOpenCourse}
                 onOpenModal={onOpenModal}
                 onToggleInProcess={onToggleInProcess}

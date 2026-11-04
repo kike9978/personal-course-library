@@ -1,24 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import LessonTree, { flattenLessons } from './LessonTree'
+import { collectTreeResources, flattenLessons } from '../../../shared/courseTree.js'
+import LessonTree from './LessonTree'
 import LessonPlayer from './LessonPlayer'
 import ResourceViewer from './ResourceViewer'
-import ProjectPanel from './ProjectPanel'
-import StudySidePanel from './StudySidePanel'
+import ProjectPanel, { placementForFile, sectionForPath } from './ProjectPanel'
+import StudySidePanel, { formatTime } from './StudySidePanel'
 import CourseAnnotationsView from './CourseAnnotationsView'
 import { InstitutionMark } from './InstitutionMark'
 import Loader from './Loader'
 
-function collectAllResources(tree) {
-  if (!tree) return []
-  const list = [...(tree.courseResources || [])]
-  for (const section of tree.sections || []) {
-    list.push(...(section.resources || []))
-    for (const lesson of section.lessons || []) {
-      list.push(...(lesson.resources || []))
+function waitForEditorApi(apiRef, timeoutMs = 1600) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now()
+    const tick = () => {
+      if (apiRef.current?.insertImage) {
+        resolve(apiRef.current)
+        return
+      }
+      if (Date.now() - start > timeoutMs) {
+        reject(new Error('El editor de notas no está listo'))
+        return
+      }
+      requestAnimationFrame(tick)
     }
-  }
-  return list.filter((res) => res.kind !== 'subtitle')
+    tick()
+  })
+}
+
+function collectAllResources(tree) {
+  return collectTreeResources(tree).filter((res) => res.kind !== 'subtitle')
 }
 
 function CourseRoom({
@@ -51,8 +62,18 @@ function CourseRoom({
   const [editingId, setEditingId] = useState(null)
   const [noteScope, setNoteScope] = useState('moment')
   const [currentTimeSec, setCurrentTimeSec] = useState(0)
+  const [pinnedTimeSec, setPinnedTimeSec] = useState(null)
   const [pendingSeek, setPendingSeek] = useState(null)
   const playerRef = useRef(null)
+  const currentTimeRef = useRef(0)
+  const draftRef = useRef({ text: '', markdown: '', json: null })
+  const pinnedTimeRef = useRef(null)
+  const pinnedLessonRef = useRef(null)
+  const composerFocusedRef = useRef(false)
+  currentTimeRef.current = currentTimeSec
+  const noteEditorApiRef = useRef(null)
+  const capturingFrameRef = useRef(false)
+  const [capturingFrame, setCapturingFrame] = useState(false)
   const moreMenuRef = useRef(null)
   const resumeApplied = useRef(false)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -330,7 +351,52 @@ function CourseRoom({
     setNoteScope((s) => (s === 'moment' ? 'file' : s === 'course' ? 'course' : 'file'))
   }
 
-  const handleAddProject = async () => {
+  const viewedPath =
+    panelMode === 'resource' ? selectedResource?.relativePath : selectedLesson?.relativePath
+  const viewedSection = sectionForPath(tree?.sections || [], viewedPath)
+
+  const toggleProjectFileLink = async (project) => {
+    if (!viewedPath || !project?.id) return
+    const placement = placementForFile(
+      tree?.sections || [],
+      tree?.courseResources || [],
+      viewedPath
+    )
+    const linked = project.fileRelativePath === viewedPath
+    try {
+      const list = await window.api.upsertProject(coursePath, {
+        id: project.id,
+        fileRelativePath: linked ? null : placement.fileRelativePath,
+        sectionId: linked ? null : placement.sectionId
+      })
+      setProjects(list || [])
+      toast.success(
+        linked ? 'Proyecto desvinculado de este archivo' : 'Proyecto vinculado al archivo'
+      )
+    } catch (err) {
+      toast.error(err.message || 'No se pudo vincular')
+    }
+  }
+
+  const toggleProjectSectionLink = async (project) => {
+    if (!viewedSection?.id || !project?.id) return
+    const linked = !project.fileRelativePath && project.sectionId === viewedSection.id
+    try {
+      const list = await window.api.upsertProject(coursePath, {
+        id: project.id,
+        fileRelativePath: null,
+        sectionId: linked ? null : viewedSection.id
+      })
+      setProjects(list || [])
+      toast.success(
+        linked ? 'Proyecto desvinculado de la sección' : 'Proyecto vinculado a la sección'
+      )
+    } catch (err) {
+      toast.error(err.message || 'No se pudo vincular')
+    }
+  }
+
+  const handleAddProject = async (anchorKind) => {
     try {
       const result = await window.api.pickProjectFolder()
       if (result?.canceled || !result?.path) return
@@ -342,9 +408,19 @@ function CourseRoom({
           .pop() ||
         ''
       setSelectedProjectId(null)
+      const anchorToSection = anchorKind === 'section' && viewedSection?.id
+      const fileRelativePath = anchorToSection
+        ? null
+        : panelMode === 'resource'
+          ? selectedResourcePath
+          : panelMode === 'lesson'
+            ? selectedPath
+            : null
       setProjectDraft({
         title: folderName,
-        linkedFolderPath: result.path
+        linkedFolderPath: result.path,
+        fileRelativePath: fileRelativePath || null,
+        sectionId: anchorToSection ? viewedSection.id : null
       })
       setCreatingProject(true)
       setPanelMode('project')
@@ -465,19 +541,48 @@ function CourseRoom({
     jumpTo(liveJump)
   }, [liveJump, coursePath, tree, jumpTo])
 
+  const clearPinnedMoment = () => {
+    if (pinnedTimeRef.current == null && pinnedLessonRef.current == null) return
+    pinnedTimeRef.current = null
+    pinnedLessonRef.current = null
+    setPinnedTimeSec(null)
+  }
+
+  useEffect(() => {
+    if (pinnedTimeRef.current == null && pinnedLessonRef.current == null) return
+    pinnedTimeRef.current = null
+    pinnedLessonRef.current = null
+    setPinnedTimeSec(null)
+  }, [selectedPath])
+
+  const pinComposerMoment = (scope = noteScope) => {
+    if (editingId || scope !== 'moment' || panelMode !== 'lesson' || !selectedPath) return
+    if (pinnedTimeRef.current != null && pinnedLessonRef.current === selectedPath) return
+    const time = playerRef.current?.getCurrentTime?.() ?? currentTimeRef.current
+    pinnedLessonRef.current = selectedPath
+    pinnedTimeRef.current = time
+    setPinnedTimeSec(time)
+  }
+
   const clearDraft = () => {
-    setDraft({ text: '', markdown: '', json: null })
+    const empty = { text: '', markdown: '', json: null }
+    draftRef.current = empty
+    setDraft(empty)
     setEditingId(null)
     setEditorKey((k) => k + 1)
+    clearPinnedMoment()
   }
 
   const loadDraftForEdit = (item) => {
-    setEditingId(item.id)
-    setDraft({
+    const nextDraft = {
       text: item.body || '',
       markdown: item.body || '',
       json: item.bodyJson || null
-    })
+    }
+    draftRef.current = nextDraft
+    setEditingId(item.id)
+    setDraft(nextDraft)
+    clearPinnedMoment()
     setEditorKey((k) => k + 1)
     setNoteScope(
       typeof item.timeSec === 'number'
@@ -490,7 +595,23 @@ function CourseRoom({
 
   const handleDraftChange = (next) => {
     const markdown = next?.markdown || next?.text || ''
-    setDraft({ text: markdown, markdown, json: null })
+    const nextDraft = { text: markdown, markdown, json: null }
+    draftRef.current = nextDraft
+    setDraft(nextDraft)
+    if (editingId) return
+    if (markdown.trim()) pinComposerMoment()
+    else if (!composerFocusedRef.current) clearPinnedMoment()
+  }
+
+  const handleComposerFocus = () => {
+    composerFocusedRef.current = true
+    pinComposerMoment()
+  }
+
+  const handleComposerBlur = () => {
+    composerFocusedRef.current = false
+    const text = (draftRef.current.markdown || draftRef.current.text || '').trim()
+    if (!text) clearPinnedMoment()
   }
 
   const saveNote = async () => {
@@ -519,7 +640,10 @@ function CourseRoom({
           bodyJson: null,
           lessonRelativePath: selectedLesson.relativePath,
           lessonTitle: selectedLesson.title,
-          timeSec: playerRef.current?.getCurrentTime?.() ?? currentTimeSec
+          timeSec:
+            pinnedTimeRef.current != null && pinnedLessonRef.current === selectedLesson.relativePath
+              ? pinnedTimeRef.current
+              : (playerRef.current?.getCurrentTime?.() ?? currentTimeSec)
         })
         setAnnotations(list)
       } else if (noteScope === 'file') {
@@ -596,6 +720,30 @@ function CourseRoom({
     toast('Escribe y pulsa Guardar — se guarda en el tiempo actual')
   }
 
+  const updateNoteTime = async (item) => {
+    if (!selectedLesson || panelMode !== 'lesson') {
+      toast.error('Reproduce la lección para actualizar el tiempo')
+      return
+    }
+    if (item.lessonRelativePath && item.lessonRelativePath !== selectedLesson.relativePath) {
+      toast.error('Esta nota pertenece a otra lección')
+      return
+    }
+    const timeSec = playerRef.current?.getCurrentTime?.() ?? currentTimeRef.current
+    try {
+      const list = await window.api.upsertNote(coursePath, {
+        id: item.id,
+        lessonRelativePath: selectedLesson.relativePath,
+        lessonTitle: selectedLesson.title,
+        timeSec
+      })
+      setAnnotations(list)
+      toast.success(`Tiempo actualizado · ${formatTime(timeSec)}`)
+    } catch (err) {
+      toast.error(err.message || 'No se pudo actualizar el tiempo')
+    }
+  }
+
   const quickPin = () => {
     if (!selectedLesson) {
       toast.error('Selecciona una lección primero')
@@ -622,14 +770,53 @@ function CourseRoom({
             !n.body
         )
         if (created) {
+          const empty = { text: '', markdown: '', json: null }
+          draftRef.current = empty
           setEditingId(created.id)
-          setDraft({ text: '', markdown: '', json: null })
+          setDraft(empty)
           setEditorKey((k) => k + 1)
           setNoteScope('moment')
+          clearPinnedMoment()
         }
         toast.success('Pin creado — puedes añadir texto')
       })
       .catch((err) => toast.error(err.message || 'Error'))
+  }
+
+  const captureVideoFrame = async () => {
+    if (capturingFrameRef.current) return
+    const capture = playerRef.current?.captureCurrentFrame
+    if (!capture || panelMode !== 'lesson' || !selectedLesson) {
+      toast.error('Reproduce una lección para capturar el video')
+      return
+    }
+    capturingFrameRef.current = true
+    setCapturingFrame(true)
+    try {
+      const frame = await capture()
+      const ext = frame.mimeType === 'image/png' ? 'png' : 'jpg'
+      const saved = await window.api.saveNoteImage({
+        dataBase64: frame.dataBase64,
+        mimeType: frame.mimeType,
+        fileName: `captura.${ext}`
+      })
+      if (!saved?.ok || !saved.url) {
+        throw new Error(saved?.error || 'No se pudo guardar la captura')
+      }
+      setShowCourseAnnotations(false)
+      setStudyOpen(true)
+      const api = await waitForEditorApi(noteEditorApiRef)
+      api.insertImage({
+        src: saved.url,
+        altText: `Captura en ${formatTime(frame.timeSec)}`
+      })
+      toast.success('Captura añadida — pulsa Guardar')
+    } catch (err) {
+      toast.error(err.message || 'No se pudo capturar el video')
+    } finally {
+      capturingFrameRef.current = false
+      setCapturingFrame(false)
+    }
   }
 
   const timelineMarks = useMemo(() => {
@@ -921,6 +1108,7 @@ function CourseRoom({
                 coursePath={coursePath}
                 project={creatingProject ? projectDraft : selectedProject}
                 sections={tree?.sections || []}
+                courseResources={tree?.courseResources || []}
                 onSaved={handleProjectsSaved}
                 onDeleted={handleProjectDeleted}
                 onCancelCreate={() => {
@@ -933,7 +1121,16 @@ function CourseRoom({
                 }}
               />
             ) : panelMode === 'resource' ? (
-              <ResourceViewer coursePath={coursePath} resource={selectedResource} />
+              <ResourceViewer
+                coursePath={coursePath}
+                resource={selectedResource}
+                projects={projects}
+                linkSectionId={viewedSection?.id || null}
+                linkSectionTitle={viewedSection?.title || ''}
+                onToggleProjectLink={toggleProjectFileLink}
+                onToggleSectionLink={toggleProjectSectionLink}
+                onCreateProject={handleAddProject}
+              />
             ) : (
               <LessonPlayer
                 ref={playerRef}
@@ -955,6 +1152,12 @@ function CourseRoom({
                 onNext={goNext}
                 hasPrev={selectedIndex > 0}
                 hasNext={selectedIndex >= 0 && selectedIndex < flatLessons.length - 1}
+                projects={projects}
+                linkSectionId={viewedSection?.id || null}
+                linkSectionTitle={viewedSection?.title || ''}
+                onToggleProjectLink={toggleProjectFileLink}
+                onToggleSectionLink={toggleProjectSectionLink}
+                onCreateProject={handleAddProject}
                 onEnded={() => {
                   if (selectedIndex >= 0 && selectedIndex < flatLessons.length - 1) {
                     goNext()
@@ -970,8 +1173,32 @@ function CourseRoom({
             editorKey={`note-${editorKey}-${editingId || 'new'}`}
             onDraftChange={handleDraftChange}
             noteScope={noteScope}
-            onNoteScopeChange={setNoteScope}
+            onNoteScopeChange={(scope) => {
+              setNoteScope(scope)
+              const text = (draftRef.current.markdown || draftRef.current.text || '').trim()
+              if (scope === 'moment') {
+                if (text || composerFocusedRef.current) pinComposerMoment('moment')
+              } else if (!text) {
+                clearPinnedMoment()
+              }
+            }}
             currentTimeSec={currentTimeSec}
+            momentTimeSec={
+              !editingId &&
+              noteScope === 'moment' &&
+              pinnedTimeSec != null &&
+              pinnedLessonRef.current === selectedPath
+                ? pinnedTimeSec
+                : currentTimeSec
+            }
+            momentFrozen={
+              !editingId &&
+              noteScope === 'moment' &&
+              pinnedTimeSec != null &&
+              pinnedLessonRef.current === selectedPath
+            }
+            onComposerFocus={handleComposerFocus}
+            onComposerBlur={handleComposerBlur}
             onSeekTimestamp={handleSeekTimestamp}
             enableTimestamp={Boolean(selectedLesson) && panelMode === 'lesson'}
             mentionItems={mentionItems}
@@ -995,7 +1222,11 @@ function CourseRoom({
               }
             }}
             onQuickPin={quickPin}
+            onCaptureFrame={captureVideoFrame}
+            capturingFrame={capturingFrame}
+            editorApiRef={noteEditorApiRef}
             onJump={jumpTo}
+            onUpdateTime={Boolean(selectedLesson) && panelMode === 'lesson' ? updateNoteTime : null}
             onExpand={() => setStudyOpen(true)}
             onCollapse={() => setStudyOpen(false)}
             currentTargetPath={activeTarget?.path}

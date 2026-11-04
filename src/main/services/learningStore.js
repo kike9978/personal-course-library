@@ -852,9 +852,17 @@ export function listAllProjects() {
  *   linkedFolderPath?: string|null,
  *   notes?: string,
  *   status?: 'todo'|'in_progress'|'done',
- *   sectionId?: string|null
+ *   sectionId?: string|null,
+ *   fileRelativePath?: string|null
  * }} payload
  */
+function normalizeProjectRelativePath(value) {
+  if (value == null || value === '') return null
+  const text = String(value).trim().replace(/\\/g, '/').replace(/^\/+/, '')
+  if (!text || text.split('/').some((part) => part === '..' || part === '')) return null
+  return text
+}
+
 export function upsertProject(coursePath, payload) {
   const store = readStore()
   const { course } = getMutableCourse(store, coursePath)
@@ -892,6 +900,10 @@ export function upsertProject(coursePath, payload) {
         payload.sectionId !== undefined
           ? payload.sectionId || null
           : course.projects[idx].sectionId,
+      fileRelativePath:
+        payload.fileRelativePath !== undefined
+          ? normalizeProjectRelativePath(payload.fileRelativePath)
+          : course.projects[idx].fileRelativePath || null,
       updatedAt: now
     }
   } else {
@@ -902,6 +914,7 @@ export function upsertProject(coursePath, payload) {
       notes: String(payload.notes || '').trim(),
       status,
       sectionId: payload.sectionId || null,
+      fileRelativePath: normalizeProjectRelativePath(payload.fileRelativePath),
       createdAt: now,
       updatedAt: now
     })

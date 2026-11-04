@@ -33,7 +33,11 @@ class SlashOption extends MenuOption {
 /**
  * `/` slash command menu for inserting common note blocks.
  */
-export default function SlashMenuPlugin({ currentTimeSec = 0, enableTimestamp = false }) {
+export default function SlashMenuPlugin({
+  currentTimeSec = 0,
+  enableTimestamp = false,
+  onCaptureFrame = null
+}) {
   const [editor] = useLexicalComposerContext()
   const [query, setQuery] = useState(null)
   const checkTrigger = useBasicTypeaheadTriggerMatch('/', { minLength: 0 })
@@ -112,6 +116,17 @@ export default function SlashMenuPlugin({ currentTimeSec = 0, enableTimestamp = 
       )
     }
 
+    if (onCaptureFrame) {
+      all.push(
+        new SlashOption(
+          'shot',
+          'Captura del video',
+          ['captura', 'screenshot', 'frame', 'foto', 'imagen'],
+          () => onCaptureFrame()
+        )
+      )
+    }
+
     const q = String(query || '')
       .trim()
       .toLowerCase()
@@ -119,7 +134,7 @@ export default function SlashMenuPlugin({ currentTimeSec = 0, enableTimestamp = 
     return all.filter(
       (o) => o.title.toLowerCase().includes(q) || o.keywords.some((k) => k.includes(q))
     )
-  }, [currentTimeSec, editor, enableTimestamp, query])
+  }, [currentTimeSec, editor, enableTimestamp, onCaptureFrame, query])
 
   const onSelectOption = useCallback((option, textNodeContainingQuery, closeMenu) => {
     closeMenu()

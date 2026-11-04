@@ -8,9 +8,31 @@ import {
   useMemo
 } from 'react'
 import { formatTime } from './StudySidePanel'
+import LinkProjectMenu from './LinkProjectMenu'
 
 const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
 const COMPLETE_RATIO = 0.95
+const FRAME_MAX_EDGE = 1600
+
+function frameFromVideo(video) {
+  const scale = Math.min(1, FRAME_MAX_EDGE / Math.max(video.videoWidth, video.videoHeight))
+  const width = Math.max(1, Math.round(video.videoWidth * scale))
+  const height = Math.max(1, Math.round(video.videoHeight * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d', { alpha: false })
+  if (!ctx) throw new Error('No se pudo leer el fotograma')
+  ctx.drawImage(video, 0, 0, width, height)
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+  const comma = dataUrl.indexOf(',')
+  if (comma < 0 || dataUrl.length < 32) throw new Error('No se pudo leer el fotograma')
+  return {
+    dataBase64: dataUrl.slice(comma + 1),
+    mimeType: 'image/jpeg',
+    timeSec: video.currentTime
+  }
+}
 
 const LessonPlayer = forwardRef(function LessonPlayer(
   {
@@ -27,7 +49,13 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     onMarkClick,
     onTimeTick,
     hasPrev,
-    hasNext
+    hasNext,
+    projects = [],
+    linkSectionId = null,
+    linkSectionTitle = '',
+    onToggleProjectLink,
+    onToggleSectionLink,
+    onCreateProject
   },
   ref
 ) {
@@ -52,6 +80,8 @@ const LessonPlayer = forwardRef(function LessonPlayer(
   const autoCompletedFor = useRef(null)
   const seekOverride = useRef(null)
   const volumeBeforeMute = useRef(1)
+  const scrubbingRef = useRef(false)
+  const [scrubbing, setScrubbing] = useState(false)
 
   useImperativeHandle(ref, () => ({
     getCurrentTime: () => {
@@ -70,7 +100,36 @@ const LessonPlayer = forwardRef(function LessonPlayer(
         seekOverride.current = target
       }
     },
-    getVideoElement: () => videoRef.current
+    getVideoElement: () => videoRef.current,
+    captureCurrentFrame: async () => {
+      const el = videoRef.current
+      if (!el || el.readyState < 2 || !el.videoWidth || !el.videoHeight) {
+        throw new Error('El video aún no está listo')
+      }
+      const timeSec = el.currentTime
+      try {
+        return frameFromVideo(el)
+      } catch {
+        const rect = el.getBoundingClientRect()
+        if (!window.api?.captureWindowRegion || rect.width < 2 || rect.height < 2) {
+          throw new Error('No se pudo capturar el fotograma')
+        }
+        const shot = await window.api.captureWindowRegion({
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height
+        })
+        if (!shot?.ok || !shot.dataBase64) {
+          throw new Error(shot?.error || 'No se pudo capturar el fotograma')
+        }
+        return {
+          dataBase64: shot.dataBase64,
+          mimeType: shot.mimeType || 'image/png',
+          timeSec
+        }
+      }
+    }
   }))
 
   useEffect(() => {
@@ -161,6 +220,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
   const scheduleSave = useCallback(() => {
     const el = videoRef.current
     if (!el || !Number.isFinite(el.currentTime)) return
+    if (scrubbingRef.current) return
     setCurrentTime(el.currentTime)
     if (Number.isFinite(el.duration)) setDuration(el.duration)
     onTimeTick?.(el.currentTime)
@@ -226,15 +286,43 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     else el.pause()
   }, [])
 
-  const seekFromClientX = (clientX) => {
-    const el = videoRef.current
-    const track = trackRef.current
-    if (!el || !track || !duration) return
-    const rect = track.getBoundingClientRect()
-    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
-    el.currentTime = ratio * duration
-    setCurrentTime(el.currentTime)
-    persist(el.currentTime)
+  const seekFromClientX = useCallback(
+    (clientX, { persistNow = true } = {}) => {
+      const el = videoRef.current
+      const track = trackRef.current
+      if (!el || !track || !Number.isFinite(el.duration) || el.duration <= 0) return
+      const rect = track.getBoundingClientRect()
+      if (rect.width <= 0) return
+      const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+      const next = ratio * el.duration
+      el.currentTime = next
+      setCurrentTime(next)
+      onTimeTick?.(next)
+      if (persistNow) persist(next)
+    },
+    [onTimeTick, persist]
+  )
+
+  const onTrackPointerDown = (e) => {
+    if (e.button != null && e.button !== 0) return
+    if (e.target.closest?.('.playhead__mark')) return
+    e.preventDefault()
+    scrubbingRef.current = true
+    setScrubbing(true)
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    seekFromClientX(e.clientX, { persistNow: false })
+  }
+
+  const onTrackPointerMove = (e) => {
+    if (!scrubbingRef.current) return
+    seekFromClientX(e.clientX, { persistNow: false })
+  }
+
+  const finishScrub = (e) => {
+    if (!scrubbingRef.current) return
+    scrubbingRef.current = false
+    setScrubbing(false)
+    seekFromClientX(e.clientX, { persistNow: true })
   }
 
   const seekBy = useCallback((deltaSec) => {
@@ -478,6 +566,17 @@ const LessonPlayer = forwardRef(function LessonPlayer(
         <h2 className="lesson-player__title" title={lesson.relativePath}>
           {lesson.title}
         </h2>
+        {onToggleProjectLink ? (
+          <LinkProjectMenu
+            projects={projects}
+            activePath={lesson.relativePath}
+            sectionId={linkSectionId}
+            sectionTitle={linkSectionTitle}
+            onToggleFile={onToggleProjectLink}
+            onToggleSection={onToggleSectionLink}
+            onCreate={onCreateProject}
+          />
+        ) : null}
       </div>
 
       <div className={`lesson-player__media${isFullscreen ? ' is-fullscreen' : ''}`} ref={stageRef}>
@@ -562,16 +661,20 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           </span>
 
           <div
-            className="playhead__track"
+            className={`playhead__track${scrubbing ? ' is-scrubbing' : ''}`}
             ref={trackRef}
             role="slider"
             aria-valuemin={0}
             aria-valuemax={Math.floor(duration || 0)}
             aria-valuenow={Math.floor(currentTime || 0)}
+            aria-orientation="horizontal"
             aria-label="Posición"
             aria-keyshortcuts="ArrowLeft ArrowRight"
             tabIndex={0}
-            onClick={(e) => seekFromClientX(e.clientX)}
+            onPointerDown={onTrackPointerDown}
+            onPointerMove={onTrackPointerMove}
+            onPointerUp={finishScrub}
+            onPointerCancel={finishScrub}
           >
             <div className="playhead__fill" style={{ width: `${progressPct}%` }} />
             <div className="playhead__thumb" style={{ left: `${progressPct}%` }} />
