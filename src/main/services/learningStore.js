@@ -14,6 +14,7 @@ import {
   findingsForCourse,
   normalizeAnchor,
   hashtagTitlesFromBody,
+  nextDefaultNoteTitle,
   normalizeTopicTitle,
   parseMentions,
   projectFinding,
@@ -533,6 +534,15 @@ function anchorFromPayload(payload, coursePath, base = {}) {
   return normalizeAnchor(next, coursePath)
 }
 
+function createdNoteTimeSec(payload) {
+  if (payload.projectId) return null
+  if (Array.isArray(payload.anchors)) {
+    const anchor = payload.anchors.find((item) => typeof item.timeSec === 'number' && !item.projectId)
+    return typeof anchor?.timeSec === 'number' ? anchor.timeSec : null
+  }
+  return typeof payload.timeSec === 'number' ? payload.timeSec : null
+}
+
 function targetsTouched(payload) {
   return (
     payload.anchors !== undefined ||
@@ -664,7 +674,7 @@ export function upsertNote(coursePath, payload) {
   } else {
     const finding = {
       id: makeId(),
-      title: title ?? null,
+      title: title || nextDefaultNoteTitle(store.findings, createdNoteTimeSec(payload)),
       body,
       bodyHtml: bodyHtml ?? null,
       bodyJson: bodyJson ?? null,

@@ -259,14 +259,144 @@ export function backlinksTo(finding, findings) {
   })
 }
 
-function findingLabel(finding) {
+export const DEFAULT_NOTE_TITLE = 'new note'
+
+/** "new note", "new note 2", "new note 1:23", or "new note 1:23 2". */
+const DEFAULT_NOTE_TITLE_RE = /^new note(?: (\d+:\d{2}(?::\d{2})?))?(?: (\d+))?$/i
+
+export function isDefaultNoteTitle(title) {
+  return DEFAULT_NOTE_TITLE_RE.test(String(title || '').trim())
+}
+
+/**
+ * Words a person wrote. Images, embeds, and bare media urls are removed so a
+ * playback mark never shows a file path.
+ */
+export function plainNoteText(markdown) {
+  let text = String(markdown || '')
+  text = text.replace(/```[\s\S]*?```/g, ' ')
+  text = text.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+  text = text.replace(/!\[[^\]]*\]\[[^\]]*\]/g, ' ')
+  text = text.replace(/!\[[^\]]*\]/g, ' ')
+  text = text.replace(/<img\b[^>]*>/gi, ' ')
+  text = text.replace(
+    /@\[(?:lesson|project|course|topic)\|([^\]]+)]\([^)]+\)|\[\[(?:lesson|project|course|topic|note)\|([^\]|]+)\|[^\]]+\]\]/g,
+    (_, atTitle, bracketTitle) => ` ${atTitle || bracketTitle || ''} `
+  )
+  text = text.replace(/\[([^\]]*)\]\([^)]*\)/g, (_, label) => {
+    const value = String(label || '').trim()
+    if (!value || /^(https?:|course-media:|file:)/i.test(value) || /^[\w./-]+\.\w{2,5}$/.test(value)) {
+      return ' '
+    }
+    return ` ${value} `
+  })
+  text = text.replace(/`([^`\n]*)`/g, '$1')
+  text = text.replace(/^#{1,6}\s+/gm, '')
+  text = text.replace(/^\s*>\s?/gm, '')
+  text = text.replace(/^\s*([-*_])\1{2,}\s*$/gm, ' ')
+  text = text.replace(/[*_~]/g, '')
+  text = text.replace(/\s+/g, ' ').trim()
+  return text
+}
+
+/** Mark label: custom title, otherwise the note's text, otherwise the default name. */
+export function playbackMarkLabel(note, defaultName, max = 72) {
+  const title = String(note?.title || '').trim()
+  const custom = title && !isDefaultNoteTitle(title) ? title : ''
+  const text = custom || plainNoteText(note?.body)
+  const label = text || String(defaultName || title || '').trim()
+  if (!label) return ''
+  return label.length > max ? `${label.slice(0, max - 1)}…` : label
+}
+
+/** Clock label for a video position, matching the note timestamp suffix. */
+export function formatNoteTimestamp(sec) {
+  if (typeof sec !== 'number' || !Number.isFinite(sec)) return ''
+  const total = Math.max(0, Math.floor(sec))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  }
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+function noteTimeSec(note) {
+  if (typeof note?.timeSec === 'number') return note.timeSec
+  const anchor = (note?.anchors || []).find((item) => typeof item.timeSec === 'number')
+  return typeof anchor?.timeSec === 'number' ? anchor.timeSec : null
+}
+
+/** Serial at the end of a default title. "new note" and "new note 1:23" are 1. */
+export function defaultNoteSerial(title) {
+  const match = String(title || '')
+    .trim()
+    .match(DEFAULT_NOTE_TITLE_RE)
+  if (!match) return null
+  const serial = match[2] ? Number(match[2]) : 1
+  if (!Number.isInteger(serial) || serial < 1) return null
+  return serial
+}
+
+function storedNoteTitle(note) {
+  return String(typeof note === 'string' ? note : note?.title || '')
+    .trim()
+    .toLowerCase()
+}
+
+function formatDefaultNoteTitle(serial, timeSec) {
+  const stamp = formatNoteTimestamp(timeSec)
+  const base = stamp ? `${DEFAULT_NOTE_TITLE} ${stamp}` : DEFAULT_NOTE_TITLE
+  return serial > 1 ? `${base} ${serial}` : base
+}
+
+function nextFreeDefaultTitle(used, timeSec) {
+  let serial = 1
+  let title = formatDefaultNoteTitle(serial, timeSec)
+  while (used.has(title.toLowerCase())) {
+    serial += 1
+    title = formatDefaultNoteTitle(serial, timeSec)
+  }
+  return title
+}
+
+/**
+ * Next free default title.
+ * A timestamp is appended to "new note". A number follows that time only when
+ * another note already uses the same default name.
+ */
+export function nextDefaultNoteTitle(notes, timeSec) {
+  const used = new Set((notes || []).map(storedNoteTitle).filter(Boolean))
+  return nextFreeDefaultTitle(used, timeSec)
+}
+
+/**
+ * Stable display titles for notes that have no stored title.
+ * A number is added only when that exact default name is already taken.
+ */
+export function noteDisplayTitles(notes) {
+  const labels = new Map()
+  const used = new Set((notes || []).map(storedNoteTitle).filter(Boolean))
+  const untitled = (notes || [])
+    .filter((note) => note?.id && !String(note.title || '').trim())
+    .slice()
+    .sort(
+      (a, b) =>
+        (a.createdAt || 0) - (b.createdAt || 0) || String(a.id).localeCompare(String(b.id))
+    )
+  for (const note of untitled) {
+    const title = nextFreeDefaultTitle(used, noteTimeSec(note))
+    used.add(title.toLowerCase())
+    labels.set(note.id, title)
+  }
+  return labels
+}
+
+function findingLabel(finding, labels) {
   const explicit = String(finding?.title || '').trim()
   if (explicit) return explicit
-  const line = String(finding?.body || '')
-    .split('\n')
-    .map((part) => part.trim())
-    .find(Boolean)
-  return line || 'Sin título'
+  return labels?.get(finding?.id) || DEFAULT_NOTE_TITLE
 }
 
 function clip(text, max = 24) {
@@ -394,6 +524,7 @@ function addEdge(edges, seen, source, target, edgeType, label) {
 }
 
 function buildTopicsGraph(findings, topics, courseTitles = {}) {
+  const labels = noteDisplayTitles(findings)
   const topicById = new Map(topics.map((topic) => [topic.id, topic]))
   const used = new Map()
   for (const finding of findings) {
@@ -431,7 +562,7 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
     group.forEach((finding, index) => {
       const angle = (2 * Math.PI * index) / group.length
       nodes.push(
-        nodeRecord('finding', finding.id, findingLabel(finding), {
+        nodeRecord('finding', finding.id, findingLabel(finding, labels), {
           x: origin.x + Math.cos(angle) * 46,
           y: origin.y + Math.sin(angle) * 46
         })
@@ -477,7 +608,7 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
         x: origin.x / neighbors.length + 28,
         y: origin.y / neighbors.length + 18
       }
-      const node = nodeRecord('finding', finding.id, findingLabel(finding), spot)
+      const node = nodeRecord('finding', finding.id, findingLabel(finding, labels), spot)
       node.data.orphan = true
       nodes.push(node)
       placedPoints.set(finding.id, node)
@@ -488,7 +619,7 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
   if (pending.length) {
     const clusterRadius = topicList.length ? Math.max(200, (topicList.length > 1 ? Math.max(180, topicList.length * 36) : 0) + 140) : 140
     ringPositions(pending.length, clusterRadius).forEach((point, index) => {
-      const node = nodeRecord('finding', pending[index].id, findingLabel(pending[index]), point)
+      const node = nodeRecord('finding', pending[index].id, findingLabel(pending[index], labels), point)
       node.data.orphan = true
       nodes.push(node)
       placedPoints.set(pending[index].id, node)
@@ -503,7 +634,7 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
       ? [{ x: 0, y: 0 }]
       : ringPositions(orphans.length, orphanRadius)
   orphans.forEach((finding, index) => {
-    const node = nodeRecord('finding', finding.id, findingLabel(finding), orphanPoints[index])
+    const node = nodeRecord('finding', finding.id, findingLabel(finding, labels), orphanPoints[index])
     node.data.orphan = true
     nodes.push(node)
   })

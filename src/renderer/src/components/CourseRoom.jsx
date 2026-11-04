@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { collectTreeResources, flattenLessons } from '../../../shared/courseTree.js'
+import { noteDisplayTitles, playbackMarkLabel } from '../../../shared/knowledgeGraph.js'
 import LessonTree from './LessonTree'
 import LessonPlayer from './LessonPlayer'
 import ResourceViewer from './ResourceViewer'
@@ -234,17 +235,14 @@ function CourseRoom({
         subtitle: 'Tema'
       })
     }
+    const noteLabels = noteDisplayTitles(annotations)
     for (const note of annotations) {
       if (!note?.id || note.id === editingId) continue
       const explicit = String(note.title || '').trim()
-      const line = String(note.body || '')
-        .split('\n')
-        .map((part) => part.trim())
-        .find(Boolean)
       items.push({
         type: 'note',
         id: note.id,
-        title: explicit || line || 'Sin título',
+        title: explicit || noteLabels.get(note.id) || 'new note',
         subtitle: 'Nota'
       })
     }
@@ -835,6 +833,7 @@ function CourseRoom({
 
   const timelineMarks = useMemo(() => {
     const marks = []
+    const noteLabels = noteDisplayTitles(annotations)
     for (const note of annotations) {
       const anchors = (note.anchors || []).filter(
         (anchor) => typeof anchor.timeSec === 'number' && anchor.lessonRelativePath
@@ -850,7 +849,7 @@ function CourseRoom({
           kind: 'annotation',
           lessonRelativePath: anchor.lessonRelativePath,
           timeSec: anchor.timeSec,
-          title: note.title || note.body || 'Pin',
+          title: playbackMarkLabel(note, noteLabels.get(note.id) || 'Pin'),
           color: note.color || 'coral'
         })
       }

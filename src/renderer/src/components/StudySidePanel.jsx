@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import NoteEditor, { NoteBody } from './NoteEditor'
+import { noteDisplayTitles, playbackMarkLabel } from '../../../shared/knowledgeGraph.js'
 import { sortWithinGroup } from '../utils/annotationGroups'
 
 const PANEL_MIN = 260
@@ -203,6 +204,7 @@ function StudySidePanel({
     () => targetNotes.filter((n) => typeof n.timeSec === 'number'),
     [targetNotes]
   )
+  const noteLabels = useMemo(() => noteDisplayTitles(annotations), [annotations])
 
   const draftText = typeof draft === 'string' ? draft : draft?.text || ''
   const canSave = Boolean(draftText.trim()) || Boolean(editingId)
@@ -304,7 +306,9 @@ function StudySidePanel({
                       type="button"
                       className="study-rail__mark"
                       onClick={() => onJump?.(item)}
-                      title={item.body || formatTime(item.timeSec)}
+                      title={
+                        playbackMarkLabel(item, noteLabels.get(item.id)) || formatTime(item.timeSec)
+                      }
                     >
                       {formatTimeShort(item.timeSec)}
                     </button>

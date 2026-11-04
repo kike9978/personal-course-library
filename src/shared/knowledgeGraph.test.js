@@ -9,6 +9,10 @@ import {
   findingFromLegacyNote,
   findingsForCourse,
   groupFindingsByTopic,
+  nextDefaultNoteTitle,
+  noteDisplayTitles,
+  playbackMarkLabel,
+  plainNoteText,
   parseMentions,
   backlinksTo,
   visibleGraph
@@ -353,6 +357,68 @@ describe('knowledge graph', () => {
     })
     assert.equal(graph.edges[0].label, 'Appeal')
     assert.equal(graph.edges[0].edgeType, 'shared-topic')
+  })
+
+  it('names untitled notes new note, then new note 2', () => {
+    assert.equal(nextDefaultNoteTitle([]), 'new note')
+    assert.equal(
+      nextDefaultNoteTitle([{ title: 'new note' }, { title: 'New Note 2' }, { title: 'Other' }]),
+      'new note 3'
+    )
+    assert.equal(nextDefaultNoteTitle([{ title: 'new note 2' }]), 'new note')
+    assert.equal(nextDefaultNoteTitle([], 83), 'new note 1:23')
+    assert.equal(nextDefaultNoteTitle([{ title: 'new note' }], 83), 'new note 1:23')
+    assert.equal(nextDefaultNoteTitle([{ title: 'new note 1:23' }], 65), 'new note 1:05')
+    assert.equal(nextDefaultNoteTitle([{ title: 'new note 1:23' }], 83), 'new note 1:23 2')
+    assert.equal(nextDefaultNoteTitle([{ title: 'new note 1:23 2' }], 83), 'new note 1:23')
+    assert.equal(nextDefaultNoteTitle([], 3661), 'new note 1:01:01')
+    const timed = noteDisplayTitles([
+      { id: 'pin', title: '', createdAt: 1, timeSec: 83 },
+      { id: 'again', title: '', createdAt: 2, timeSec: 83 },
+      { id: 'plain', title: '', createdAt: 3 }
+    ])
+    assert.equal(timed.get('pin'), 'new note 1:23')
+    assert.equal(timed.get('again'), 'new note 1:23 2')
+    assert.equal(timed.get('plain'), 'new note')
+    const labels = noteDisplayTitles([
+      { id: 'b', title: '', createdAt: 2, body: 'Second line title' },
+      { id: 'a', title: null, createdAt: 1, body: 'First line title' },
+      { id: 'kept', title: 'new note', createdAt: 0, body: 'kept' }
+    ])
+    assert.equal(labels.get('a'), 'new note 2')
+    assert.equal(labels.get('b'), 'new note 3')
+    assert.equal(labels.has('kept'), false)
+
+    const graph = buildGlobalGraph({
+      viewMode: 'topics',
+      topics: [{ id: 't', title: 'Topic' }],
+      findings: [{ id: 'n', title: '', body: 'Opening line', topicIds: ['t'] }]
+    })
+    const note = graph.nodes.find((node) => node.data.kind === 'finding')
+    assert.equal(note.data.fullLabel, 'new note')
+  })
+
+  it('labels a playback mark with written text, not an image source', () => {
+    const image =
+      '![Captura en 2:42](course-media://note/?file=mw2pazt9-4b174209be23.jpg)'
+    assert.equal(plainNoteText(image), '')
+    assert.equal(plainNoteText(`**buenas** noches\n\n${image}`), 'buenas noches')
+    assert.equal(
+      playbackMarkLabel({ title: 'new note 0:19', body: '' }, 'new note 0:19'),
+      'new note 0:19'
+    )
+    assert.equal(
+      playbackMarkLabel({ title: 'new note 0:19', body: image }, 'new note 0:19'),
+      'new note 0:19'
+    )
+    assert.equal(
+      playbackMarkLabel({ title: 'new note 0:20', body: 'buenas noches' }, 'new note 0:20'),
+      'buenas noches'
+    )
+    assert.equal(
+      playbackMarkLabel({ title: 'Terminología', body: image }, 'new note 2:42'),
+      'Terminología'
+    )
   })
 
   it('clamps depth and link distance', () => {
