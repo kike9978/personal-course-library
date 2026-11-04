@@ -1,7 +1,7 @@
 import { $applyNodeReplacement, TextNode } from 'lexical'
 
 /**
- * Mention of a lesson, project, or course — markdown: @[lesson|title](path)
+ * Mention of a note, lesson, project, course, or topic — markdown: [[type|title|id]]
  */
 export class MentionNode extends TextNode {
   static getType() {
@@ -40,7 +40,16 @@ export class MentionNode extends TextNode {
     const dom = super.createDOM(config)
     dom.className = config.theme?.mention || 'note-editor__mention'
     dom.spellcheck = false
+    dom.dataset.mentionType = this.getMentionType()
+    dom.dataset.mentionId = this.getMentionId()
     return dom
+  }
+
+  updateDOM(prevNode, dom, config) {
+    const updated = super.updateDOM(prevNode, dom, config)
+    dom.dataset.mentionType = this.__mentionType
+    dom.dataset.mentionId = this.__mentionId
+    return updated
   }
 
   isToken() {

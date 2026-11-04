@@ -234,8 +234,22 @@ function CourseRoom({
         subtitle: 'Tema'
       })
     }
+    for (const note of annotations) {
+      if (!note?.id || note.id === editingId) continue
+      const explicit = String(note.title || '').trim()
+      const line = String(note.body || '')
+        .split('\n')
+        .map((part) => part.trim())
+        .find(Boolean)
+      items.push({
+        type: 'note',
+        id: note.id,
+        title: explicit || line || 'Sin título',
+        subtitle: 'Nota'
+      })
+    }
     return items
-  }, [course?.title, coursePath, flatLessons, projects, topics])
+  }, [annotations, course?.title, coursePath, editingId, flatLessons, projects, topics])
 
   const handleSeekTimestamp = useCallback((timeSec) => {
     const sec = Number(timeSec)
@@ -1202,6 +1216,11 @@ function CourseRoom({
             onSeekTimestamp={handleSeekTimestamp}
             enableTimestamp={Boolean(selectedLesson) && panelMode === 'lesson'}
             mentionItems={mentionItems}
+            onOpenMention={(mention) => {
+              if (mention?.type !== 'note') return
+              const note = annotations.find((item) => item.id === mention.id)
+              if (note) loadDraftForEdit(note)
+            }}
             onCreateTopic={async (title) => {
               const saved = await window.api.upsertTopic({ title })
               setTopics((await window.api.listTopics()) || [])

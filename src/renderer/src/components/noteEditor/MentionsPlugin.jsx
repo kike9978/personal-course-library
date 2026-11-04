@@ -3,11 +3,32 @@ import { createPortal } from 'react-dom'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import {
   LexicalTypeaheadMenuPlugin,
-  useBasicTypeaheadTriggerMatch,
   MenuOption
 } from '@lexical/react/LexicalTypeaheadMenuPlugin'
 import { $createMentionNode } from './MentionNode'
 import { $createTextNode, $getNodeByKey } from 'lexical'
+
+function bracketTrigger(text) {
+  const match = /(^|\s)(\[\[([^\]\n]{0,75}))$/.exec(text)
+  if (!match) return null
+  return {
+    leadOffset: match.index + match[1].length,
+    matchingString: match[3],
+    replaceableString: match[2]
+  }
+}
+
+function replaceTrigger(textNode, mention) {
+  if (!textNode) return
+  const text = textNode.getTextContent()
+  const start = text.lastIndexOf('[[')
+  if (start > 0) {
+    textNode.setTextContent(text.slice(0, start))
+    textNode.insertAfter(mention)
+    return
+  }
+  textNode.replace(mention)
+}
 
 class MentionOption extends MenuOption {
   constructor(item) {
@@ -19,14 +40,14 @@ class MentionOption extends MenuOption {
 }
 
 /**
- * `@` mentions for lessons, projects, courses, and topics.
- * mentionItems: [{ type: 'lesson'|'project'|'course'|'topic', id, title, subtitle? }]
+ * `[[` links for notes, lessons, projects, courses, and topics.
+ * mentionItems: [{ type: 'note'|'lesson'|'project'|'course'|'topic', id, title, subtitle? }]
  * onCreateTopic(title) may return { id, title } for a new topic.
  */
 export default function MentionsPlugin({ mentionItems = [], onCreateTopic }) {
   const [editor] = useLexicalComposerContext()
   const [query, setQuery] = useState(null)
-  const checkTrigger = useBasicTypeaheadTriggerMatch('@', { minLength: 0 })
+  const checkTrigger = useCallback((text) => bracketTrigger(text), [])
 
   const options = useMemo(() => {
     const q = String(query || '')
@@ -65,9 +86,7 @@ export default function MentionsPlugin({ mentionItems = [], onCreateTopic }) {
             mentionId: item.id,
             text: item.title
           })
-          if (textNodeContainingQuery) {
-            textNodeContainingQuery.replace(mention)
-          }
+          replaceTrigger(textNodeContainingQuery, mention)
           const space = $createTextNode(' ')
           mention.insertAfter(space)
           space.select()
@@ -86,7 +105,8 @@ export default function MentionsPlugin({ mentionItems = [], onCreateTopic }) {
                 text: created.title || option.item.title
               })
               const queryNode = queryNodeKey ? $getNodeByKey(queryNodeKey) : null
-              if (queryNode) queryNode.replace(mention)
+              if (!queryNode) return
+              replaceTrigger(queryNode, mention)
               const space = $createTextNode(' ')
               mention.insertAfter(space)
               space.select()

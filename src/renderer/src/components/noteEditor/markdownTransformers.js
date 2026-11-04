@@ -56,23 +56,36 @@ const TIMESTAMP = {
   type: 'text-match'
 }
 
-/** Mention: @[lesson|Title](id) */
+function mentionFromMatch(textNode, match) {
+  const [, mentionType, text, mentionId] = match
+  textNode.replace($createMentionNode({ mentionType, mentionId, text }))
+}
+
+/** Older notes: @[lesson|Title](id) */
+const MENTION_LEGACY = {
+  dependencies: [MentionNode],
+  export: () => null,
+  importRegExp: /@\[(lesson|project|course|topic)\|([^\]]+)]\(([^)]+)\)/,
+  regExp: /@\[(lesson|project|course|topic)\|([^\]]+)]\(([^)]+)\)$/,
+  replace: mentionFromMatch,
+  trigger: ')',
+  type: 'text-match'
+}
+
+/** Mention: [[lesson|Title|id]] */
 const MENTION = {
   dependencies: [MentionNode],
   export: (node) => {
     if (!$isMentionNode(node)) return null
     const type = node.getMentionType()
     const id = node.getMentionId()
-    const text = node.getTextContent()
-    return `@[${type}|${text}](${id})`
+    const text = node.getTextContent().replace(/[\]|]/g, ' ')
+    return `[[${type}|${text}|${id}]]`
   },
-  importRegExp: /@\[(lesson|project|course|topic)\|([^\]]+)]\(([^)]+)\)/,
-  regExp: /@\[(lesson|project|course|topic)\|([^\]]+)]\(([^)]+)\)$/,
-  replace: (textNode, match) => {
-    const [, mentionType, text, mentionId] = match
-    textNode.replace($createMentionNode({ mentionType, mentionId, text }))
-  },
-  trigger: ')',
+  importRegExp: /\[\[(lesson|project|course|topic|note)\|([^\]|]+)\|([^\]]+)\]\]/,
+  regExp: /\[\[(lesson|project|course|topic|note)\|([^\]|]+)\|([^\]]+)\]\]$/,
+  replace: mentionFromMatch,
+  trigger: ']',
   type: 'text-match'
 }
 
@@ -123,4 +136,12 @@ const IMAGE = {
 }
 
 /** Transformers used for import/export + markdown shortcuts in notes. */
-export const NOTE_TRANSFORMERS = [TIMESTAMP, MENTION, EXCALIDRAW, IMAGE, HR, ...TRANSFORMERS]
+export const NOTE_TRANSFORMERS = [
+  TIMESTAMP,
+  MENTION,
+  MENTION_LEGACY,
+  EXCALIDRAW,
+  IMAGE,
+  HR,
+  ...TRANSFORMERS
+]

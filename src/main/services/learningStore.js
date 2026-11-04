@@ -13,6 +13,7 @@ import {
   findingFromLegacyNote,
   findingsForCourse,
   normalizeAnchor,
+  hashtagTitlesFromBody,
   normalizeTopicTitle,
   parseMentions,
   projectFinding,
@@ -465,24 +466,21 @@ function decorateFinding(store, finding) {
   return { ...finding, topics }
 }
 
-function resolveTopicLinks(store, explicitIds, mentions) {
+function resolveTopicLinks(store, explicitIds, mentions, hashtagTitles = []) {
   const ids = []
   const add = (id) => {
     if (id && !ids.includes(id)) ids.push(id)
   }
-  for (const id of explicitIds || []) {
-    if (store.topics.some((topic) => topic.id === id)) add(id)
-  }
-  const now = Date.now()
-  for (const mention of mentions) {
-    if (mention.type !== 'topic') continue
-    const title = normalizeTopicTitle(mention.title) || 'Tema'
-    let topic = store.topics.find((item) => item.id === mention.id)
-    if (!topic) topic = store.topics.find((item) => topicKey(item.title) === topicKey(title))
+  const ensureTitle = (title, preferredId) => {
+    const normalized = normalizeTopicTitle(title)
+    if (!normalized) return
+    let topic = preferredId ? store.topics.find((item) => item.id === preferredId) : null
+    if (!topic) topic = store.topics.find((item) => topicKey(item.title) === topicKey(normalized))
     if (!topic) {
+      const now = Date.now()
       topic = {
-        id: mention.id || makeId(),
-        title,
+        id: preferredId || makeId(),
+        title: normalized,
         aliases: [],
         summary: '',
         createdAt: now,
@@ -492,6 +490,14 @@ function resolveTopicLinks(store, explicitIds, mentions) {
     }
     add(topic.id)
   }
+  for (const id of explicitIds || []) {
+    if (store.topics.some((topic) => topic.id === id)) add(id)
+  }
+  for (const mention of mentions) {
+    if (mention.type !== 'topic') continue
+    ensureTitle(mention.title || 'Tema', mention.id)
+  }
+  for (const title of hashtagTitles) ensureTitle(title)
   return ids
 }
 
@@ -621,7 +627,12 @@ export function upsertNote(coursePath, payload) {
 
   const applyTopics = (finding, nextBody) => {
     const explicit = payload.topicIds !== undefined ? payload.topicIds : finding.topicIds
-    finding.topicIds = resolveTopicLinks(store, explicit, parseMentions(nextBody))
+    finding.topicIds = resolveTopicLinks(
+      store,
+      explicit,
+      parseMentions(nextBody),
+      hashtagTitlesFromBody(nextBody)
+    )
   }
 
   const applyAnchors = (finding) => {

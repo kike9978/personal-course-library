@@ -889,6 +889,24 @@ function DraggableBlocksPlugin({ anchorElem }) {
   )
 }
 
+function MentionClickPlugin({ onOpenMention }) {
+  const [editor] = useLexicalComposerContext()
+  useEffect(() => {
+    if (!onOpenMention) return undefined
+    const onClick = (event) => {
+      const chip = event.target?.closest?.('.note-editor__mention')
+      if (!chip || chip.dataset.mentionType !== 'note' || !chip.dataset.mentionId) return
+      event.preventDefault()
+      onOpenMention({ type: chip.dataset.mentionType, id: chip.dataset.mentionId })
+    }
+    return editor.registerRootListener((root, prev) => {
+      prev?.removeEventListener('click', onClick)
+      root?.addEventListener('click', onClick)
+    })
+  }, [editor, onOpenMention])
+  return null
+}
+
 /**
  * Lexical note editor with markdown as the persistence format.
  * onChange → { text, markdown } where both are the markdown source.
@@ -907,6 +925,7 @@ function NoteEditor({
   enableTimestamp = false,
   mentionItems = [],
   onCreateTopic = null,
+  onOpenMention = null,
   onCaptureFrame = null,
   editorApiRef = null,
   onFocus = null,
@@ -995,6 +1014,7 @@ function NoteEditor({
             onCaptureFrame={onCaptureFrame}
           />
           <MentionsPlugin mentionItems={mentionItems} onCreateTopic={onCreateTopic} />
+          <MentionClickPlugin onOpenMention={onOpenMention} />
           <OnChangePlugin onChange={handleChange} ignoreSelectionChange />
           {autofocus ? <AutoFocusPlugin /> : null}
         </LexicalComposer>

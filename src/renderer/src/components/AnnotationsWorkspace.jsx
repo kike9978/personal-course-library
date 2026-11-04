@@ -1,15 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import NoteEditor from './NoteEditor'
+import { TreeSection } from './LessonTree'
 import KnowledgeGraphView from './KnowledgeGraphView'
 import { formatTime } from './StudySidePanel'
 import { groupAnnotationsByTarget } from '../utils/annotationGroups'
+import { buildAnnotationTree, openIdsForItem } from '../utils/annotationTree'
 import {
-  buildLocalGraph,
+  buildGlobalGraph,
+  clampDepth,
+  clampLabelZoom,
+  clampLinkDistance,
+  LABEL_ZOOM,
+  LABEL_ZOOM_MAX,
+  LABEL_ZOOM_MIN,
   groupFindingsByTopic,
-  relatedFindings,
+  backlinksTo,
+  hashtagTitlesFromBody,
   resolveCourseTitle,
-  siblingFindings
+  topicKey,
+  visibleGraph
 } from '../../../shared/knowledgeGraph.js'
 
 function noteTitleFallback(item) {
@@ -40,6 +50,44 @@ function topicTitlesOf(item, topics = []) {
   return (item?.topicIds || [])
     .map((id) => topics.find((topic) => topic.id === id)?.title)
     .filter(Boolean)
+}
+
+function AnnotationBranch({ node, nested, collapsedIds, onToggle, isRowActive, displayName, onOpen }) {
+  const open = !collapsedIds.has(node.id)
+  return (
+    <TreeSection
+      id={node.id}
+      idPrefix="ann-section"
+      title={node.title}
+      open={open}
+      nested={nested}
+      dense
+      onToggle={() => onToggle(node.id)}
+    >
+      {node.children?.map((child) => (
+        <AnnotationBranch
+          key={child.id}
+          node={child}
+          nested
+          collapsedIds={collapsedIds}
+          onToggle={onToggle}
+          isRowActive={isRowActive}
+          displayName={displayName}
+          onOpen={onOpen}
+        />
+      ))}
+      {node.items?.map((item) => (
+        <button
+          key={`${node.id}-${item.coursePath || 'local'}-${item.id}`}
+          type="button"
+          className={`annotations-page-list__item${isRowActive(item) ? ' is-active' : ''}`}
+          onClick={() => onOpen(item)}
+        >
+          <span>{displayName(item)}</span>
+        </button>
+      ))}
+    </TreeSection>
+  )
 }
 
 function sameSelection(item, selectedId) {
@@ -91,6 +139,66 @@ function formatDateTime(ts) {
 /**
  * Page list, note, and the connections beside the note.
  */
+const GRAPH_SETTINGS_KEY = 'pcl.graph.node-visibility'
+const GRAPH_WIDTH_KEY = 'pcl.graph.pane-width'
+const GRAPH_PANE_MIN = 280
+const GRAPH_PANE_DEFAULT = 420
+const NODE_SCALE_MIN = 0.6
+const NODE_SCALE_MAX = 2
+
+function clampNodeScale(scale) {
+  const value = Number(scale)
+  if (!Number.isFinite(value)) return 1
+  const clamped = Math.min(NODE_SCALE_MAX, Math.max(NODE_SCALE_MIN, value))
+  return Math.round(clamped * 10) / 10
+}
+
+function clampGraphWidth(width, maxAvailable = 1400) {
+  const max = Math.max(GRAPH_PANE_MIN, maxAvailable)
+  return Math.min(max, Math.max(GRAPH_PANE_MIN, Math.round(width)))
+}
+
+function readStoredGraphWidth() {
+  try {
+    const stored = Number(localStorage.getItem(GRAPH_WIDTH_KEY))
+    if (Number.isFinite(stored) && stored >= GRAPH_PANE_MIN) return Math.round(stored)
+  } catch {
+    // Width is only a layout preference.
+  }
+  return null
+}
+
+function readGraphSettings() {
+  const defaults = {
+    depth: 1,
+    linkDistance: 72,
+    nodeScale: 1,
+    showArrows: false,
+    showLabels: true,
+    labelZoom: LABEL_ZOOM,
+    showCourses: true,
+    showFiles: true,
+    showOrphans: true
+  }
+  try {
+    const stored = JSON.parse(localStorage.getItem(GRAPH_SETTINGS_KEY) || 'null')
+    if (!stored || typeof stored !== 'object') return defaults
+    return {
+      depth: clampDepth(stored.depth),
+      linkDistance: clampLinkDistance(stored.linkDistance),
+      nodeScale: clampNodeScale(stored.nodeScale),
+      showArrows: stored.showArrows === true,
+      showLabels: stored.showLabels !== false,
+      labelZoom: clampLabelZoom(stored.labelZoom),
+      showCourses: stored.showCourses !== false,
+      showFiles: stored.showFiles !== false,
+      showOrphans: stored.showOrphans !== false
+    }
+  } catch {
+    return defaults
+  }
+}
+
 function AnnotationsWorkspace({
   title = 'Anotaciones',
   subtitle,
@@ -123,13 +231,156 @@ function AnnotationsWorkspace({
   const [dirty, setDirty] = useState(false)
   const [saveStatus, setSaveStatus] = useState('idle')
   const [groupMode, setGroupMode] = useState('target')
-  const [overlapOnly, setOverlapOnly] = useState(false)
-  const [graphFocus, setGraphFocus] = useState(null)
+  const [collapsedIds, setCollapsedIds] = useState(() => new Set())
+  const [graphPrefs] = useState(readGraphSettings)
+  const [graphDepth, setGraphDepth] = useState(graphPrefs.depth)
+  const [linkDistance, setLinkDistance] = useState(graphPrefs.linkDistance)
+  const [nodeScale, setNodeScale] = useState(graphPrefs.nodeScale)
+  const [showArrows, setShowArrows] = useState(graphPrefs.showArrows)
+  const [showLabels, setShowLabels] = useState(graphPrefs.showLabels)
+  const [labelZoom, setLabelZoom] = useState(graphPrefs.labelZoom)
+  const [showCourses, setShowCourses] = useState(graphPrefs.showCourses)
+  const [showFiles, setShowFiles] = useState(graphPrefs.showFiles)
+  const [showOrphans, setShowOrphans] = useState(graphPrefs.showOrphans)
+  const [graphSelection, setGraphSelection] = useState(null)
+  const [graphReset, setGraphReset] = useState(0)
+  const [graphWidth, setGraphWidth] = useState(() => readStoredGraphWidth() ?? GRAPH_PANE_DEFAULT)
+  const [graphResizing, setGraphResizing] = useState(false)
+  const bodyRef = useRef(null)
+  const graphWidthRef = useRef(graphWidth)
+  const graphPreferredRef = useRef(readStoredGraphWidth())
+  const listCollapsedRef = useRef(listCollapsed)
+  graphWidthRef.current = graphWidth
+  listCollapsedRef.current = listCollapsed
+  const [tagViewId, setTagViewId] = useState(null)
   const [jsonTitles, setJsonTitles] = useState({})
   const titles = useMemo(
     () => ({ ...courseTitleByPath, ...jsonTitles }),
     [courseTitleByPath, jsonTitles]
   )
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        GRAPH_SETTINGS_KEY,
+        JSON.stringify({
+          depth: graphDepth,
+          linkDistance,
+          nodeScale,
+          showArrows,
+          showLabels,
+          labelZoom,
+          showCourses,
+          showFiles,
+          showOrphans
+        })
+      )
+    } catch {
+      // The controls still apply for this session.
+    }
+  }, [
+    graphDepth,
+    linkDistance,
+    nodeScale,
+    showArrows,
+    showLabels,
+    labelZoom,
+    showCourses,
+    showFiles,
+    showOrphans
+  ])
+
+  const graphRoomMax = useCallback((body = bodyRef.current) => {
+    const list = listCollapsedRef.current ? 48 : 220
+    return Math.max(GRAPH_PANE_MIN, (body?.clientWidth || GRAPH_PANE_DEFAULT + list + 320) - list - 280)
+  }, [])
+
+  const applyGraphWidth = useCallback(() => {
+    const body = bodyRef.current
+    const max = graphRoomMax(body)
+    const list = listCollapsedRef.current ? 48 : 220
+    const preferred = graphPreferredRef.current
+    const base =
+      preferred == null
+        ? Math.round(Math.max(0, (body?.clientWidth || 0) - list) * 0.34)
+        : preferred
+    setGraphWidth(clampGraphWidth(base || GRAPH_PANE_DEFAULT, max))
+  }, [graphRoomMax])
+
+  useEffect(() => {
+    const body = bodyRef.current
+    if (!body) return undefined
+    applyGraphWidth()
+    const observer = new ResizeObserver(() => applyGraphWidth())
+    observer.observe(body)
+    return () => observer.disconnect()
+  }, [applyGraphWidth, listCollapsed])
+
+  const onGraphResizeStart = useCallback(
+    (event) => {
+      if (event.button != null && event.button !== 0) return
+      if (window.matchMedia('(max-width: 900px)').matches) return
+      event.preventDefault()
+      const handle = event.currentTarget
+      handle.setPointerCapture(event.pointerId)
+      const startX = event.clientX
+      const startWidth = graphWidthRef.current
+      const max = graphRoomMax()
+      setGraphResizing(true)
+
+      const onMove = (moveEvent) => {
+        const next = clampGraphWidth(startWidth + startX - moveEvent.clientX, max)
+        graphPreferredRef.current = next
+        setGraphWidth(next)
+      }
+      const onUp = () => {
+        setGraphResizing(false)
+        const next = graphPreferredRef.current
+        if (next != null) {
+          try {
+            localStorage.setItem(GRAPH_WIDTH_KEY, String(next))
+          } catch {
+            // The width still applies for this session.
+          }
+        }
+        handle.removeEventListener('pointermove', onMove)
+        handle.removeEventListener('pointerup', onUp)
+        handle.removeEventListener('pointercancel', onUp)
+      }
+      handle.addEventListener('pointermove', onMove)
+      handle.addEventListener('pointerup', onUp)
+      handle.addEventListener('pointercancel', onUp)
+    },
+    [graphRoomMax]
+  )
+
+  const onGraphResizeKey = useCallback(
+    (event) => {
+      const step = event.shiftKey ? 48 : 16
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      event.preventDefault()
+      const delta = event.key === 'ArrowLeft' ? step : -step
+      const next = clampGraphWidth(graphWidthRef.current + delta, graphRoomMax())
+      graphPreferredRef.current = next
+      setGraphWidth(next)
+      try {
+        localStorage.setItem(GRAPH_WIDTH_KEY, String(next))
+      } catch {
+        // The width still applies for this session.
+      }
+    },
+    [graphRoomMax]
+  )
+
+  const resetGraphWidth = useCallback(() => {
+    graphPreferredRef.current = null
+    try {
+      localStorage.removeItem(GRAPH_WIDTH_KEY)
+    } catch {
+      // The default width still applies for this session.
+    }
+    applyGraphWidth()
+  }, [applyGraphWidth])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -196,8 +447,7 @@ function AnnotationsWorkspace({
   const groups = useMemo(() => {
     if (groupMode === 'topic') {
       return groupFindingsByTopic(filtered, topics, {
-        corpus: libraryFindings,
-        overlapOnly
+        corpus: libraryFindings
       })
     }
     return groupAnnotationsByTarget(filtered, {
@@ -210,11 +460,36 @@ function AnnotationsWorkspace({
     groupMode,
     topics,
     libraryFindings,
-    overlapOnly,
     preferGroupPath,
     preferGroupProjectId,
     courseColumn
   ])
+
+  const listTree = useMemo(
+    () => buildAnnotationTree(groups, { groupMode, courseColumn, titles }),
+    [groups, groupMode, courseColumn, titles]
+  )
+
+  useEffect(() => {
+    if (!selectedId) return
+    const openIds = openIdsForItem(listTree, (item) => sameSelection(item, selectedId))
+    if (!openIds?.length) return
+    setCollapsedIds((prev) => {
+      if (openIds.every((id) => !prev.has(id))) return prev
+      const next = new Set(prev)
+      for (const id of openIds) next.delete(id)
+      return next
+    })
+  }, [selectedId, listTree])
+
+  const toggleTreeNode = (id) => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const isRowActive = (item) => sameSelection(item, selectedId)
 
@@ -290,6 +565,15 @@ function AnnotationsWorkspace({
         subtitle: 'Tema'
       })
     }
+    for (const item of libraryFindings) {
+      if (!item?.id || item.id === selected?.id) continue
+      map.set(`note:${item.id}`, {
+        type: 'note',
+        id: item.id,
+        title: noteTitle(item),
+        subtitle: 'Nota'
+      })
+    }
     for (const item of annotations) {
       if (item.lessonRelativePath) {
         const key = `lesson:${item.lessonRelativePath}`
@@ -315,7 +599,7 @@ function AnnotationsWorkspace({
       }
     }
     return [...map.values()]
-  }, [annotations, topics])
+  }, [annotations, libraryFindings, selected?.id, topics])
 
   const persistNote = useCallback(
     async (item, incoming, { silent = true } = {}) => {
@@ -333,12 +617,21 @@ function AnnotationsWorkspace({
         setSaveStatus('saving')
       }
       try {
+        const body = String(snapshot.draft?.markdown || snapshot.draft?.text || '').trim()
+        const topicTitles = [...(snapshot.topics || [])]
+        for (const title of hashtagTitlesFromBody(body)) {
+          if (!topicTitles.some((item) => topicKey(item) === topicKey(title))) topicTitles.push(title)
+        }
+        if (noteKey(selectedRef.current) === key) {
+          draftTopicsRef.current = topicTitles
+          setDraftTopics(topicTitles)
+        }
         const topicIds = []
         const known = [...(topicsRef.current || [])]
-        for (const title of snapshot.topics || []) {
-          const topicKey = title.trim().toLowerCase()
-          if (!topicKey) continue
-          let topic = known.find((entry) => String(entry.title || '').trim().toLowerCase() === topicKey)
+        for (const title of topicTitles) {
+          const key = topicKey(title)
+          if (!key) continue
+          let topic = known.find((entry) => topicKey(entry.title) === key)
           if (!topic && onUpsertTopic) {
             topic = await onUpsertTopic({ title: title.trim() })
             if (topic) known.push(topic)
@@ -347,7 +640,7 @@ function AnnotationsWorkspace({
         }
         await onSave?.(item, {
           title: String(snapshot.title || '').trim() || null,
-          body: String(snapshot.draft?.markdown || snapshot.draft?.text || '').trim(),
+          body,
           bodyHtml: null,
           bodyJson: null,
           topicIds
@@ -355,7 +648,7 @@ function AnnotationsWorkspace({
         if (noteKey(selectedRef.current) === key) {
           if (
             snapshotMatchesCurrent(
-              snapshot,
+              { ...snapshot, topics: topicTitles },
               draftRef.current,
               draftTitleRef.current,
               draftTopicsRef.current
@@ -421,10 +714,6 @@ function AnnotationsWorkspace({
     setDirty(false)
     setSaveStatus('idle')
     // Only remount when switching notes — not after every save (updatedAt).
-  }, [selected?.id, selected?.coursePath])
-
-  useEffect(() => {
-    setGraphFocus(null)
   }, [selected?.id, selected?.coursePath])
 
   useEffect(() => {
@@ -546,19 +835,6 @@ function AnnotationsWorkspace({
     }
   }
 
-  const groupHeading = (group) => {
-    if (group.topicId) {
-      return group.courseCount > 1 ? `${group.title} · ${group.courseCount} cursos` : group.title
-    }
-    if (courseColumn && group.coursePath) {
-      const courseName = resolveCourseTitle(group.coursePath, titles)
-      if (group.projectId) return `${courseName} · ${group.title}`
-      if (!group.path) return `${courseName} · Del curso`
-      return `${courseName} · ${group.title}`
-    }
-    return group.title
-  }
-
   const jumpLabel = (item) => {
     if (typeof item.timeSec === 'number') {
       return `Ir al video · ${formatTime(item.timeSec)}`
@@ -581,26 +857,31 @@ function AnnotationsWorkspace({
 
   const related = useMemo(() => {
     if (!selected) return []
-    return relatedFindings(selected, libraryFindings, topics)
-  }, [selected, libraryFindings, topics])
+    return backlinksTo(selected, libraryFindings)
+  }, [selected, libraryFindings])
 
-  const siblings = useMemo(() => {
-    if (!selected || graphFocus?.type === 'topic') return []
-    return siblingFindings(selected, libraryFindings)
-  }, [selected, libraryFindings, graphFocus])
+  const graph = useMemo(
+    () =>
+      buildGlobalGraph({
+        viewMode: 'topics',
+        findings: libraryFindings,
+        topics,
+        courseTitles: titles
+      }),
+    [libraryFindings, topics, titles]
+  )
 
-  const graph = useMemo(() => {
-    const focusType = graphFocus?.type || (selected ? 'finding' : null)
-    const focusId = graphFocus?.id || selected?.id
-    return buildLocalGraph({
-      focusType,
-      focusId,
-      findings: libraryFindings,
-      topics,
-      courseTitles: titles,
-      depth: 2
-    })
-  }, [graphFocus, selected, libraryFindings, topics, titles])
+  const graphVisibility = useMemo(
+    () =>
+      visibleGraph({
+        nodes: graph.nodes,
+        edges: graph.edges,
+        selectedId: graphSelection,
+        depth: graphDepth,
+        viewMode: graph.viewMode
+      }),
+    [graph, graphSelection, graphDepth]
+  )
 
   const topicSuggestions = useMemo(() => {
     const q = topicQuery.trim().toLowerCase()
@@ -622,16 +903,62 @@ function AnnotationsWorkspace({
     if (updated !== before) markDirty()
   }
 
+  const findingForNode = (node) =>
+    libraryFindings.find((item) => item.id === node?.data?.refId) || null
+
+  const jumpTarget = (node) =>
+    node?.data?.kind === 'file'
+      ? {
+          coursePath: node.data.coursePath,
+          lessonRelativePath: node.data.lessonRelativePath,
+          projectId: node.data.projectId
+        }
+      : { coursePath: node?.data?.refId }
+
   const handleGraphNode = (node) => {
-    if (node?.data?.kind === 'finding') {
-      const finding = libraryFindings.find((item) => item.id === node.data.refId)
-      if (finding) onSelect?.(finding)
-      setGraphFocus(null)
+    if (!node) return
+    setGraphSelection((current) => (current === node.id ? null : node.id))
+  }
+
+  const tagViewNotes = useMemo(() => {
+    if (!tagViewId) return []
+    return libraryFindings
+      .filter((finding) => (finding.topicIds || []).includes(tagViewId))
+      .sort((a, b) =>
+        noteTitle(a).localeCompare(noteTitle(b), undefined, { sensitivity: 'base' })
+      )
+  }, [tagViewId, libraryFindings])
+
+  const tagViewTitle = topics.find((topic) => topic.id === tagViewId)?.title || 'Tag'
+
+  const openFinding = (finding) => {
+    setTagViewId(null)
+    if (finding) onSelect?.(finding)
+  }
+
+  const handleGraphActivate = (node) => {
+    if (!node) return
+    setGraphSelection(node.id)
+    if (node.data?.kind === 'topic') {
+      setTagViewId(node.data.refId)
       return
     }
-    if (node?.data?.kind === 'topic') {
-      setGraphFocus({ type: 'topic', id: node.data.refId })
+    if (node.data?.kind === 'finding') {
+      openFinding(findingForNode(node))
+      return
     }
+    if (node.data?.kind === 'course' || node.data?.kind === 'file') onJump?.(jumpTarget(node))
+  }
+
+  const handleGraphShift = (node) => {
+    if (!node) return
+    setGraphSelection(node.id)
+    if (node.data?.kind === 'finding') {
+      const finding = findingForNode(node)
+      if (finding) onJump?.(finding)
+      return
+    }
+    if (node.data?.kind === 'course' || node.data?.kind === 'file') onJump?.(jumpTarget(node))
   }
 
   const createTopic = async (title) => {
@@ -642,7 +969,9 @@ function AnnotationsWorkspace({
   }
 
   return (
-    <div className={`annotations-page${listCollapsed ? ' is-list-collapsed' : ''}`}>
+    <div
+      className={`annotations-page${listCollapsed ? ' is-list-collapsed' : ''}${graphResizing ? ' is-graph-resizing' : ''}`}
+    >
       <header className="annotations-page__top">
         <div className="annotations-page__top-left">
           {onBack ? (
@@ -698,7 +1027,11 @@ function AnnotationsWorkspace({
         </div>
       </header>
 
-      <div className="annotations-page__body">
+      <div
+        className="annotations-page__body"
+        ref={bodyRef}
+        style={{ '--annotations-graph-w': `${graphWidth}px` }}
+      >
         <aside className="annotations-page-list" aria-label="Lista de anotaciones">
           <div className="annotations-page-list__bar">
             <button
@@ -723,17 +1056,6 @@ function AnnotationsWorkspace({
                     <option value="topic">Por tema</option>
                   </select>
                 </label>
-                <label className="annotations-table-pane__check">
-                  <input
-                    type="checkbox"
-                    checked={overlapOnly}
-                    onChange={(event) => {
-                      setOverlapOnly(event.target.checked)
-                      if (event.target.checked) setGroupMode('topic')
-                    }}
-                  />
-                  Cruces
-                </label>
               </div>
               <div className="annotations-page-list__items">
                 {loading ? (
@@ -742,30 +1064,17 @@ function AnnotationsWorkspace({
                   <p className="annotations-page-list__empty">
                     {annotations.length === 0 ? 'Aún no hay anotaciones.' : 'Ningún resultado.'}
                   </p>
-                ) : groups.length === 0 ? (
-                  <p className="annotations-page-list__empty">Ningún cruce entre cursos.</p>
                 ) : (
-                  groups.map((group) => (
-                    <Fragment key={group.key}>
-                      <div className="annotations-page-list__group">{groupHeading(group)}</div>
-                      {group.items.map((item) => (
-                        <button
-                          key={`${group.key}-${item.coursePath || 'local'}-${item.id}`}
-                          type="button"
-                          className={`annotations-page-list__item${isRowActive(item) ? ' is-active' : ''}`}
-                          onClick={() => onSelect?.(item)}
-                        >
-                          <span>{displayName(item)}</span>
-                          {courseColumn ? (
-                            <small>
-                              {item.coursePath
-                                ? resolveCourseTitle(item.coursePath, titles)
-                                : 'Sin curso'}
-                            </small>
-                          ) : null}
-                        </button>
-                      ))}
-                    </Fragment>
+                  listTree.map((node) => (
+                    <AnnotationBranch
+                      key={node.id}
+                      node={node}
+                      collapsedIds={collapsedIds}
+                      onToggle={toggleTreeNode}
+                      isRowActive={isRowActive}
+                      displayName={displayName}
+                      onOpen={openFinding}
+                    />
                   ))
                 )}
               </div>
@@ -774,7 +1083,43 @@ function AnnotationsWorkspace({
         </aside>
 
         <main className="annotations-doc-pane">
-          {!selected ? (
+          {tagViewId ? (
+            <div className="annotations-tag-view">
+              <div className="annotations-tag-view__bar">
+                <button type="button" className="btn btn--ghost" onClick={() => setTagViewId(null)}>
+                  Volver
+                </button>
+                <span>{tagViewNotes.length}</span>
+              </div>
+              <h2>{tagViewTitle}</h2>
+              <p className="annotations-tag-view__meta">Notas con este tag</p>
+              {tagViewNotes.length ? (
+                <ul>
+                  {tagViewNotes.map((item) => {
+                    const courses = []
+                    for (const anchor of item.anchors || []) {
+                      if (!anchor.coursePath) continue
+                      const title = resolveCourseTitle(anchor.coursePath, titles)
+                      if (title && !courses.includes(title)) courses.push(title)
+                    }
+                    if (!courses.length && item.coursePath) {
+                      courses.push(resolveCourseTitle(item.coursePath, titles))
+                    }
+                    return (
+                      <li key={`${item.coursePath || 'local'}-${item.id}`}>
+                        <button type="button" onClick={() => openFinding(item)}>
+                          <strong>{displayName(item)}</strong>
+                          {courses.length ? <span>{courses.join(' · ')}</span> : null}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
+                <p className="annotations-tag-view__empty">Este tag todavía no tiene notas.</p>
+              )}
+            </div>
+          ) : !selected ? (
             <div className="annotations-doc-pane__empty">
               <h2>Selecciona una anotación</h2>
               <p>Abre una fila de la tabla o crea una nueva para editarla aquí.</p>
@@ -951,7 +1296,7 @@ function AnnotationsWorkspace({
                   variant="document"
                   bodyText={draft.text}
                   bodyJson={draft.json}
-                  placeholder="Escribe tu anotación… Escribe @ para mencionar un tema."
+                  placeholder="Escribe tu anotación… [[ enlaza una nota, # añade un tema."
                   onChange={handleDraftChange}
                   enableTimestamp={typeof selected.timeSec === 'number'}
                   currentTimeSec={
@@ -963,6 +1308,10 @@ function AnnotationsWorkspace({
                       : null
                   }
                   mentionItems={mentionItems}
+                  onOpenMention={(mention) => {
+                    if (mention?.type !== 'note') return
+                    openFinding(libraryFindings.find((item) => item.id === mention.id))
+                  }}
                   onCreateTopic={onUpsertTopic ? createTopic : null}
                 />
               </div>
@@ -971,7 +1320,7 @@ function AnnotationsWorkspace({
                 <div className="annotations-related">
                   <span className="annotations-doc__prop-label">Referencias vinculadas</span>
                   <ul>
-                    {related.map(({ finding, topics: shared }) => (
+                    {related.map((finding) => (
                       <li key={finding.id}>
                         <button type="button" onClick={() => onSelect?.(finding)}>
                           <strong>{noteTitle(finding)}</strong>
@@ -981,7 +1330,6 @@ function AnnotationsWorkspace({
                               .filter(Boolean)
                               .filter((value, index, all) => all.indexOf(value) === index)
                               .join(' · ')}
-                            {shared.length ? ` · ${shared.map((topic) => topic.title).join(', ')}` : ''}
                           </span>
                         </button>
                       </li>
@@ -993,67 +1341,171 @@ function AnnotationsWorkspace({
           )}
         </main>
 
-        <aside className="annotations-graph-pane" aria-label="Conexiones de la anotación">
+        <aside className="annotations-graph-pane" aria-label="Grafo de la biblioteca">
+          <div
+            className="annotations-graph-pane__resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Ancho del grafo"
+            aria-valuemin={GRAPH_PANE_MIN}
+            aria-valuemax={graphRoomMax()}
+            aria-valuenow={graphWidth}
+            tabIndex={0}
+            title="Arrastra para cambiar el ancho. Doble clic para restablecer."
+            onPointerDown={onGraphResizeStart}
+            onKeyDown={onGraphResizeKey}
+            onDoubleClick={resetGraphWidth}
+          />
           <div className="annotations-graph-pane__bar">
-            <span>Conexiones</span>
-            {graphFocus?.type === 'topic' ? (
-              <button type="button" className="btn btn--ghost" onClick={() => setGraphFocus(null)}>
-                Volver
+            <span>Grafo</span>
+          </div>
+          <div className="annotations-graph-pane__settings">
+            <label>
+              Profundidad
+              <input
+                type="range"
+                min="1"
+                max="5"
+                step="1"
+                value={graphDepth}
+                aria-label="Profundidad del grafo"
+                onChange={(event) => setGraphDepth(clampDepth(event.target.value))}
+              />
+              <span>{graphDepth}</span>
+            </label>
+            <label>
+              Distancia
+              <input
+                type="range"
+                min="36"
+                max="180"
+                step="1"
+                value={linkDistance}
+                aria-label="Distancia de los enlaces"
+                onChange={(event) => setLinkDistance(clampLinkDistance(event.target.value))}
+              />
+            </label>
+            <label>
+              Tamaño
+              <input
+                type="range"
+                min="0.6"
+                max="2"
+                step="0.1"
+                value={nodeScale}
+                aria-label="Tamaño de los nodos"
+                onChange={(event) => setNodeScale(clampNodeScale(event.target.value))}
+              />
+            </label>
+            <label className="annotations-graph-pane__check">
+              <input
+                type="checkbox"
+                checked={showArrows}
+                onChange={(event) => setShowArrows(event.target.checked)}
+              />
+              Flechas
+            </label>
+            <label className="annotations-graph-pane__check">
+              <input
+                type="checkbox"
+                checked={showLabels}
+                onChange={(event) => setShowLabels(event.target.checked)}
+              />
+              Nombres
+            </label>
+            {showLabels ? (
+              <label>
+                Umbral
+                <input
+                  type="range"
+                  min={LABEL_ZOOM_MIN}
+                  max={LABEL_ZOOM_MAX}
+                  step="0.05"
+                  value={labelZoom}
+                  aria-label="Umbral de zoom de los nombres"
+                  onChange={(event) => setLabelZoom(clampLabelZoom(event.target.value))}
+                />
+                <span>{labelZoom.toFixed(2)}</span>
+              </label>
+            ) : null}
+            <label className="annotations-graph-pane__check">
+              <input
+                type="checkbox"
+                checked={showCourses}
+                onChange={(event) => setShowCourses(event.target.checked)}
+              />
+              Cursos
+            </label>
+            <label className="annotations-graph-pane__check">
+              <input
+                type="checkbox"
+                checked={showFiles}
+                onChange={(event) => setShowFiles(event.target.checked)}
+              />
+              Archivos
+            </label>
+            <label className="annotations-graph-pane__check">
+              <input
+                type="checkbox"
+                checked={showOrphans}
+                onChange={(event) => setShowOrphans(event.target.checked)}
+              />
+              Huérfanas
+            </label>
+            {graphSelection ? (
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => {
+                  setGraphSelection(null)
+                  setGraphReset((value) => value + 1)
+                }}
+              >
+                Reiniciar
               </button>
             ) : null}
           </div>
-          {!selected && graphFocus?.type !== 'topic' ? (
-            <div className="knowledge-graph--empty">
-              <p>Selecciona una anotación para ver con qué se conecta.</p>
-            </div>
-          ) : graph.nodes.some((node) => !node.data?.active) ? (
-            <>
-              <ul className="knowledge-graph__legend">
+          {graph.nodes.length ? (
+            <ul className="knowledge-graph__legend">
+              <li>
+                <i data-kind="topic" /> Tag
+              </li>
+              <li>
+                <i data-kind="finding" /> Nota
+              </li>
+              {showFiles ? (
                 <li>
-                  <i data-kind="finding" /> Nota
+                  <i data-kind="file" /> Archivo
                 </li>
-                <li>
-                  <i data-kind="topic" /> Tema
-                </li>
+              ) : null}
+              {showCourses ? (
                 <li>
                   <i data-kind="course" /> Curso
                 </li>
-              </ul>
-              <KnowledgeGraphView
-                nodes={graph.nodes}
-                edges={graph.edges}
-                truncated={graph.truncated}
-                onNodeClick={handleGraphNode}
-              />
-            </>
-          ) : (
-            <div className="knowledge-graph--empty">
-              {graphFocus?.type === 'topic' ? (
-                <p>Este tema todavía no tiene notas.</p>
-              ) : siblings.length ? (
-                <p>Esta nota no comparte temas. Las del mismo archivo están abajo.</p>
-              ) : (
-                <>
-                  <p>Todavía no hay conexiones.</p>
-                  <p>Añade un tema para ver otras notas que lo comparten.</p>
-                </>
-              )}
-            </div>
-          )}
-          {siblings.length ? (
-            <div className="annotations-links">
-              <span className="annotations-links__label">En el mismo archivo</span>
-              <ul>
-                {siblings.map((finding) => (
-                  <li key={finding.id}>
-                    <button type="button" onClick={() => onSelect?.(finding)}>
-                      {noteTitle(finding)}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
+              ) : null}
+            </ul>
           ) : null}
+          <KnowledgeGraphView
+            nodes={graph.nodes}
+            edges={graph.edges}
+            viewMode={graph.viewMode}
+            linkDistance={linkDistance}
+            nodeScale={nodeScale}
+            showArrows={showArrows}
+            showLabels={showLabels}
+            labelZoom={labelZoom}
+            showCourses={showCourses}
+            showFiles={showFiles}
+            showOrphans={showOrphans}
+            highlightIds={graphVisibility.highlightIds}
+            selectedId={graphSelection}
+            truncated={graph.truncated || graphVisibility.truncated}
+            resetToken={graphReset}
+            onNodeClick={handleGraphNode}
+            onNodeActivate={handleGraphActivate}
+            onNodeShift={handleGraphShift}
+            onClear={() => setGraphSelection(null)}
+          />
         </aside>
       </div>
     </div>

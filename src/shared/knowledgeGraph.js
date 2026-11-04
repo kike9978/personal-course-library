@@ -1,10 +1,40 @@
 /**
- * Findings, topics, and the local overlap graph.
+ * Findings, topics, and the library graph.
  * A finding is a note. A topic is a library-wide idea. An anchor is where a finding was seen.
- * The graph is computed from those links.
+ * The graph is one view with two modes: topics (tags and objects) and courses (pages).
  */
 
-const MENTION_RE = /@\[(lesson|project|course|topic)\|([^\]]+)]\(([^)]+)\)/g
+export const FINDING_REVEAL_BUDGET = 24
+export const EDGE_CAP = 2000
+export const LABEL_ZOOM = 1.15
+export const LABEL_ZOOM_MIN = 0.35
+export const LABEL_ZOOM_MAX = 2.4
+
+export function clampDepth(depth) {
+  const value = Number(depth)
+  if (!Number.isFinite(value)) return 1
+  return Math.min(5, Math.max(1, Math.round(value)))
+}
+
+export function clampLinkDistance(distance) {
+  const value = Number(distance)
+  if (!Number.isFinite(value)) return 72
+  return Math.min(180, Math.max(36, Math.round(value)))
+}
+
+export function clampLabelZoom(zoom) {
+  const value = Number(zoom)
+  if (!Number.isFinite(value)) return LABEL_ZOOM
+  const clamped = Math.min(LABEL_ZOOM_MAX, Math.max(LABEL_ZOOM_MIN, value))
+  return Math.round(clamped * 20) / 20
+}
+
+export function normalizeGraphMode(viewMode) {
+  return viewMode === 'courses' ? 'courses' : 'topics'
+}
+
+const MENTION_RE =
+  /@\[(lesson|project|course|topic)\|([^\]]+)]\(([^)]+)\)|\[\[(lesson|project|course|topic|note)\|([^\]|]+)\|([^\]]+)\]\]/g
 
 export function parseMentions(markdown) {
   const mentions = []
@@ -12,7 +42,11 @@ export function parseMentions(markdown) {
   MENTION_RE.lastIndex = 0
   let match = MENTION_RE.exec(text)
   while (match) {
-    mentions.push({ type: match[1], title: match[2], id: match[3] })
+    mentions.push(
+      match[1]
+        ? { type: match[1], title: match[2], id: match[3] }
+        : { type: match[4], title: match[5], id: match[6] }
+    )
     match = MENTION_RE.exec(text)
   }
   return mentions
@@ -34,6 +68,27 @@ export function normalizeTopicTitle(title) {
 
 export function topicKey(title) {
   return normalizeTopicTitle(title).toLowerCase()
+}
+
+/** Tag titles written as #name in the note body. Headings (# Title) are not tags. */
+export function hashtagTitlesFromBody(markdown) {
+  const text = String(markdown || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`\n]*`/g, ' ')
+  const titles = []
+  const seen = new Set()
+  const pattern = /(^|[^\p{L}\p{N}_])#([\p{L}\p{N}_]*\p{L}[\p{L}\p{N}_]*)/gu
+  let match = pattern.exec(text)
+  while (match) {
+    const title = normalizeTopicTitle(match[2])
+    const key = topicKey(title)
+    if (key && !seen.has(key)) {
+      seen.add(key)
+      titles.push(title)
+    }
+    match = pattern.exec(text)
+  }
+  return titles
 }
 
 function courseFolderName(coursePath) {
@@ -194,21 +249,14 @@ export function groupFindingsByTopic(findings, topics, { corpus = findings, over
     })
 }
 
-export function relatedFindings(finding, findings, topics) {
-  const ids = new Set(finding?.topicIds || [])
-  if (!ids.size) return []
-  const topicById = new Map((topics || []).map((topic) => [topic.id, topic]))
-  return (findings || [])
-    .filter(
-      (other) => other.id !== finding.id && (other.topicIds || []).some((id) => ids.has(id))
-    )
-    .map((other) => ({
-      finding: other,
-      topics: (other.topicIds || [])
-        .filter((id) => ids.has(id))
-        .map((id) => topicById.get(id))
-        .filter(Boolean)
-    }))
+/** Notes whose body links to this note with [[note|title|id]]. */
+export function backlinksTo(finding, findings) {
+  const id = finding?.id
+  if (!id) return []
+  return (findings || []).filter((other) => {
+    if (!other || other.id === id) return false
+    return parseMentions(other.body).some((mention) => mention.type === 'note' && mention.id === id)
+  })
 }
 
 function findingLabel(finding) {
@@ -227,32 +275,60 @@ function clip(text, max = 24) {
   return `${value.slice(0, max - 1)}…`
 }
 
-export function anchorKeys(finding) {
-  const keys = []
-  const add = (key) => {
-    if (key && !keys.includes(key)) keys.push(key)
-  }
-  for (const anchor of finding?.anchors || []) {
-    if (anchor.projectId) add(`project:${anchor.coursePath || ''}:${anchor.projectId}`)
-    else if (anchor.lessonRelativePath) add(`lesson:${anchor.coursePath || ''}:${anchor.lessonRelativePath}`)
-  }
-  if (!keys.length) {
-    if (finding?.projectId) add(`project:${finding.coursePath || ''}:${finding.projectId}`)
-    else if (finding?.lessonRelativePath) {
-      add(`lesson:${finding.coursePath || ''}:${finding.lessonRelativePath}`)
-    }
-  }
-  return keys
+function fileName(path) {
+  return String(path || '').split(/[\\/]/).filter(Boolean).pop() || 'Archivo'
 }
 
-/** Other notes attached to the same lesson or project. */
-export function siblingFindings(finding, findings, limit = 8) {
-  const keys = new Set(anchorKeys(finding))
-  if (!keys.size) return []
-  return (findings || [])
-    .filter((other) => other.id !== finding?.id && anchorKeys(other).some((key) => keys.has(key)))
-    .slice(0, limit)
+function filesOf(finding) {
+  const files = []
+  const seen = new Set()
+  const add = (file) => {
+    if (!file?.id || seen.has(file.id)) return
+    seen.add(file.id)
+    files.push(file)
+  }
+  for (const anchor of finding?.anchors || []) {
+    if (anchor.projectId) {
+      add({
+        id: `project:${anchor.coursePath || ''}:${anchor.projectId}`,
+        label: anchor.projectTitle || 'Proyecto',
+        coursePath: anchor.coursePath || null,
+        lessonRelativePath: null,
+        projectId: anchor.projectId
+      })
+    } else if (anchor.lessonRelativePath) {
+      add({
+        id: `lesson:${anchor.coursePath || ''}:${anchor.lessonRelativePath}`,
+        label: anchor.lessonTitle || fileName(anchor.lessonRelativePath),
+        coursePath: anchor.coursePath || null,
+        lessonRelativePath: anchor.lessonRelativePath,
+        projectId: null
+      })
+    }
+  }
+  if (!files.length) {
+    if (finding?.projectId) {
+      add({
+        id: `project:${finding.coursePath || ''}:${finding.projectId}`,
+        label: finding.projectTitle || 'Proyecto',
+        coursePath: finding.coursePath || null,
+        lessonRelativePath: null,
+        projectId: finding.projectId
+      })
+    } else if (finding?.lessonRelativePath) {
+      add({
+        id: `lesson:${finding.coursePath || ''}:${finding.lessonRelativePath}`,
+        label: finding.lessonTitle || fileName(finding.lessonRelativePath),
+        coursePath: finding.coursePath || null,
+        lessonRelativePath: finding.lessonRelativePath,
+        projectId: null
+      })
+    }
+  }
+  return files
 }
+
+const KIND_LABEL = { topic: 'Tag', finding: 'Anotación', course: 'Curso', file: 'Archivo' }
 
 function ringPositions(count, radius) {
   if (!count) return []
@@ -262,172 +338,398 @@ function ringPositions(count, radius) {
   })
 }
 
-/**
- * Deterministic local graph around one topic or finding.
- * Depth 1 is the direct links. Depth 2 adds the other courses and shared topics.
- */
-export function buildLocalGraph({
-  focusType,
-  focusId,
-  findings = [],
-  topics = [],
-  courseTitles = {},
-  depth = 2
-} = {}) {
-  if (!focusId || (focusType !== 'topic' && focusType !== 'finding')) {
-    return { nodes: [], edges: [], truncated: false }
-  }
+function phyllotaxis(index) {
+  const angle = index * 2.399963229728653
+  const radius = 28 * Math.sqrt(index + 1)
+  return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius }
+}
 
+function nodeRecord(kind, id, label, point) {
+  return {
+    id: `${kind}:${id}`,
+    x: point.x,
+    y: point.y,
+    data: {
+      kind,
+      kindLabel: KIND_LABEL[kind] || kind,
+      label: clip(label),
+      fullLabel: String(label || '').trim() || clip(label),
+      refId: id
+    }
+  }
+}
+
+function courseKeys(finding) {
+  const paths = coursePathsOf(finding)
+  if (!paths.length && finding?.coursePath) paths.push(finding.coursePath)
+  return paths
+}
+
+function coursePathsOf(finding) {
+  const paths = []
+  for (const anchor of finding?.anchors || []) {
+    if (!anchor.coursePath || paths.some((path) => sameCourse(path, anchor.coursePath))) continue
+    paths.push(anchor.coursePath)
+  }
+  return paths
+}
+
+function rememberCourse(courses, coursePath) {
+  const existing = courses.find((path) => sameCourse(path, coursePath))
+  if (existing) return existing
+  courses.push(coursePath)
+  return coursePath
+}
+
+function addEdge(edges, seen, source, target, edgeType, label) {
+  if (!source || !target || source === target) return false
+  const directed = edgeType === 'topic' || edgeType === 'file' || edgeType === 'course' || edgeType === 'link'
+  const [from, to] = directed ? [source, target] : [source, target].sort()
+  const id = directed ? `${from}->${to}` : `${edgeType}:${from}<->${to}`
+  if (seen.has(id)) return false
+  if (edges.length >= EDGE_CAP) return false
+  seen.add(id)
+  edges.push({ id, source: from, target: to, edgeType, label: label || '' })
+  return true
+}
+
+function buildTopicsGraph(findings, topics, courseTitles = {}) {
   const topicById = new Map(topics.map((topic) => [topic.id, topic]))
-  const findingById = new Map(findings.map((finding) => [finding.id, finding]))
-  const descriptors = []
-  const links = []
-  const seen = new Set()
-  let truncated = false
-
-  const add = (kind, id, label, extra = {}) => {
-    const nodeId = `${kind}:${id}`
-    if (seen.has(nodeId)) return nodeId
-    seen.add(nodeId)
-    descriptors.push({ nodeId, kind, id, label, ...extra })
-    return nodeId
-  }
-
-  const link = (source, target) => {
-    if (!source || !target || source === target) return
-    links.push([source, target])
-  }
-
-  if (focusType === 'topic') {
-    const topic = topicById.get(focusId)
-    if (!topic) return { nodes: [], edges: [], truncated: false }
-    const center = add('topic', topic.id, topic.title, { ring: 0 })
-    const matched = findings.filter((finding) => (finding.topicIds || []).includes(topic.id))
-    const shown = matched.slice(0, 24)
-    if (matched.length > shown.length) truncated = true
-    const courses = new Map()
-    const extraTopics = new Map()
-    for (const finding of shown) {
-      const findingNode = add('finding', finding.id, findingLabel(finding), { ring: 1, finding })
-      link(center, findingNode)
-      for (const anchor of finding.anchors || []) {
-        if (!anchor.coursePath) continue
-        courses.set(anchor.coursePath, resolveCourseTitle(anchor.coursePath, courseTitles))
-      }
-      if (depth >= 2) {
-        for (const topicId of finding.topicIds || []) {
-          if (topicId === topic.id) continue
-          const other = topicById.get(topicId)
-          if (other) extraTopics.set(other.id, other.title)
-        }
-      }
-    }
-    if (depth >= 2) {
-      for (const [coursePath, title] of courses) {
-        const courseNode = add('course', coursePath, title, { ring: 2 })
-        for (const finding of shown) {
-          if ((finding.anchors || []).some((anchor) => anchor.coursePath === coursePath)) {
-            link(`finding:${finding.id}`, courseNode)
-          }
-        }
-      }
-      const extra = [...extraTopics.entries()].slice(0, 16)
-      if (extraTopics.size > extra.length) truncated = true
-      for (const [topicId, title] of extra) {
-        const topicNode = add('topic', topicId, title, { ring: 2 })
-        for (const finding of shown) {
-          if ((finding.topicIds || []).includes(topicId)) link(`finding:${finding.id}`, topicNode)
-        }
-      }
-    }
-  } else {
-    const finding = findingById.get(focusId)
-    if (!finding) return { nodes: [], edges: [], truncated: false }
-    const center = add('finding', finding.id, findingLabel(finding), { ring: 0, finding })
-    const topicIds = (finding.topicIds || []).filter((id) => topicById.has(id)).slice(0, 12)
-    for (const topicId of topicIds) {
-      const topicNode = add('topic', topicId, topicById.get(topicId).title, { ring: 1 })
-      link(center, topicNode)
-    }
-    const coursePaths = []
-    for (const anchor of finding.anchors || []) {
-      if (!anchor.coursePath || coursePaths.includes(anchor.coursePath)) continue
-      coursePaths.push(anchor.coursePath)
-    }
-    if (depth >= 2 && topicIds.length) {
-      const related = findings
-        .filter(
-          (other) =>
-            other.id !== finding.id && (other.topicIds || []).some((id) => topicIds.includes(id))
-        )
-        .slice(0, 20)
-      for (const other of related) {
-        const otherNode = add('finding', other.id, findingLabel(other), { ring: 2, finding: other })
-        for (const topicId of other.topicIds || []) {
-          if (topicIds.includes(topicId)) link(`topic:${topicId}`, otherNode)
-        }
-      }
-    }
-    if (coursePaths.length > 1) {
-      for (const coursePath of coursePaths) {
-        const courseNode = add(
-          'course',
-          coursePath,
-          resolveCourseTitle(coursePath, courseTitles),
-          { ring: 1 }
-        )
-        link(center, courseNode)
-      }
+  const used = new Map()
+  for (const finding of findings) {
+    for (const topicId of finding.topicIds || []) {
+      const topic = topicById.get(topicId)
+      if (!topic || used.has(topic.id)) continue
+      used.set(topic.id, topic)
     }
   }
-
-  const rings = [[], [], []]
-  for (const item of descriptors) rings[item.ring || 0].push(item)
-  const positions = new Map()
-  positions.set(rings[0][0]?.nodeId, { x: 0, y: 0 })
-  ringPositions(rings[1].length, 240).forEach((point, index) => {
-    positions.set(rings[1][index].nodeId, point)
-  })
-  ringPositions(rings[2].length, 440).forEach((point, index) => {
-    positions.set(rings[2][index].nodeId, point)
-  })
-
-  const kindLabel = { topic: 'Tema', finding: 'Anotación', course: 'Curso' }
-  const nodes = descriptors.map((item) => {
-    const point = positions.get(item.nodeId) || { x: 0, y: 0 }
-    return {
-      id: item.nodeId,
-      type: 'knowledge',
-      position: { x: point.x - 84, y: point.y - 28 },
-      data: {
-        kind: item.kind,
-        kindLabel: kindLabel[item.kind] || item.kind,
-        label: clip(item.label),
-        fullLabel: String(item.label || '').trim() || clip(item.label),
-        refId: item.id,
-        active: item.nodeId === `${focusType}:${focusId}`
-      },
-      draggable: false,
-      selectable: true
-    }
-  })
-
-  const nodeIds = new Set(nodes.map((node) => node.id))
-  const edges = []
-  const edgeIds = new Set()
-  for (const [source, target] of links) {
-    if (!nodeIds.has(source) || !nodeIds.has(target)) continue
-    const id = `${source}->${target}`
-    if (edgeIds.has(id)) continue
-    edgeIds.add(id)
-    edges.push({
-      id,
-      source,
-      target,
-      type: 'straight',
-      style: { stroke: 'rgba(42, 36, 56, 0.38)', strokeWidth: 1.5 }
+  const topicList = [...used.values()].sort((a, b) =>
+    String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' })
+  )
+  const topicPoints = new Map()
+  if (topicList.length === 1) topicPoints.set(topicList[0].id, { x: 0, y: 0 })
+  else {
+    const radius = Math.max(180, topicList.length * 36)
+    ringPositions(topicList.length, radius).forEach((point, index) => {
+      topicPoints.set(topicList[index].id, point)
     })
   }
 
-  return { nodes, edges, truncated }
+  const findingList = findings
+    .filter((finding) => (finding.topicIds || []).some((id) => used.has(id)))
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+  const byTopic = new Map()
+  for (const finding of findingList) {
+    const primary = (finding.topicIds || []).find((id) => used.has(id))
+    if (!byTopic.has(primary)) byTopic.set(primary, [])
+    byTopic.get(primary).push(finding)
+  }
+
+  const nodes = topicList.map((topic) => nodeRecord('topic', topic.id, topic.title, topicPoints.get(topic.id)))
+  for (const [topicId, group] of byTopic) {
+    const origin = topicPoints.get(topicId)
+    group.forEach((finding, index) => {
+      const angle = (2 * Math.PI * index) / group.length
+      nodes.push(
+        nodeRecord('finding', finding.id, findingLabel(finding), {
+          x: origin.x + Math.cos(angle) * 46,
+          y: origin.y + Math.sin(angle) * 46
+        })
+      )
+    })
+  }
+
+  const untagged = findings
+    .filter((finding) => !(finding.topicIds || []).some((id) => used.has(id)))
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+  const noteLinked = (finding) =>
+    untagged.concat(findingList).some(
+      (other) =>
+        other.id !== finding.id &&
+        (filesOf(finding).some((file) => filesOf(other).some((candidate) => candidate.id === file.id)) ||
+          courseKeys(finding).some((path) => courseKeys(other).some((candidate) => sameCourse(path, candidate))))
+    )
+  const attached = untagged.filter((finding) => noteLinked(finding))
+  const orphans = untagged.filter((finding) => !noteLinked(finding))
+  const placedPoints = new Map(nodes.filter((node) => node.data.kind === 'finding').map((node) => [node.data.refId, node]))
+  const pending = [...attached]
+  let placedAttached = true
+  while (pending.length && placedAttached) {
+    placedAttached = false
+    for (let index = pending.length - 1; index >= 0; index -= 1) {
+      const finding = pending[index]
+      const neighbors = untagged.concat(findingList).filter(
+        (other) =>
+          other.id !== finding.id &&
+          placedPoints.has(other.id) &&
+          (filesOf(finding).some((file) => filesOf(other).some((candidate) => candidate.id === file.id)) ||
+            courseKeys(finding).some((path) => courseKeys(other).some((candidate) => sameCourse(path, candidate))))
+      )
+      if (!neighbors.length) continue
+      const origin = neighbors.reduce(
+        (sum, other) => {
+          const point = placedPoints.get(other.id)
+          return { x: sum.x + point.x, y: sum.y + point.y }
+        },
+        { x: 0, y: 0 }
+      )
+      const spot = {
+        x: origin.x / neighbors.length + 28,
+        y: origin.y / neighbors.length + 18
+      }
+      const node = nodeRecord('finding', finding.id, findingLabel(finding), spot)
+      node.data.orphan = true
+      nodes.push(node)
+      placedPoints.set(finding.id, node)
+      pending.splice(index, 1)
+      placedAttached = true
+    }
+  }
+  if (pending.length) {
+    const clusterRadius = topicList.length ? Math.max(200, (topicList.length > 1 ? Math.max(180, topicList.length * 36) : 0) + 140) : 140
+    ringPositions(pending.length, clusterRadius).forEach((point, index) => {
+      const node = nodeRecord('finding', pending[index].id, findingLabel(pending[index]), point)
+      node.data.orphan = true
+      nodes.push(node)
+      placedPoints.set(pending[index].id, node)
+    })
+  }
+  const topicRadius = topicList.length > 1 ? Math.max(180, topicList.length * 36) : 0
+  const orphanRadius = topicList.length || attached.length
+    ? Math.max(260, topicRadius + 220)
+    : Math.max(120, orphans.length * 28)
+  const orphanPoints =
+    orphans.length === 1 && !topicList.length && !attached.length
+      ? [{ x: 0, y: 0 }]
+      : ringPositions(orphans.length, orphanRadius)
+  orphans.forEach((finding, index) => {
+    const node = nodeRecord('finding', finding.id, findingLabel(finding), orphanPoints[index])
+    node.data.orphan = true
+    nodes.push(node)
+  })
+
+  const placed = [...findingList, ...attached, ...orphans]
+  const edges = []
+  const seen = new Set()
+  let truncated = false
+  for (const finding of findingList) {
+    for (const topicId of finding.topicIds || []) {
+      if (!used.has(topicId)) continue
+      const added = addEdge(edges, seen, `finding:${finding.id}`, `topic:${topicId}`, 'topic', '')
+      if (!added && edges.length >= EDGE_CAP) truncated = true
+    }
+  }
+
+  const files = new Map()
+  for (const finding of placed) {
+    for (const file of filesOf(finding)) {
+      if (!files.has(file.id)) files.set(file.id, { ...file, findingIds: [] })
+      files.get(file.id).findingIds.push(finding.id)
+    }
+  }
+  const findingPoint = new Map(nodes.filter((node) => node.data.kind === 'finding').map((node) => [node.id, node]))
+  for (const file of files.values()) {
+    const points = file.findingIds
+      .map((id) => findingPoint.get(`finding:${id}`))
+      .filter(Boolean)
+    const origin = points.reduce(
+      (sum, node) => ({ x: sum.x + node.x, y: sum.y + node.y }),
+      { x: 0, y: 0 }
+    )
+    const node = nodeRecord('file', file.id, file.label, {
+      x: origin.x / Math.max(points.length, 1) + 36,
+      y: origin.y / Math.max(points.length, 1) - 28
+    })
+    node.data.coursePath = file.coursePath
+    node.data.lessonRelativePath = file.lessonRelativePath
+    node.data.projectId = file.projectId
+    nodes.push(node)
+    for (const findingId of file.findingIds) {
+      const added = addEdge(edges, seen, `finding:${findingId}`, node.id, 'file', '')
+      if (!added && edges.length >= EDGE_CAP) truncated = true
+    }
+  }
+
+  const coursePaths = []
+  const courseMembers = new Map()
+  for (const finding of placed) {
+    const rawPaths = coursePathsOf(finding)
+    if (!rawPaths.length && finding.coursePath) rawPaths.push(finding.coursePath)
+    for (const raw of rawPaths) {
+      const path = rememberCourse(coursePaths, raw)
+      if (!courseMembers.has(path)) courseMembers.set(path, [])
+      courseMembers.get(path).push(finding.id)
+    }
+  }
+  for (const [path, findingIds] of courseMembers) {
+    const points = findingIds.map((id) => findingPoint.get(`finding:${id}`)).filter(Boolean)
+    const origin = points.reduce((sum, node) => ({ x: sum.x + node.x, y: sum.y + node.y }), { x: 0, y: 0 })
+    const node = nodeRecord('course', path, resolveCourseTitle(path, courseTitles), {
+      x: origin.x / Math.max(points.length, 1) - 42,
+      y: origin.y / Math.max(points.length, 1) + 34
+    })
+    nodes.push(node)
+    for (const findingId of findingIds) {
+      const added = addEdge(edges, seen, `finding:${findingId}`, node.id, 'course', '')
+      if (!added && edges.length >= EDGE_CAP) truncated = true
+    }
+  }
+
+  const placedIds = new Set(placed.map((finding) => finding.id))
+  for (const finding of placed) {
+    for (const mention of parseMentions(finding.body)) {
+      if (mention.type !== 'note' || !placedIds.has(mention.id)) continue
+      const added = addEdge(edges, seen, `finding:${finding.id}`, `finding:${mention.id}`, 'link', '')
+      if (!added && edges.length >= EDGE_CAP) truncated = true
+    }
+  }
+
+  return { nodes, edges, viewMode: 'topics', truncated }
+}
+
+function buildCoursesGraph(findings, topics, courseTitles) {
+  const topicById = new Map(topics.map((topic) => [topic.id, topic]))
+  const courses = []
+  const shared = new Map()
+  for (const finding of findings) {
+    const paths = coursePathsOf(finding).map((path) => rememberCourse(courses, path))
+    if (paths.length < 2) continue
+    const topicIds = (finding.topicIds || []).filter((id) => topicById.has(id))
+    if (!topicIds.length) continue
+    for (let i = 0; i < paths.length; i += 1) {
+      for (let j = i + 1; j < paths.length; j += 1) {
+        const [left, right] = [paths[i], paths[j]].sort()
+        if (!shared.has(left)) shared.set(left, new Map())
+        if (!shared.get(left).has(right)) shared.get(left).set(right, new Set())
+        for (const topicId of topicIds) shared.get(left).get(right).add(topicId)
+      }
+    }
+  }
+
+  const edges = []
+  const seen = new Set()
+  let truncated = false
+  const linked = new Set()
+  const pairs = []
+  for (const [left, rights] of shared) {
+    for (const [right, topicIds] of rights) pairs.push([left, right, topicIds])
+  }
+  pairs.sort((a, b) => `${a[0]}\0${a[1]}`.localeCompare(`${b[0]}\0${b[1]}`))
+  for (const [left, right, topicIds] of pairs) {
+    const ids = [...topicIds]
+    const label = ids.length === 1 ? topicById.get(ids[0]).title : `${ids.length} temas`
+    const added = addEdge(edges, seen, `course:${left}`, `course:${right}`, 'shared-topic', label)
+    if (!added) {
+      truncated = edges.length >= EDGE_CAP
+      break
+    }
+    linked.add(left)
+    linked.add(right)
+  }
+
+  const ordered = [...courses].sort((a, b) =>
+    resolveCourseTitle(a, courseTitles).localeCompare(resolveCourseTitle(b, courseTitles), undefined, {
+      sensitivity: 'base'
+    })
+  )
+  const linkedPaths = ordered.filter((path) => linked.has(path))
+  const loosePaths = ordered.filter((path) => !linked.has(path))
+  const linkedPoints = linkedPaths.map((_, index) => phyllotaxis(index))
+  const maxRadius = linkedPoints.reduce((max, point) => Math.max(max, Math.hypot(point.x, point.y)), 0)
+  const outer = loosePaths.length
+    ? ringPositions(loosePaths.length, Math.max(168, maxRadius + 128))
+    : []
+  const points = new Map()
+  linkedPaths.forEach((path, index) => points.set(path, linkedPoints[index]))
+  loosePaths.forEach((path, index) => points.set(path, outer[index]))
+  if (!linkedPaths.length && loosePaths.length === 1) points.set(loosePaths[0], { x: 0, y: 0 })
+
+  const nodes = ordered.map((path) =>
+    nodeRecord('course', path, resolveCourseTitle(path, courseTitles), points.get(path))
+  )
+  return { nodes, edges, viewMode: 'courses', truncated }
+}
+
+/**
+ * Library graph. Topics mode is tags, the notes that use them, and notes with no tag.
+ * An orphan note has no tag. A shared course or file is not a link to another note.
+ * Courses mode is every course that holds a note, linked when one note sits in two courses and carries a topic.
+ */
+export function buildGlobalGraph({
+  viewMode = 'topics',
+  findings = [],
+  topics = [],
+  courseTitles = {}
+} = {}) {
+  const mode = normalizeGraphMode(viewMode)
+  const safeFindings = findings || []
+  const safeTopics = topics || []
+  if (mode === 'courses') return buildCoursesGraph(safeFindings, safeTopics, courseTitles || {})
+  return buildTopicsGraph(safeFindings, safeTopics, courseTitles || {})
+}
+
+function adjacency(edges) {
+  const map = new Map()
+  const add = (id, edge) => {
+    if (!map.has(id)) map.set(id, [])
+    map.get(id).push(edge)
+  }
+  for (const edge of edges) {
+    add(edge.source, edge)
+    add(edge.target, edge)
+  }
+  return map
+}
+
+function neighborhood(nodes, edges, selectedId, depth) {
+  const selected = nodes.find((node) => node.id === selectedId)
+  const adj = adjacency(edges)
+  const ids = new Set([selectedId])
+  let frontier = [selectedId]
+  let truncated = false
+  for (let hop = 1; hop <= depth; hop += 1) {
+    const next = []
+    let findingBudget = FINDING_REVEAL_BUDGET
+    for (const id of frontier) {
+      for (const edge of adj.get(id) || []) {
+        const other = edge.source === id ? edge.target : edge.source
+        if (ids.has(other)) continue
+        const budgeted = hop === 1 && selected?.data?.kind === 'topic' && edge.edgeType === 'topic'
+        if (budgeted) {
+          if (findingBudget <= 0) {
+            truncated = true
+            continue
+          }
+          findingBudget -= 1
+        }
+        ids.add(other)
+        next.push(other)
+      }
+    }
+    frontier = next
+  }
+  return { ids: [...ids], truncated }
+}
+
+/**
+ * Both modes keep the whole graph on screen.
+ * A selection highlights the neighborhood and dims the rest.
+ * Tags mode draws each tag with the notes it connects to.
+ */
+export function visibleGraph({
+  nodes = [],
+  edges = [],
+  selectedId = null,
+  depth = 1,
+  viewMode = 'topics'
+} = {}) {
+  const mode = normalizeGraphMode(viewMode)
+  const depthN = clampDepth(depth)
+  const known = selectedId && nodes.some((node) => node.id === selectedId)
+  if (!known) return { highlightIds: null, truncated: false }
+  const next = neighborhood(nodes, edges, selectedId, depthN)
+  return {
+    highlightIds: next.ids,
+    truncated: mode === 'topics' ? next.truncated : false
+  }
 }

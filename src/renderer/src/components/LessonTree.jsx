@@ -24,8 +24,8 @@ function visibleResources(resources) {
   return (resources || []).filter((res) => res.kind !== 'subtitle')
 }
 
-function panelIdFor(id) {
-  return `lesson-section-${String(id).replace(/[^a-zA-Z0-9_-]/g, '_')}`
+function panelIdFor(id, prefix = 'lesson-section') {
+  return `${prefix}-${String(id).replace(/[^a-zA-Z0-9_-]/g, '_')}`
 }
 
 function sectionIdForSelection({
@@ -47,13 +47,13 @@ function sectionIdForSelection({
   return sectionIdForPath(sections, courseResources, selectedPath)
 }
 
-function SectionBlock({ id, title, open, onToggle, nested, children }) {
-  const panelId = panelIdFor(id)
+function TreeSection({ id, title, open, onToggle, nested, dense, idPrefix, children }) {
+  const panelId = panelIdFor(id, idPrefix)
   return (
     <div
       className={`lesson-tree__section${nested ? ' lesson-tree__section--nested' : ''}${
-        open ? '' : ' is-collapsed'
-      }`}
+        dense ? ' lesson-tree__section--dense' : ''
+      }${open ? '' : ' is-collapsed'}`}
     >
       <h3 className="lesson-tree__section-head">
         <button
@@ -293,7 +293,7 @@ function LessonTree({
       </div>
 
       {unanchored.length > 0 ? (
-        <SectionBlock
+        <TreeSection
           id="__projects__"
           title="Proyectos"
           open={!collapsedIds.has('__projects__')}
@@ -309,7 +309,7 @@ function LessonTree({
               />
             ))}
           </ul>
-        </SectionBlock>
+        </TreeSection>
       ) : null}
 
       {sections.map((section) => (
@@ -332,7 +332,7 @@ function LessonTree({
       ))}
 
       {visibleCourseResources.length > 0 ? (
-        <SectionBlock
+        <TreeSection
           id="__course_resources__"
           title="Recursos del curso"
           open={!collapsedIds.has('__course_resources__')}
@@ -351,7 +351,7 @@ function LessonTree({
               />
             ))}
           </ul>
-        </SectionBlock>
+        </TreeSection>
       ) : null}
     </nav>
   )
@@ -500,7 +500,7 @@ function SectionView({
   flushLessons()
 
   return (
-    <SectionBlock
+    <TreeSection
       id={section.id}
       title={section.title}
       nested={depth > 0}
@@ -535,10 +535,10 @@ function SectionView({
           ))}
         </ul>
       ) : null}
-    </SectionBlock>
+    </TreeSection>
   )
 }
 
-export { flattenLessons }
+export { flattenLessons, TreeSection }
 
 export default LessonTree

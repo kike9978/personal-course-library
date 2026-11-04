@@ -122,6 +122,7 @@ function StudySidePanel({
   enableTimestamp = false,
   mentionItems = [],
   onCreateTopic = null,
+  onOpenMention = null,
   onSave,
   onDelete,
   onEdit,
@@ -403,6 +404,7 @@ function StudySidePanel({
                 onSeekTimestamp={onSeekTimestamp}
                 mentionItems={mentionItems}
                 onCreateTopic={onCreateTopic}
+                onOpenMention={onOpenMention}
                 onCaptureFrame={hasLesson ? onCaptureFrame : null}
                 editorApiRef={editorApiRef}
               />
