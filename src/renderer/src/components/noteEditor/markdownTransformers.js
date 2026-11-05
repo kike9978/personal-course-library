@@ -90,7 +90,22 @@ const MENTION = {
 }
 
 /**
+ * Keep the paragraph when this block is the last line, so the caret still has
+ * somewhere to go. Import replaces the line; a later pass adds a trailing
+ * paragraph when the document ends on a block.
+ */
+function replaceWithBlock(parentNode, block, isImport) {
+  if (isImport || parentNode.getNextSibling() != null) {
+    parentNode.replace(block)
+    return
+  }
+  parentNode.insertBefore(block)
+}
+
+/**
  * Excalidraw block: ![excalidraw:id](previewUrl)
+ * Element (not text-match) so the drawing is a root block. A block decorator
+ * nested in a paragraph is contenteditable=false and swallows clicks.
  * Must be registered before IMAGE so it wins over the generic image pattern.
  */
 const EXCALIDRAW = {
@@ -101,38 +116,56 @@ const EXCALIDRAW = {
     const preview = node.getPreviewSrc() || ''
     return `![excalidraw:${id}](${preview})`
   },
-  importRegExp: /!\[excalidraw:([^\]]*)\]\(([^)]*)\)/,
-  regExp: /!\[excalidraw:([^\]]*)\]\(([^)]*)\)$/,
-  replace: (textNode, match) => {
+  regExp: /^!\[excalidraw:([^\]]*)\]\(([^)]*)\)$/,
+  replace: (parentNode, _children, match, isImport) => {
     const [, drawingId, previewSrc] = match
-    textNode.replace(
+    replaceWithBlock(
+      parentNode,
       $createExcalidrawNode({
         drawingId: drawingId || '',
         previewSrc: previewSrc || ''
-      })
+      }),
+      isImport
     )
   },
-  trigger: ')',
-  type: 'text-match'
+  type: 'element'
 }
 
-/** Image: ![alt](src) */
+/** `url` or `url "caption"` inside the image parentheses. */
+function parseImageDestination(raw) {
+  const text = String(raw || '').trim()
+  const titled = /^(.*\S)\s+"((?:\\.|[^"])*)"\s*$/.exec(text)
+  if (!titled) return { src: text, caption: '' }
+  return {
+    src: titled[1].trim(),
+    caption: titled[2].replace(/\\"/g, '"')
+  }
+}
+
+/** Image: ![alt](src) or ![alt](src "pie de foto"). Root block. */
 const IMAGE = {
   dependencies: [ImageNode],
   export: (node) => {
     if (!$isImageNode(node)) return null
     const alt = node.getAltText() || ''
     const src = node.getSrc() || ''
-    return `![${alt}](${src})`
+    const caption = node.getCaption() || ''
+    if (!caption) return `![${alt}](${src})`
+    return `![${alt}](${src} "${caption.replace(/"/g, '\\"')}")`
   },
-  importRegExp: /!\[([^\][]*)\]\(([^)]+)\)/,
-  regExp: /!\[([^\][]*)\]\(([^)]+)\)$/,
-  replace: (textNode, match) => {
-    const [, altText, src] = match
-    textNode.replace($createImageNode({ src, altText: altText || '' }))
+  regExp: /^!\[([^\][]*)\]\((.*)\)\s*$/,
+  replace: (parentNode, _children, match, isImport) => {
+    const [, altText, dest] = match
+    if (String(altText || '').startsWith('excalidraw:')) return false
+    const { src, caption } = parseImageDestination(dest)
+    if (!src) return false
+    replaceWithBlock(
+      parentNode,
+      $createImageNode({ src, altText: altText || '', caption }),
+      isImport
+    )
   },
-  trigger: ')',
-  type: 'text-match'
+  type: 'element'
 }
 
 /** Transformers used for import/export + markdown shortcuts in notes. */

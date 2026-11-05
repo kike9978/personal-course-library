@@ -56,12 +56,14 @@ import {
 } from '@lexical/table'
 import { CodeNode, CodeHighlightNode, $createCodeNode, $isCodeNode } from '@lexical/code-core'
 import { $setBlocksType } from '@lexical/selection'
-import { $findMatchingParent, $wrapNodeInElement, mergeRegister } from '@lexical/utils'
+import { $findMatchingParent, mergeRegister } from '@lexical/utils'
 import { $convertFromMarkdownString, $convertToMarkdownString } from '@lexical/markdown'
 import { marked } from 'marked'
 import {
   $getRoot,
   $getSelection,
+  $getNearestNodeFromDOMNode,
+  $isDecoratorNode,
   $isRangeSelection,
   $isRootOrShadowRoot,
   $createParagraphNode,
@@ -211,7 +213,53 @@ function buildEditorState(bodyMarkdown, bodyJson) {
       return
     }
     $convertFromMarkdownString(markdown, NOTE_TRANSFORMERS)
+    $prepareNoteForEditing()
   }
+}
+
+/**
+ * Block images and drawings must sit on the root. Inside a paragraph they are
+ * contenteditable=false and the browser will not place a caret, so an existing
+ * note looks frozen. A paragraph after the last block is the place to type.
+ */
+function $prepareNoteForEditing() {
+  const root = $getRoot()
+  const nested = []
+  for (const child of root.getChildren()) {
+    if (typeof child.getChildren !== 'function') continue
+    for (const inner of child.getChildren()) {
+      if ($isDecoratorNode(inner) && !inner.isInline()) nested.push(inner)
+    }
+  }
+  for (const block of nested) {
+    const parent = block.getParent()
+    if (!parent || $isRootOrShadowRoot(parent)) continue
+    parent.insertAfter(block)
+    if (parent.getChildrenSize() === 0) parent.remove()
+  }
+  const last = root.getLastChild()
+  if (!last || ($isDecoratorNode(last) && !last.isInline())) {
+    root.append($createParagraphNode())
+  }
+}
+
+function $insertBlock(node) {
+  const selection = $getSelection()
+  if (!$isRangeSelection(selection)) $getRoot().selectEnd()
+  $insertNodes([node])
+  const parent = node.getParent()
+  if (parent && !$isRootOrShadowRoot(parent)) {
+    parent.insertAfter(node)
+    if (parent.getChildrenSize() === 0) parent.remove()
+  }
+  const next = node.getNextSibling()
+  if (next && next.getType() === 'paragraph') {
+    next.selectStart()
+    return
+  }
+  const paragraph = $createParagraphNode()
+  node.insertAfter(paragraph)
+  paragraph.selectStart()
 }
 
 const emptyToolbarState = {
@@ -298,16 +346,12 @@ function ImagesPlugin() {
         (payload) => {
           const src = payload?.src
           if (!src) return false
-          const imageNode = $createImageNode({
-            src,
-            altText: payload.altText || ''
-          })
-          $insertNodes([imageNode])
-          if ($isRootOrShadowRoot(imageNode.getParentOrThrow())) {
-            $wrapNodeInElement(imageNode, $createParagraphNode).selectEnd()
-          } else {
-            imageNode.selectNext()
-          }
+          $insertBlock(
+            $createImageNode({
+              src,
+              altText: payload.altText || ''
+            })
+          )
           return true
         },
         COMMAND_PRIORITY_EDITOR
@@ -315,13 +359,7 @@ function ImagesPlugin() {
       editor.registerCommand(
         INSERT_EXCALIDRAW_COMMAND,
         () => {
-          const node = $createExcalidrawNode()
-          $insertNodes([node])
-          if ($isRootOrShadowRoot(node.getParentOrThrow())) {
-            $wrapNodeInElement(node, $createParagraphNode).selectEnd()
-          } else {
-            node.selectNext()
-          }
+          $insertBlock($createExcalidrawNode())
           return true
         },
         COMMAND_PRIORITY_EDITOR
@@ -889,6 +927,55 @@ function DraggableBlocksPlugin({ anchorElem }) {
   )
 }
 
+/** Lift saved block images/drawings and leave a paragraph the caret can use. */
+function PrepareNotePlugin() {
+  const [editor] = useLexicalComposerContext()
+  useEffect(() => {
+    editor.update(() => {
+      $prepareNoteForEditing()
+    })
+  }, [editor])
+  return null
+}
+
+/**
+ * A click on a picture or drawing used to select that block and then ignore
+ * typing. Put the caret in the paragraph after it instead.
+ */
+function BlockCaretPlugin() {
+  const [editor] = useLexicalComposerContext()
+  useEffect(() => {
+    const onMouseDown = (event) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (target.closest('button, a, input, textarea, .note-editor__figure')) return
+      const host = target.closest('[data-lexical-decorator="true"]')
+      if (!host || !editor.getRootElement()?.contains(host)) return
+      event.preventDefault()
+      event.stopPropagation()
+      editor.update(() => {
+        const node = $getNearestNodeFromDOMNode(host)
+        const block = $isDecoratorNode(node) ? node : node?.getParent?.()
+        if (!$isDecoratorNode(block) || block.isInline()) return
+        const next = block.getNextSibling()
+        if (next && next.getType() === 'paragraph') {
+          next.selectStart()
+          return
+        }
+        const paragraph = $createParagraphNode()
+        block.insertAfter(paragraph)
+        paragraph.selectStart()
+      })
+      editor.focus()
+    }
+    return editor.registerRootListener((root, prev) => {
+      prev?.removeEventListener('mousedown', onMouseDown, true)
+      root?.addEventListener('mousedown', onMouseDown, true)
+    })
+  }, [editor])
+  return null
+}
+
 function MentionClickPlugin({ onOpenMention }) {
   const [editor] = useLexicalComposerContext()
   useEffect(() => {
@@ -986,6 +1073,7 @@ function NoteEditor({
                     className="note-editor__input"
                     aria-placeholder={placeholder}
                     placeholder={<div className="note-editor__placeholder">{placeholder}</div>}
+                    spellCheck={false}
                     onFocus={onFocus}
                     onBlur={onBlur}
                   />
@@ -1021,6 +1109,8 @@ function NoteEditor({
           />
           <MentionClickPlugin onOpenMention={onOpenMention} />
           <OnChangePlugin onChange={handleChange} ignoreSelectionChange />
+          <PrepareNotePlugin />
+          <BlockCaretPlugin />
           {autofocus ? <AutoFocusPlugin /> : null}
         </LexicalComposer>
       </div>
