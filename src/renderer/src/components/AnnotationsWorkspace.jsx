@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import NoteEditor from './NoteEditor'
+import { NotionSyncButton, NotionSyncConflict, NotionSyncNoteButton } from './NotionSyncControl'
 import { TreeSection } from './LessonTree'
 import KnowledgeGraphView from './KnowledgeGraphView'
 import { formatTime } from './StudySidePanel'
@@ -44,7 +45,15 @@ function topicTitlesOf(item, topics = []) {
     .filter(Boolean)
 }
 
-function AnnotationBranch({ node, nested, collapsedIds, onToggle, isRowActive, displayName, onOpen }) {
+function AnnotationBranch({
+  node,
+  nested,
+  collapsedIds,
+  onToggle,
+  isRowActive,
+  displayName,
+  onOpen
+}) {
   const open = !collapsedIds.has(node.id)
   return (
     <TreeSection
@@ -76,6 +85,7 @@ function AnnotationBranch({ node, nested, collapsedIds, onToggle, isRowActive, d
           onClick={() => onOpen(item)}
         >
           <span>{displayName(item)}</span>
+          {item.notion?.conflict ? <small>Conflicto con Notion</small> : null}
         </button>
       ))}
     </TreeSection>
@@ -85,7 +95,9 @@ function AnnotationBranch({ node, nested, collapsedIds, onToggle, isRowActive, d
 function sameSelection(item, selectedId) {
   if (!item || !selectedId) return false
   if (typeof selectedId === 'object') {
-    return item.id === selectedId.id && (item.coursePath || null) === (selectedId.coursePath || null)
+    return (
+      item.id === selectedId.id && (item.coursePath || null) === (selectedId.coursePath || null)
+    )
   }
   return item.id === selectedId
 }
@@ -285,7 +297,10 @@ function AnnotationsWorkspace({
 
   const graphRoomMax = useCallback((body = bodyRef.current) => {
     const list = listCollapsedRef.current ? 48 : 220
-    return Math.max(GRAPH_PANE_MIN, (body?.clientWidth || GRAPH_PANE_DEFAULT + list + 320) - list - 280)
+    return Math.max(
+      GRAPH_PANE_MIN,
+      (body?.clientWidth || GRAPH_PANE_DEFAULT + list + 320) - list - 280
+    )
   }, [])
 
   const applyGraphWidth = useCallback(() => {
@@ -502,6 +517,7 @@ function AnnotationsWorkspace({
   const savingRef = useRef(saving)
   const persistRef = useRef(null)
   const pendingFlushRef = useRef(null)
+  const appliedPullRef = useRef(0)
   const saveTimerRef = useRef(null)
 
   draftRef.current = draft
@@ -599,8 +615,7 @@ function AnnotationsWorkspace({
     async (item, incoming, { silent = true } = {}) => {
       if (!item) return
       const key = noteKey(item)
-      const snapshot =
-        noteKey(selectedRef.current) === key ? currentSnapshot() : incoming
+      const snapshot = noteKey(selectedRef.current) === key ? currentSnapshot() : incoming
       if (savingRef.current) {
         pendingFlushRef.current = { item, snapshot, silent }
         return
@@ -614,7 +629,8 @@ function AnnotationsWorkspace({
         const body = String(snapshot.draft?.markdown || snapshot.draft?.text || '').trim()
         const topicTitles = [...(snapshot.topics || [])]
         for (const title of hashtagTitlesFromBody(body)) {
-          if (!topicTitles.some((item) => topicKey(item) === topicKey(title))) topicTitles.push(title)
+          if (!topicTitles.some((item) => topicKey(item) === topicKey(title)))
+            topicTitles.push(title)
         }
         if (noteKey(selectedRef.current) === key) {
           draftTopicsRef.current = topicTitles
@@ -687,6 +703,7 @@ function AnnotationsWorkspace({
       void persistRef.current?.(prev, currentSnapshot(), { silent: true })
     }
     selectedRef.current = next
+    appliedPullRef.current = next?.notion?.pulledAt || 0
 
     if (!next) {
       setDraftTitle('')
@@ -709,6 +726,26 @@ function AnnotationsWorkspace({
     setSaveStatus('idle')
     // Only remount when switching notes — not after every save (updatedAt).
   }, [selected?.id, selected?.coursePath])
+
+  useEffect(() => {
+    if (!selected) return
+    const stamp = selected.notion?.pulledAt || 0
+    if (!stamp || stamp === appliedPullRef.current) return
+    appliedPullRef.current = stamp
+    if (dirtyRef.current) return
+    const title = selected.title || ''
+    draftTitleRef.current = title
+    setDraftTitle(title)
+    setDraftTopics(topicTitlesOf(selected, topics))
+    setDraft({
+      text: selected.body || '',
+      markdown: selected.body || '',
+      json: null
+    })
+    setEditorKey((key) => key + 1)
+    setDirty(false)
+    setSaveStatus('idle')
+  }, [selected, dirty, topics])
 
   useEffect(() => {
     if (saveStatus !== 'saved') return
@@ -802,8 +839,7 @@ function AnnotationsWorkspace({
           curso: selected.coursePath ? resolveCourseTitle(selected.coursePath, titles) : null,
           archivo: selected.lessonTitle || selected.projectTitle || 'Del curso',
           proyecto: selected.projectTitle || null,
-          tiempo:
-            typeof selected.timeSec === 'number' ? formatTime(selected.timeSec) : null,
+          tiempo: typeof selected.timeSec === 'number' ? formatTime(selected.timeSec) : null,
           creado: formatDateTime(selected.createdAt),
           actualizado:
             selected.updatedAt && selected.updatedAt !== selected.createdAt
@@ -919,7 +955,9 @@ function AnnotationsWorkspace({
     return libraryFindings
       .filter((finding) => (finding.topicIds || []).includes(tagViewId))
       .sort((a, b) =>
-        noteTitle(a, titleLabels).localeCompare(noteTitle(b, titleLabels), undefined, { sensitivity: 'base' })
+        noteTitle(a, titleLabels).localeCompare(noteTitle(b, titleLabels), undefined, {
+          sensitivity: 'base'
+        })
       )
   }, [tagViewId, libraryFindings, titleLabels])
 
@@ -1013,6 +1051,7 @@ function AnnotationsWorkspace({
               Ventana
             </button>
           ) : null}
+          <NotionSyncButton />
           {onCreate ? (
             <button type="button" className="btn btn--primary" onClick={onCreate}>
               Nueva
@@ -1165,6 +1204,7 @@ function AnnotationsWorkspace({
                       Guardar
                     </button>
                   ) : null}
+                  <NotionSyncNoteButton findingId={selected.id} />
                   <button type="button" className="btn btn--ghost" onClick={handleExport}>
                     Exportar
                   </button>
@@ -1177,6 +1217,23 @@ function AnnotationsWorkspace({
                   </button>
                 </div>
               </div>
+
+              <NotionSyncConflict
+                note={selected}
+                dirty={dirty}
+                localTitle={draftTitle}
+                localBody={draft.markdown || draft.text || ''}
+                onBeforeLocal={async () => {
+                  if (!dirtyRef.current || !selectedRef.current) return
+                  await persistRef.current?.(selectedRef.current, currentSnapshot(), {
+                    silent: true
+                  })
+                }}
+                onTookRemote={() => {
+                  dirtyRef.current = false
+                  setDirty(false)
+                }}
+              />
 
               <input
                 key={`title-${selected.id}`}
@@ -1226,7 +1283,9 @@ function AnnotationsWorkspace({
                     <span className="annotations-doc__prop-label">También anclada en</span>
                     <span>
                       {selected.anchors
-                        .filter((anchor) => anchor.coursePath && anchor.coursePath !== selected.coursePath)
+                        .filter(
+                          (anchor) => anchor.coursePath && anchor.coursePath !== selected.coursePath
+                        )
                         .map((anchor) => resolveCourseTitle(anchor.coursePath, titles))
                         .join(' · ') || 'varios puntos'}
                     </span>
@@ -1243,7 +1302,9 @@ function AnnotationsWorkspace({
                       type="button"
                       className="annotations-topics__chip"
                       onClick={() => {
-                        const updated = (draftTopicsRef.current || []).filter((item) => item !== title)
+                        const updated = (draftTopicsRef.current || []).filter(
+                          (item) => item !== title
+                        )
                         draftTopicsRef.current = updated
                         setDraftTopics(updated)
                         markDirty()
@@ -1293,14 +1354,8 @@ function AnnotationsWorkspace({
                   placeholder="Escribe tu anotación… [[ enlaza una nota, # añade un tema."
                   onChange={handleDraftChange}
                   enableTimestamp={typeof selected.timeSec === 'number'}
-                  currentTimeSec={
-                    typeof selected.timeSec === 'number' ? selected.timeSec : 0
-                  }
-                  onSeekTimestamp={
-                    onJump
-                      ? (timeSec) => onJump({ ...selected, timeSec })
-                      : null
-                  }
+                  currentTimeSec={typeof selected.timeSec === 'number' ? selected.timeSec : 0}
+                  onSeekTimestamp={onJump ? (timeSec) => onJump({ ...selected, timeSec }) : null}
                   mentionItems={mentionItems}
                   programs={programs}
                   onOpenMention={(mention) => {

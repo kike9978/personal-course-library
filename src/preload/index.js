@@ -83,6 +83,18 @@ const api = {
     return () => ipcRenderer.removeListener('course-zip-progress', listener)
   },
   exportMarkdownBundle: (payload) => ipcRenderer.invoke('export-markdown-bundle', payload),
+  getNotionSync: () => ipcRenderer.invoke('get-notion-sync'),
+  setNotionSync: (payload) => ipcRenderer.invoke('set-notion-sync', payload || {}),
+  syncNotionNow: (findingId) => ipcRenderer.invoke('sync-notion-now', findingId || null),
+  resolveNotionConflict: (findingId, choice) =>
+    ipcRenderer.invoke('resolve-notion-conflict', { findingId, choice }),
+  resolveNotionDelete: (findingId, choice) =>
+    ipcRenderer.invoke('resolve-notion-delete', { findingId, choice }),
+  onNotionSync: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('notion-sync', listener)
+    return () => ipcRenderer.removeListener('notion-sync', listener)
+  },
   openProjectLink: (coursePath, projectId) =>
     ipcRenderer.invoke('open-project-link', { coursePath, projectId }),
   revealProjectLink: (coursePath, projectId) =>

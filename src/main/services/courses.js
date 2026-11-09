@@ -201,6 +201,37 @@ export function hiddenCoursePathSet() {
   return hidden
 }
 
+/** Folder name → title from courseProps.json. Missing files fall back later. */
+export function readCourseTitleMap() {
+  let libraryPath
+  try {
+    libraryPath = requireLibraryPath()
+  } catch {
+    return {}
+  }
+  let entries = []
+  try {
+    entries = fsSync.readdirSync(libraryPath, { withFileTypes: true })
+  } catch {
+    return {}
+  }
+  const titles = {}
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    try {
+      const raw = fsSync.readFileSync(
+        path.join(libraryPath, entry.name, 'courseProps.json'),
+        'utf8'
+      )
+      const title = String(JSON.parse(raw)?.title || '').trim()
+      if (title) titles[entry.name] = title
+    } catch {
+      // The folder name is the title when this course has no props yet.
+    }
+  }
+  return titles
+}
+
 export async function listCourseDirs() {
   const libraryPath = requireLibraryPath()
   const entries = await fs.readdir(libraryPath, { withFileTypes: true })

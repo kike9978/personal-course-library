@@ -7734,3 +7734,92 @@ button.annotations-doc__save-status {
   font-size: 0.82rem;
   box-shadow: none;
 }
+
+.notion-sync-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  line-height: 1.15;
+}
+
+.notion-sync-btn small {
+  color: var(--clr-ink-soft);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.notion-sync__enable {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+}
+
+.notion-sync-dialog {
+  max-width: 34rem;
+}
+
+.notion-sync-error {
+  margin: 0;
+  color: var(--clr-coral-deep);
+  font-size: 0.86rem;
+}
+
+.notion-sync__deletes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.notion-sync__deletes h4,
+.notion-conflict h3,
+.notion-conflict h4 {
+  margin: 0;
+  font-family: var(--font-display);
+}
+
+.notion-sync__deletes p,
+.notion-conflict p {
+  margin: 0;
+  color: var(--clr-ink-soft);
+  font-size: 0.88rem;
+}
+
+.notion-sync__deletes article,
+.notion-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: var(--border-thick);
+  border-radius: var(--radius-md);
+  background: var(--clr-surface);
+}
+
+.notion-conflict {
+  margin-bottom: 1rem;
+}
+
+.notion-conflict__cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.notion-conflict pre,
+.notion-sync__deletes pre {
+  margin: 0.35rem 0 0;
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  color: var(--clr-ink);
+}
+
+@media (max-width: 720px) {
+  .notion-conflict__cols {
+    grid-template-columns: 1fr;
+  }
+}

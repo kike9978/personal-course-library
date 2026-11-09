@@ -74,8 +74,20 @@ import {
   upsertPlaylist,
   deletePlaylist,
   getPlaylistIntent,
-  savePlaylistIntent
+  savePlaylistIntent,
+  setNoteWriteHook
 } from './services/learningStore.js'
+import {
+  enqueueNotionDelete,
+  enqueueNotionUpsert,
+  getNotionSyncStatus,
+  pollNotionChanges,
+  resolveNotionConflict,
+  resolveNotionDelete,
+  saveNotionSettings,
+  startNotionSync,
+  syncNotionNow
+} from './services/notionSync.js'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -413,6 +425,10 @@ async function listCatalogCourses() {
 }
 
 function registerIpcHandlers() {
+  setNoteWriteHook((event) => {
+    if (event.op === 'delete') enqueueNotionDelete(event.finding)
+    else enqueueNotionUpsert(event.id)
+  })
   ipcMain.handle('get-library-path', () => {
     const libraryPath = getLibraryPath()
     return {
@@ -887,6 +903,16 @@ function registerIpcHandlers() {
     }
   })
 
+  ipcMain.handle('get-notion-sync', () => getNotionSyncStatus())
+  ipcMain.handle('set-notion-sync', (_event, payload = {}) => saveNotionSettings(payload))
+  ipcMain.handle('sync-notion-now', (_event, findingId) => syncNotionNow(findingId || null))
+  ipcMain.handle('resolve-notion-conflict', (_event, { findingId, choice } = {}) =>
+    resolveNotionConflict(findingId, choice)
+  )
+  ipcMain.handle('resolve-notion-delete', (_event, { findingId, choice } = {}) =>
+    resolveNotionDelete(findingId, choice)
+  )
+
   ipcMain.handle('open-project-link', async (_event, { coursePath, projectId }) => {
     const linked = getProjectLinkedPath(coursePath, projectId)
     await openAbsolutePath(linked)
@@ -905,6 +931,13 @@ app.whenReady().then(() => {
 
   registerCourseMediaProtocol()
   registerIpcHandlers()
+  startNotionSync({
+    notifyNotes: () => broadcastToWindows('notes-changed', {}),
+    notifyStatus: (status) => broadcastToWindows('notion-sync', status)
+  })
+  app.on('browser-window-focus', () => {
+    pollNotionChanges()
+  })
   startLibraryWatcher()
 
   app.on('browser-window-created', (_, window) => {

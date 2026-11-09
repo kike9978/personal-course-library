@@ -59,6 +59,29 @@ function makeId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+let noteWriteHook = null
+let noteWriteSuppress = 0
+
+/** Main-process listener for saves and deletes. Sync uses this to enqueue work. */
+export function setNoteWriteHook(fn) {
+  noteWriteHook = typeof fn === 'function' ? fn : null
+}
+
+/** Store writes from the sync worker must not enqueue another sync. */
+export function withoutNoteWriteHook(fn) {
+  noteWriteSuppress += 1
+  try {
+    return fn()
+  } finally {
+    noteWriteSuppress -= 1
+  }
+}
+
+function emitNoteWrite(event) {
+  if (noteWriteSuppress > 0 || !noteWriteHook) return
+  noteWriteHook(event)
+}
+
 function ensureArrays(course) {
   if (!Array.isArray(course.notes)) course.notes = []
   if (!Array.isArray(course.bookmarks)) course.bookmarks = []
@@ -660,6 +683,7 @@ export function upsertNote(coursePath, payload) {
     finding.anchors = [...rest, next]
   }
 
+  let savedId = payload.id
   if (payload.id) {
     const finding = store.findings.find((item) => item.id === payload.id)
     if (!finding) throw new Error('Anotación no encontrada')
@@ -688,17 +712,76 @@ export function upsertNote(coursePath, payload) {
     if (!finding.anchors.length && key) finding.anchors = [normalizeAnchor({}, key)]
     applyTopics(finding, body)
     store.findings.push(finding)
+    savedId = finding.id
   }
 
   writeStore(store)
+  emitNoteWrite({ op: 'upsert', id: savedId })
   return key ? listNotes(coursePath) : listAllNotes()
 }
 
 export function deleteNote(coursePath, noteId) {
   const store = readStore()
+  const removed = (store.findings || []).find((finding) => finding.id === noteId) || null
   store.findings = (store.findings || []).filter((finding) => finding.id !== noteId)
   writeStore(store)
+  if (removed) emitNoteWrite({ op: 'delete', finding: structuredClone(removed) })
   return courseKey(coursePath) ? listNotes(coursePath) : listAllNotes()
+}
+
+export function listFindingRecords() {
+  return structuredClone(readStore().findings || [])
+}
+
+export function readFinding(id) {
+  const finding = (readStore().findings || []).find((item) => item.id === id)
+  return finding ? structuredClone(finding) : null
+}
+
+/** Apply a mutation to one finding and return the stored copy. Does not enqueue sync. */
+export function mutateFinding(id, mutate) {
+  const store = readStore()
+  const finding = (store.findings || []).find((item) => item.id === id)
+  if (!finding) return null
+  mutate(finding)
+  writeStore(store)
+  return structuredClone(finding)
+}
+
+export function forkFinding(sourceId, { title, body } = {}) {
+  const store = readStore()
+  const source = (store.findings || []).find((item) => item.id === sourceId)
+  if (!source) throw new Error('Anotación no encontrada')
+  const copy = {
+    id: makeId(),
+    title: title === undefined ? source.title : title,
+    body: body === undefined ? source.body || '' : body,
+    bodyHtml: null,
+    bodyJson: null,
+    topicIds: [...(source.topicIds || [])],
+    anchors: structuredClone(source.anchors || []),
+    color: source.color ?? null,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  }
+  store.findings.push(copy)
+  writeStore(store)
+  emitNoteWrite({ op: 'upsert', id: copy.id })
+  return structuredClone(copy)
+}
+
+export function restoreFinding(snapshot) {
+  if (!snapshot?.id) throw new Error('Anotación no encontrada')
+  const store = readStore()
+  const existing = (store.findings || []).find((item) => item.id === snapshot.id)
+  if (existing) {
+    Object.assign(existing, structuredClone(snapshot), { id: snapshot.id })
+  } else {
+    store.findings.push(structuredClone(snapshot))
+  }
+  writeStore(store)
+  emitNoteWrite({ op: 'upsert', id: snapshot.id })
+  return snapshot.id
 }
 
 export function listTopics() {

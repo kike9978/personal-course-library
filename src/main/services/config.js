@@ -62,6 +62,29 @@ export function clearLibraryPath() {
   writeConfig(config)
 }
 
+export function getNotionConfig() {
+  const notion = readConfig().notion
+  if (!notion || typeof notion !== 'object') {
+    return { enabled: false, token: '', databaseId: '' }
+  }
+  return {
+    enabled: notion.enabled === true,
+    token: typeof notion.token === 'string' ? notion.token : '',
+    databaseId: typeof notion.databaseId === 'string' ? notion.databaseId : ''
+  }
+}
+
+export function setNotionConfig(notion) {
+  const config = readConfig()
+  config.notion = {
+    enabled: notion.enabled === true,
+    token: typeof notion.token === 'string' ? notion.token : '',
+    databaseId: typeof notion.databaseId === 'string' ? notion.databaseId : ''
+  }
+  writeConfig(config)
+  return getNotionConfig()
+}
+
 export function isLibraryPathValid(libraryPath = getLibraryPath()) {
   if (!libraryPath) return false
   try {
