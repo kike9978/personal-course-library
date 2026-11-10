@@ -2,6 +2,9 @@ import {
   blocksToBody,
   bodyToBlocks,
   chunkRichText,
+  findingIdFromBlocks,
+  markerBlocks,
+  markerFromBlocks,
   normalizeBody,
   normalizeTitle,
   plainRichText
@@ -218,7 +221,8 @@ export function createNotionClient({
       pageId: page.id,
       title: pageTitle(page, titleName),
       editedAt: page.last_edited_time || null,
-      archived: page.archived === true || page.in_trash === true
+      archived: page.archived === true || page.in_trash === true,
+      icon: page.icon?.type === 'emoji' ? page.icon.emoji : null
     }
   }
 
@@ -285,25 +289,40 @@ export function createNotionClient({
       const summary = pageSummary(page, names.titleName)
       if (!summary || summary.archived) return null
       const blocks = await listChildren(pageId)
-      return { ...summary, body: blocksToBody(blocks) }
+      const fromProperty = plainRichText(page.properties?.[names.findingName]?.rich_text).trim()
+      return {
+        ...summary,
+        body: blocksToBody(blocks),
+        findingId: findingIdFromBlocks(blocks) || fromProperty,
+        marker: markerFromBlocks(blocks)
+      }
     } catch (error) {
       if (error.status === 404 || error.code === 'object_not_found') return null
       throw error
     }
   }
 
-  async function writeBody(pageId, body) {
+  async function replaceContent(pageId, children) {
     const existing = await listChildren(pageId)
     for (const block of existing) {
-      if (block.archived || block.in_trash) continue
+      if (block.type === 'child_page' || block.archived || block.in_trash) continue
       await request(`/blocks/${block.id}`, { method: 'DELETE' })
     }
-    const children = bodyToBlocks(body)
     if (!children.length) return
     await request(`/blocks/${pageId}/children`, {
       method: 'PATCH',
       body: { children }
     })
+  }
+
+  async function writeBody(pageId, body, findingId) {
+    const existing = await listChildren(pageId)
+    const stamped = findingIdFromBlocks(existing)
+    await replaceContent(pageId, bodyToBlocks(body, stamped || findingId || null))
+  }
+
+  async function writeMarker(pageId, marker) {
+    await replaceContent(pageId, markerBlocks(marker))
   }
 
   function pageTitleProperties(title, inDatabase, names) {
@@ -316,9 +335,9 @@ export function createNotionClient({
     return emoji ? { type: 'emoji', emoji } : undefined
   }
 
-  async function createPage(findingId, title, body, parentPageId = null, emoji = null) {
+  async function createPage(findingId, title, body, parentPageId = null, emoji = null, marker = null) {
     const names = await loadSchema()
-    const children = bodyToBlocks(body)
+    const children = marker ? markerBlocks(marker) : bodyToBlocks(body, findingId)
     const inDatabase = !parentPageId
     const icon = emojiIcon(emoji)
     const page = await request('/pages', {
@@ -383,7 +402,7 @@ export function createNotionClient({
       method: 'PATCH',
       body: { properties, ...(icon ? { icon } : {}) }
     })
-    await writeBody(pageId, normalizeBody(body))
+    await writeBody(pageId, normalizeBody(body), findingId)
     return readPage(pageId)
   }
 
@@ -397,7 +416,10 @@ export function createNotionClient({
     const blocks = await listChildren(pageId)
     return blocks
       .filter((block) => block.type === 'child_page' && !block.archived && !block.in_trash)
-      .map((block) => ({ pageId: block.id }))
+      .map((block) => ({
+        pageId: block.id,
+        editedAt: block.last_edited_time || null
+      }))
   }
 
   async function renamePage(pageId, title) {
@@ -457,6 +479,7 @@ export function createNotionClient({
     createPage,
     createNodePage,
     updatePage,
+    writeMarker,
     renamePage,
     setPageIcon,
     listChildPages,

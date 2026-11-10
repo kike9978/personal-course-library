@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  anchorFromNotion,
   blocksToBody,
   bodyToBlocks,
   decideDelete,
   decideSync,
+  filePageMarker,
+  findingIdFromBlocks,
+  markerBlocks,
   normalizeDatabaseId,
   notionErrorMessage,
   notionPlace,
@@ -24,6 +28,42 @@ describe('notion wire text', () => {
     assert.equal(blocks.length, 1)
     assert.equal(blocks[0].type, 'code')
     assert.equal(blocksToBody(blocks), 'Nota\n\n@[time:12.5](0:12)\n\n[[lesson|Uno|abc]]')
+  })
+
+  it('keeps the finding id out of the note text', () => {
+    const blocks = bodyToBlocks('Hola\n\nmundo', 'note-1')
+    assert.equal(blocksToBody(blocks), 'Hola\n\nmundo')
+    assert.equal(findingIdFromBlocks(blocks), 'note-1')
+    assert.equal(blocksToBody(bodyToBlocks('', 'note-1')), '')
+    assert.equal(blocksToBody(markerBlocks('node:file:course:pack::a.mp4@lesson')), '')
+  })
+
+  it('rebuilds an anchor from the shared course and file markers', () => {
+    const lesson = anchorFromNotion({
+      courseMarker: 'node:course:pack',
+      fileMarker: 'node:file:course:pack::01 Orientation.mp4@lesson',
+      fileTitle: 'Orientation'
+    })
+    assert.equal(lesson.coursePath, 'pack')
+    assert.equal(lesson.lessonRelativePath, '01 Orientation.mp4')
+    assert.equal(lesson.lessonTitle, 'Orientation')
+
+    const project = anchorFromNotion({
+      courseMarker: 'node:course:pack',
+      fileMarker: 'node:file:course:pack::proj-1@project',
+      fileTitle: 'Reel'
+    })
+    assert.equal(project.projectId, 'proj-1')
+    assert.equal(project.projectTitle, 'Reel')
+    assert.equal(project.lessonRelativePath, null)
+
+    const journal = anchorFromNotion({
+      courseMarker: 'node:course:pack',
+      fileMarker: 'node:file:course:pack::__course__@course',
+      fileTitle: 'Del curso'
+    })
+    assert.equal(journal.coursePath, 'pack')
+    assert.equal(journal.lessonRelativePath, null)
   })
 
   it('reads a paragraph Notion added under the code block', () => {
@@ -57,6 +97,8 @@ describe('notion wire text', () => {
     assert.equal(placed.courseTitle, '2D Action Animation Starter Pack')
     assert.equal(placed.fileTitle, 'Orientation')
     assert.equal(placed.courseKey, 'course:pack')
+    assert.equal(placed.fileKind, 'lesson')
+    assert.equal(filePageMarker(placed), `node:${placed.fileKey}@lesson`)
 
     const collapsed = notionPlace(
       {

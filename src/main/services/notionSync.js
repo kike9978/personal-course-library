@@ -12,9 +12,13 @@ import {
   restoreFinding,
   withoutNoteWriteHook
 } from './learningStore.js'
+import { findingFromLegacyNote } from '../../shared/knowledgeGraph.js'
 import {
+  anchorFromNotion,
   decideDelete,
   decideSync,
+  fileKeyFromMarker,
+  filePageMarker,
   isRetryableNotionError,
   normalizeBody,
   databaseIdCandidates,
@@ -27,6 +31,8 @@ import {
 const STATE_FILE = 'notion-sync.json'
 
 let jobs = new Map()
+const sharedIdsConfirmed = new Set()
+const sharedFileInfo = new Map()
 let timer = null
 let pollTimer = null
 let remoteCheck = null
@@ -219,17 +225,45 @@ async function ensureCoursePage(client, place) {
   return page.pageId
 }
 
+function cachedFileKey(pageId) {
+  for (const [key, id] of Object.entries(readNodes())) {
+    if (id === pageId) return key
+  }
+  return ''
+}
+
 async function ensureFilePage(client, place, coursePageId) {
+  const marker = filePageMarker(place)
   const cached = readNodes()[place.fileKey]
   if (cached) {
     const parent = await client.pageParent(cached)
     if (parent?.type === 'page_id' && parent.id === coursePageId) {
       const current = await client.readPage(cached)
       if (current && current.title !== place.fileTitle) await client.renamePage(cached, place.fileTitle)
+      if (current && current.marker !== marker) await client.writeMarker(cached, marker)
       if (current) return cached
     }
   }
-  const created = await client.createPage(null, place.fileTitle, '', coursePageId, PAGE_ICONS.file)
+  const children = await client.listChildPages(coursePageId)
+  for (const child of children) {
+    const page = await client.readPage(child.pageId)
+    if (!page || page.findingId) continue
+    const sameMarker = Boolean(marker) && page.marker === marker
+    const sameTitle = page.title === place.fileTitle && page.icon === PAGE_ICONS.file
+    if (!sameMarker && !sameTitle) continue
+    if (page.marker !== marker) await client.writeMarker(page.pageId, marker)
+    if (page.title !== place.fileTitle) await client.renamePage(page.pageId, place.fileTitle)
+    writeNode(place.fileKey, page.pageId)
+    return page.pageId
+  }
+  const created = await client.createPage(
+    null,
+    place.fileTitle,
+    '',
+    coursePageId,
+    PAGE_ICONS.file,
+    marker
+  )
   writeNode(place.fileKey, created.pageId)
   return created.pageId
 }
@@ -259,11 +293,11 @@ async function saveNotePage(client, finding, remote) {
     } else {
       const title = finding.title
       const body = finding.body
-      page = await client.createPage(null, title, body, parentId, PAGE_ICONS.note)
+      page = await client.createPage(finding.id, title, body, parentId, PAGE_ICONS.note)
       await client.archivePage(remote.pageId)
     }
   } else {
-    page = await client.createPage(null, finding.title, finding.body, parentId, PAGE_ICONS.note)
+    page = await client.createPage(finding.id, finding.title, finding.body, parentId, PAGE_ICONS.note)
   }
   await retireFlatCopies(client, finding.id, page.pageId)
   return page
@@ -276,7 +310,13 @@ async function placeExisting(client, finding, remote) {
     await retireFlatCopies(client, finding.id, remote.pageId)
     return remote
   }
-  const created = await client.createPage(null, remote.title, remote.body, parentId, PAGE_ICONS.note)
+  const created = await client.createPage(
+    finding.id,
+    remote.title,
+    remote.body,
+    parentId,
+    PAGE_ICONS.note
+  )
   await client.archivePage(remote.pageId)
   await retireFlatCopies(client, finding.id, created.pageId)
   return { ...remote, pageId: created.pageId, editedAt: created.editedAt || remote.editedAt }
@@ -472,9 +512,187 @@ async function flushQueued() {
   }
 }
 
+function makeFindingId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function linkedFinding(page) {
+  return listFindingRecords().find(
+    (finding) =>
+      finding.notion?.pageId === page.pageId || (page.findingId && finding.id === page.findingId)
+  )
+}
+
+function shouldRetarget(finding, anchor) {
+  const current = finding.anchors?.[0] || {}
+  const provisional = String(current.lessonRelativePath || '').startsWith('notion-page:')
+  const incomingProvisional = String(anchor.lessonRelativePath || '').startsWith('notion-page:')
+  if (!anchor.coursePath && !anchor.lessonRelativePath && !anchor.projectId) return false
+  if (!current.coursePath && (anchor.coursePath || anchor.lessonRelativePath || anchor.projectId)) {
+    return true
+  }
+  return provisional && Boolean(anchor.lessonRelativePath) && !incomingProvisional
+}
+
+async function takeSharedNote(client, pageId, place, seen) {
+  if (!pageId || seen.has(pageId)) return false
+  const anchor = anchorFromNotion({
+    courseMarker: place.courseMarker,
+    fileMarker: place.fileMarker,
+    fileTitle: place.fileTitle,
+    filePageId: place.filePageId
+  })
+  const known = listFindingRecords().find((finding) => finding.notion?.pageId === pageId)
+  if (
+    known &&
+    sharedIdsConfirmed.has(pageId) &&
+    place.editedAt &&
+    known.notion?.remoteEditedAt === place.editedAt &&
+    !shouldRetarget(known, anchor)
+  ) {
+    seen.add(pageId)
+    return false
+  }
+  seen.add(pageId)
+  const page = await client.readPage(pageId)
+  if (!page) return false
+  const existing = linkedFinding(page)
+  if (existing) {
+    let changed = false
+    if (shouldRetarget(existing, anchor)) {
+      const next = findingFromLegacyNote({ ...existing, anchors: [anchor] }, anchor.coursePath)
+      withoutNoteWriteHook(() => {
+        mutateFinding(existing.id, (finding) => {
+          finding.anchors = next.anchors
+        })
+      })
+      changed = true
+    }
+    if (!page.findingId && wireHash(existing.title, existing.body) === wireHash(page.title, page.body)) {
+      const stamped = await client.updatePage(
+        page.pageId,
+        existing.id,
+        page.title,
+        page.body,
+        page.icon
+      )
+      const hash = wireHash(stamped?.title, stamped?.body)
+      if (stamped?.pageId) {
+        withoutNoteWriteHook(() => applyNotion(existing.id, cursorFrom(stamped, hash)))
+        sharedIdsConfirmed.add(page.pageId)
+      }
+      return changed
+    }
+    if (page.findingId) sharedIdsConfirmed.add(page.pageId)
+    if (existing.notion?.conflict) return changed
+    if (page.editedAt && page.editedAt !== existing.notion?.remoteEditedAt) {
+      jobs.set(existing.id, { op: 'upsert' })
+    }
+    return changed
+  }
+
+  let adopted = page
+  const id = page.findingId || makeFindingId()
+  if (!page.findingId) {
+    adopted =
+      (await client.updatePage(page.pageId, id, page.title, page.body, page.icon)) || page
+    if (adopted?.pageId) sharedIdsConfirmed.add(adopted.pageId)
+  } else {
+    sharedIdsConfirmed.add(page.pageId)
+  }
+  const hash = wireHash(adopted.title, adopted.body)
+  const finding = findingFromLegacyNote(
+    {
+      id,
+      title: adopted.title,
+      body: adopted.body,
+      anchors: [anchor]
+    },
+    anchor.coursePath
+  )
+  finding.notion = cursorFrom(adopted, hash, { pulledAt: Date.now() })
+  withoutNoteWriteHook(() => restoreFinding(finding))
+  return true
+}
+
+async function importSharedNotes(client, rows) {
+  let changed = false
+  const seen = new Set()
+  for (const row of rows || []) {
+    const courseMarker = String(row.nodeMarker || '')
+    if (!courseMarker.startsWith('node:')) {
+      if (row.findingId && !String(row.findingId).startsWith('node:')) {
+        changed =
+          (await takeSharedNote(client, row.pageId, { editedAt: row.editedAt }, seen)) || changed
+      }
+      continue
+    }
+    const children = await client.listChildPages(row.pageId)
+    for (const child of children) {
+      const cachedKey = cachedFileKey(child.pageId)
+      const remembered = sharedFileInfo.get(child.pageId)
+      let fileMarker = remembered?.fileMarker || (cachedKey ? `node:${cachedKey}` : '')
+      let fileTitle = remembered?.fileTitle || ''
+      const knownFile = Boolean(cachedKey) || Boolean(remembered)
+      if (!knownFile && sharedIdsConfirmed.has(child.pageId)) {
+        changed =
+          (await takeSharedNote(
+            client,
+            child.pageId,
+            { courseMarker, editedAt: child.editedAt },
+            seen
+          )) || changed
+        continue
+      }
+      if (!knownFile) {
+        const page = await client.readPage(child.pageId)
+        if (!page) continue
+        const nested = await client.listChildPages(child.pageId)
+        const isFile = Boolean(
+          (page.marker && page.marker.startsWith('node:')) ||
+            page.icon === PAGE_ICONS.file ||
+            nested.length
+        )
+        if (!isFile) {
+          changed =
+            (await takeSharedNote(
+              client,
+              child.pageId,
+              { courseMarker, editedAt: child.editedAt },
+              seen
+            )) || changed
+          continue
+        }
+        fileMarker = page.marker || ''
+        fileTitle = page.title || ''
+        sharedFileInfo.set(child.pageId, { fileMarker, fileTitle })
+        const fileKey = fileKeyFromMarker(page.marker)
+        if (fileKey) writeNode(fileKey, page.pageId)
+        seen.add(child.pageId)
+      }
+      const notes = await client.listChildPages(child.pageId)
+      for (const note of notes) {
+        changed =
+          (await takeSharedNote(
+            client,
+            note.pageId,
+            {
+              courseMarker,
+              fileMarker,
+              fileTitle,
+              filePageId: child.pageId,
+              editedAt: note.editedAt
+            },
+            seen
+          )) || changed
+      }
+    }
+  }
+  if (changed) notifyNotes()
+}
+
 async function queuePending() {
   if (!getNotionConfig().enabled) return
-  const findings = listFindingRecords().filter((finding) => !finding.notion?.conflict)
   let remotePages = null
   let recent = []
   const client = clientFromConfig()
@@ -494,7 +712,14 @@ async function queuePending() {
     } catch {
       // The next pass sets any icon that did not land.
     }
+    try {
+      await importSharedNotes(client, remotePages)
+    } catch (error) {
+      lastError = describeError(error)
+    }
   }
+  const findings = listFindingRecords().filter((finding) => !finding.notion?.conflict)
+  const courseTitles = readCourseTitleMap()
   const remoteByFinding = new Map()
   for (const page of remotePages || []) {
     if (page.findingId && !String(page.findingId).startsWith('node:')) {
@@ -512,7 +737,9 @@ async function queuePending() {
     const remoteChanged = Boolean(
       remote?.editedAt && remote.editedAt !== finding.notion?.remoteEditedAt
     )
-    const needsPlace = Boolean(row && row.parentType !== 'page_id')
+    const place = notionPlace(finding, courseTitles)
+    const canPlace = Boolean(place.fileKey) || place.courseKey !== 'course:__loose__'
+    const needsPlace = Boolean(row && row.parentType !== 'page_id' && canPlace)
     const missingHere =
       Array.isArray(remotePages) &&
       Boolean(finding.notion?.pageId) &&

@@ -144,12 +144,14 @@ describe('notion client', () => {
     }
 
     const client = createNotionClient({ token: 'secret', databaseId: 'db-1', fetchImpl })
-    const page = await client.createPage(null, 'new note', 'Hola', 'file-page', '📝')
+    const page = await client.createPage('note-id', 'new note', 'Hola', 'file-page', '📝')
     const created = calls.find((call) => call.method === 'POST' && call.url.endsWith('/pages'))
     assert.equal(created.body.parent.page_id, 'file-page')
     assert.equal(created.body.icon.emoji, '📝')
     assert.equal(created.body.properties.title.title[0].text.content, 'new note')
     assert.equal(created.body.properties.Finding, undefined)
+    assert.equal(created.body.children[0].code.caption[0].text.content, 'finding:note-id')
+    assert.equal(created.body.children[0].code.rich_text[0].text.content, 'Hola')
     assert.equal(page.pageId, 'note-1')
   })
 })

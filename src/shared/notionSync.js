@@ -77,10 +77,88 @@ export function notionPlace(finding, courseTitles = {}) {
     fileTitle = null
   }
   const courseKey = `course:${coursePath ? folderName(coursePath) : '__loose__'}`
+  let fileKind = null
+  if (fileTitle && anchor.projectId) fileKind = 'project'
+  else if (fileTitle && anchor.lessonRelativePath) fileKind = 'lesson'
+  else if (fileTitle) fileKind = 'course'
   const fileKey = fileTitle
     ? `file:${courseKey}::${anchor.projectId || anchor.lessonRelativePath || '__course__'}`
     : null
-  return { courseTitle, fileTitle, courseKey, fileKey }
+  return { courseTitle, fileTitle, courseKey, fileKey, fileKind }
+}
+
+/** Caption on the file page so another install can find the same page. */
+export function filePageMarker(place) {
+  if (!place?.fileKey) return ''
+  const kind = place.fileKind || 'course'
+  return `node:${place.fileKey}@${kind}`
+}
+
+function blockCaption(block) {
+  const type = block?.type
+  return plainRichText(block?.[type]?.caption).trim()
+}
+
+/** Id carried on the note page itself. Nested pages cannot hold database properties. */
+export function findingIdFromBlocks(blocks) {
+  for (const block of blocks || []) {
+    const caption = blockCaption(block)
+    if (caption.startsWith('finding:')) return caption.slice('finding:'.length).trim()
+  }
+  return ''
+}
+
+export function markerFromBlocks(blocks) {
+  for (const block of blocks || []) {
+    const caption = blockCaption(block)
+    if (caption.startsWith('node:')) return caption
+  }
+  return ''
+}
+
+export function fileKeyFromMarker(marker) {
+  const raw = String(marker || '').replace(/^node:/, '')
+  const fileKey = raw.replace(/@(lesson|project|course)$/, '')
+  return fileKey.startsWith('file:') ? fileKey : ''
+}
+
+/**
+ * Rebuild the sidebar anchor from the course row and the file page.
+ * A file page that was never stamped falls back to its title.
+ */
+export function anchorFromNotion({ courseMarker, fileMarker, fileTitle, filePageId } = {}) {
+  const courseKey = String(courseMarker || '').replace(/^node:/, '')
+  const folder = courseKey.startsWith('course:') ? courseKey.slice('course:'.length) : ''
+  const coursePath = folder && folder !== '__loose__' ? folder : null
+  const anchor = {
+    coursePath,
+    lessonRelativePath: null,
+    lessonTitle: null,
+    projectId: null,
+    projectTitle: null
+  }
+  const raw = String(fileMarker || '').replace(/^node:/, '')
+  const kindMatch = raw.match(/@(lesson|project|course)$/)
+  const kind = kindMatch ? kindMatch[1] : ''
+  const fileKey = kind ? raw.slice(0, -(kind.length + 1)) : raw
+  const prefix = `file:${courseKey}::`
+  const rest = fileKey.startsWith(prefix) ? fileKey.slice(prefix.length) : ''
+  if (kind === 'course' || rest === '__course__') return anchor
+  if (kind === 'project' || (!kind && rest && !/[./\\]/.test(rest))) {
+    anchor.projectId = rest
+    anchor.projectTitle = fileTitle || null
+    return anchor
+  }
+  if (rest) {
+    anchor.lessonRelativePath = rest
+    anchor.lessonTitle = fileTitle || null
+    return anchor
+  }
+  if (filePageId) {
+    anchor.lessonRelativePath = `notion-page:${filePageId}`
+    anchor.lessonTitle = fileTitle || null
+  }
+  return anchor
 }
 
 function formatNotionId(hex) {
@@ -138,17 +216,43 @@ export function plainRichText(items) {
   return (items || []).map((item) => item.plain_text ?? item.text?.content ?? '').join('')
 }
 
-/** One markdown code block so a note is a single Notion write. */
-export function bodyToBlocks(body) {
+function captionRichText(value) {
+  const text = String(value || '').trim()
+  if (!text) return undefined
+  return [{ type: 'text', text: { content: text } }]
+}
+
+/** One markdown code block so a note is a single Notion write. The caption keeps the id. */
+export function bodyToBlocks(body, findingId = null) {
   const text = normalizeBody(body)
-  if (!text) return []
+  const id = String(findingId || '').trim()
+  if (!text && !id) return []
+  const caption = captionRichText(id ? `finding:${id}` : '')
   return [
     {
       object: 'block',
       type: 'code',
       code: {
         language: 'markdown',
-        rich_text: chunkRichText(text)
+        rich_text: chunkRichText(text || ' '),
+        ...(caption ? { caption } : {})
+      }
+    }
+  ]
+}
+
+/** Marker block for a file page. It is not note text. */
+export function markerBlocks(marker) {
+  const caption = captionRichText(marker)
+  if (!caption) return []
+  return [
+    {
+      object: 'block',
+      type: 'code',
+      code: {
+        language: 'plain text',
+        rich_text: chunkRichText(String(marker)),
+        caption
       }
     }
   ]
@@ -159,7 +263,9 @@ export function blocksToBody(blocks) {
   for (const block of blocks || []) {
     const type = block?.type
     if (!TEXT_BLOCK_TYPES.has(type)) continue
-    parts.push(plainRichText(block[type]?.rich_text))
+    if (blockCaption(block).startsWith('node:')) continue
+    const text = plainRichText(block[type]?.rich_text).replace(/\u200b/g, '')
+    if (text) parts.push(text)
   }
   return normalizeBody(parts.join('\n'))
 }

@@ -155,8 +155,9 @@ export function NotionSyncButton() {
             <p className="dialog__lead">
               Apagado, las anotaciones se quedan en este equipo. Encendido, el título y el texto se
               envían al guardar y al abrir la app. Cada curso es una página, cada archivo queda
-              dentro, y la nota dentro de ese archivo. Si los dos lados cambiaron, la nota espera a
-              que elijas una versión. El cuerpo de la página en Notion es el texto de la nota.
+              dentro, y la nota dentro de ese archivo. Otra copia de la app conectada a esta misma
+              base recoge esas notas. Si los dos lados cambiaron, la nota espera a que elijas una
+              versión. El cuerpo de la página en Notion es el texto de la nota.
             </p>
             <p className="notion-sync__enable">
               {status?.enabled ? 'La sincronización está encendida.' : 'La sincronización está apagada.'}
