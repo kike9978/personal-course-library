@@ -14,6 +14,8 @@ import {
   markerBlocks,
   noteAssetNames,
   normalizeDatabaseId,
+  isRetryableNotionError,
+  notionAssetsToUpload,
   notionErrorMessage,
   notionPlace,
   wireHash
@@ -240,5 +242,44 @@ describe('notion errors', () => {
   it('names a missing share of the database', () => {
     assert.match(notionErrorMessage({ status: 404, code: 'object_not_found' }), /Conexiones/)
     assert.match(notionErrorMessage({ status: 401 }), /token/)
+  })
+
+  it('explains a file Notion will not accept', () => {
+    assert.match(
+      notionErrorMessage({
+        status: 400,
+        message: "Provided `filename` has an extension that is not supported for the File Upload API."
+      }),
+      /dibujo/
+    )
+  })
+
+  it('uploads a drawing as JSON, as its image, or not at all', () => {
+    const names = ['shot.jpg', 'draw-1.png', 'draw-1.excalidraw']
+    assert.deepEqual(
+      notionAssetsToUpload(names, '').map((item) => item.name),
+      ['shot.jpg', 'draw-1.png']
+    )
+    assert.deepEqual(notionAssetsToUpload(names, 'json'), [
+      { name: 'shot.jpg', filename: 'shot.jpg', contentType: '' },
+      { name: 'draw-1.png', filename: 'draw-1.png', contentType: '' },
+      { name: 'draw-1.excalidraw', filename: 'draw-1.json', contentType: 'application/json' }
+    ])
+    assert.deepEqual(
+      notionAssetsToUpload(names, 'local').map((item) => item.name),
+      ['shot.jpg']
+    )
+  })
+
+  it('explains a save that collided and leaves it retryable', () => {
+    assert.match(
+      notionErrorMessage({
+        status: 409,
+        code: 'conflict_error',
+        message: 'Conflict occurred while saving. Please try again.'
+      }),
+      /al mismo tiempo/
+    )
+    assert.equal(isRetryableNotionError({ status: 409, code: 'conflict_error' }), true)
   })
 })

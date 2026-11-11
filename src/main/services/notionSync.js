@@ -28,6 +28,7 @@ import {
   normalizeTitle,
   notionErrorMessage,
   noteAssetNames,
+  notionAssetsToUpload,
   notionPlace,
   playlistFromBody,
   playlistWire,
@@ -46,6 +47,21 @@ let remoteCheck = null
 let draining = null
 let syncing = false
 let lastError = null
+let lastErrorCode = ''
+let turn = Promise.resolve()
+const conflictCooldown = new Map()
+
+const SAVE_CONFLICT_PASSES = 3
+
+/** One Notion reader or writer at a time. A poll that rewrites pages while a save is in flight is what triggers Notion's 409. */
+function oneAtATime(task) {
+  const run = turn.then(task, task)
+  turn = run.then(
+    () => undefined,
+    () => undefined
+  )
+  return run
+}
 let hooks = {
   notifyNotes() {},
   notifyPlaylists() {},
@@ -62,10 +78,11 @@ function readState() {
     return {
       tombstones: Array.isArray(data.tombstones) ? data.tombstones : [],
       nodes: data.nodes && typeof data.nodes === 'object' ? data.nodes : {},
-      playlistTombstones: Array.isArray(data.playlistTombstones) ? data.playlistTombstones : []
+      playlistTombstones: Array.isArray(data.playlistTombstones) ? data.playlistTombstones : [],
+      drawingShare: ['json', 'image', 'local'].includes(data.drawingShare) ? data.drawingShare : ''
     }
   } catch {
-    return { tombstones: [], nodes: {}, playlistTombstones: [] }
+    return { tombstones: [], nodes: {}, playlistTombstones: [], drawingShare: '' }
   }
 }
 
@@ -78,7 +95,8 @@ function writeState(state) {
       {
         tombstones: state.tombstones || [],
         nodes: state.nodes || {},
-        playlistTombstones: state.playlistTombstones || []
+        playlistTombstones: state.playlistTombstones || [],
+        drawingShare: state.drawingShare || ''
       },
       null,
       2
@@ -125,6 +143,62 @@ function describeError(error) {
   })
 }
 
+function noteFailure(error) {
+  lastError = describeError(error)
+  lastErrorCode = error?.code || (error?.status === 409 ? 'conflict_error' : '')
+}
+
+function clearFailure() {
+  lastError = null
+  lastErrorCode = ''
+}
+
+function isSaveConflict(error) {
+  return error?.status === 409 || error?.code === 'conflict_error'
+}
+
+function requeueJob(id, job, error) {
+  if (!isRetryableNotionError(error)) return false
+  const attempts = (job.attempts || 0) + 1
+  if (isSaveConflict(error) && attempts >= SAVE_CONFLICT_PASSES) {
+    conflictCooldown.set(id, Date.now() + 60_000)
+    return false
+  }
+  jobs.set(id, { ...job, attempts: isSaveConflict(error) ? attempts : job.attempts || 0 })
+  return true
+}
+
+function saveConflictParked(id) {
+  const until = conflictCooldown.get(id) || 0
+  if (until <= Date.now()) {
+    conflictCooldown.delete(id)
+    return false
+  }
+  return true
+}
+
+function playlistText(why, coursePaths) {
+  return [why, ...(coursePaths || [])].filter(Boolean).join('\n')
+}
+
+function remotePlaylistBody(body) {
+  const parsed = playlistFromBody(body)
+  if (!parsed) return body || ''
+  return playlistText(parsed.why, parsed.coursePaths)
+}
+
+function playlistConflictView(playlist) {
+  const remote = playlist.notion?.conflict || {}
+  const parsed = playlistFromBody(remote.remoteBody)
+  return {
+    playlistId: playlist.id,
+    title: playlist.title || 'Sin título',
+    localBody: playlistText(playlist.why, playlist.coursePaths),
+    remoteTitle: remote.remoteTitle || '',
+    remoteBody: parsed ? playlistText(parsed.why, parsed.coursePaths) : remote.remoteBody || ''
+  }
+}
+
 function clientFromConfig() {
   const config = getNotionConfig()
   return createNotionClient({ token: config.token, databaseId: config.databaseId })
@@ -138,9 +212,25 @@ function publicStatus() {
         .map((finding) => ({
           findingId: finding.id,
           title: finding.title || 'Sin título',
+          body: finding.body || '',
+          remoteTitle: finding.notion.conflict.remoteTitle || '',
+          remoteBody: finding.notion.conflict.remoteBody || '',
           coursePath: finding.anchors?.[0]?.coursePath || null
         }))
     : []
+  const playlistConflicts = config.enabled
+    ? listPlaylistRecords()
+        .filter((playlist) => playlist.notion?.conflict)
+        .map(playlistConflictView)
+    : []
+  const playlistDeleteConflicts = readPlaylistTombstones()
+    .filter((item) => item.conflict)
+    .map((item) => ({
+      playlistId: item.playlistId,
+      title: item.snapshot?.title || 'Sin título',
+      remoteTitle: item.conflict.remoteTitle || '',
+      remoteBody: remotePlaylistBody(item.conflict.remoteBody)
+    }))
   const deleteConflicts = readTombstones()
     .filter((item) => item.conflict)
     .map((item) => ({
@@ -156,9 +246,14 @@ function publicStatus() {
     databaseId: config.databaseId || '',
     syncing,
     lastError,
+    lastErrorCode,
     queued: jobs.size,
     conflicts,
-    deleteConflicts
+    deleteConflicts,
+    playlistConflicts,
+    playlistDeleteConflicts,
+    drawingShare: readState().drawingShare || '',
+    drawings: listDrawingFiles()
   }
 }
 
@@ -330,9 +425,29 @@ async function saveNotePage(client, finding, remote) {
 
 const MAX_NOTE_ASSET_BYTES = 20 * 1024 * 1024
 
+function listDrawingFiles() {
+  const drawings = []
+  const seen = new Set()
+  for (const finding of listFindingRecords()) {
+    const names = noteAssetNames(finding.body || '')
+    for (const name of names) {
+      if (!String(name).toLowerCase().endsWith('.excalidraw') || seen.has(name)) continue
+      seen.add(name)
+      const id = name.slice(0, -'.excalidraw'.length)
+      drawings.push({
+        name,
+        noteTitle: finding.title || 'Sin título',
+        hasPreview: names.some((item) => item.toLowerCase() === `${id.toLowerCase()}.png`)
+      })
+    }
+  }
+  return drawings
+}
+
 async function reconcileNoteFiles(client, pageId, body) {
   if (!pageId) return
-  const wanted = noteAssetNames(body)
+  const planned = notionAssetsToUpload(noteAssetNames(body), readState().drawingShare)
+  const wanted = planned.map((item) => item.name)
   const remote = await client.listNoteAssets(pageId)
   for (const item of remote) {
     if (wanted.includes(item.name) || !item.blockId) continue
@@ -355,7 +470,14 @@ async function reconcileNoteFiles(client, pageId, body) {
     }
     if (local && !present.has(name)) {
       if (local.size > MAX_NOTE_ASSET_BYTES) continue
-      await client.attachNoteFile(pageId, name, local.bytes, local.contentType)
+      const plan = planned.find((item) => item.name === name)
+      await client.attachNoteFile(
+        pageId,
+        name,
+        local.bytes,
+        plan?.contentType || local.contentType,
+        plan?.filename || name
+      )
     }
   }
 }
@@ -511,7 +633,7 @@ function schedule(delay) {
 
 function kick() {
   if (!draining) {
-    draining = drain().finally(() => {
+    draining = oneAtATime(() => drain()).finally(() => {
       draining = null
     })
   }
@@ -543,23 +665,30 @@ async function drain() {
         else if (job.op === 'playlist-delete') await reconcilePlaylistDelete(client, job.playlistId)
         else if (job.op === 'delete') await reconcileDelete(client, id)
         else await reconcileUpsert(client, id)
-        lastError = null
+        clearFailure()
       } catch (error) {
-        lastError = describeError(error)
+        noteFailure(error)
         if (job.op === 'playlist-upsert') rememberPlaylistError(job.playlistId, lastError)
         else if (job.op !== 'delete' && job.op !== 'playlist-delete') rememberError(id, lastError)
-        if (isRetryableNotionError(error)) {
-          jobs.set(id, job)
-          retryDelay = Math.max(retryDelay, error.status === 429 ? 5000 : 15000)
+        if (requeueJob(id, job, error)) {
+          const wait = error.status === 429 ? 5000 : isSaveConflict(error) ? 1500 : 15000
+          retryDelay = Math.max(retryDelay, wait)
         }
         if (job.op === 'playlist-upsert' || job.op === 'playlist-delete') notifyPlaylists()
         else notifyNotes()
       }
     }
   } catch (error) {
-    lastError = describeError(error)
-    for (const [id, job] of batch) jobs.set(id, job)
-    retryDelay = 30000
+    noteFailure(error)
+    const conflict = isSaveConflict(error)
+    for (const [id, job] of batch) {
+      if (!conflict) {
+        jobs.set(id, job)
+        continue
+      }
+      requeueJob(id, job, error)
+    }
+    retryDelay = conflict ? 1500 : 30000
   } finally {
     syncing = false
     publish()
@@ -764,7 +893,7 @@ async function queuePending() {
   try {
     remotePages = await client.listPages()
   } catch (error) {
-    lastError = describeError(error)
+    noteFailure(error)
   }
   try {
     recent = await client.recentPages()
@@ -780,7 +909,7 @@ async function queuePending() {
     try {
       await importSharedNotes(client, remotePages)
     } catch (error) {
-      lastError = describeError(error)
+      noteFailure(error)
     }
   }
   const findings = listFindingRecords().filter((finding) => !finding.notion?.conflict)
@@ -810,8 +939,10 @@ async function queuePending() {
       Boolean(finding.notion?.pageId) &&
       !row &&
       !(await pageBelongsToRows(client, finding.notion.pageId, rowIds))
+    if (saveConflictParked(finding.id)) continue
     if (localChanged || remoteChanged || needsPlace || missingHere) {
-      jobs.set(finding.id, { op: 'upsert' })
+      const pending = jobs.get(finding.id)
+      jobs.set(finding.id, { op: 'upsert', attempts: pending?.attempts || 0 })
     }
   }
   for (const tomb of readTombstones()) {
@@ -819,12 +950,16 @@ async function queuePending() {
     const remote = remoteByFinding.get(tomb.findingId)
     const remoteChanged =
       !remotePages || !remote || remote.editedAt !== tomb.snapshot?.notion?.remoteEditedAt
-    if (remoteChanged) jobs.set(tomb.findingId, { op: 'delete' })
+    if (saveConflictParked(tomb.findingId)) continue
+    if (remoteChanged) {
+      const pending = jobs.get(tomb.findingId)
+      jobs.set(tomb.findingId, { op: 'delete', attempts: pending?.attempts || 0 })
+    }
   }
   try {
     await queuePlaylists(client, remotePages)
   } catch (error) {
-    lastError = describeError(error)
+    noteFailure(error)
   }
 }
 
@@ -1090,13 +1225,27 @@ async function queuePlaylists(client, remotePages) {
     const localChanged = playlist.notion?.ackedHash !== localHash
     const remoteChanged = Boolean(remote && remote.editedAt !== playlist.notion?.remoteEditedAt)
     const missingPage = !remote
+    const key = playlistKey(playlist.id)
+    if (saveConflictParked(key)) continue
     if (localChanged || remoteChanged || missingPage) {
-      jobs.set(playlistKey(playlist.id), { op: 'playlist-upsert', playlistId: playlist.id })
+      const pending = jobs.get(key)
+      jobs.set(key, {
+        op: 'playlist-upsert',
+        playlistId: playlist.id,
+        attempts: pending?.attempts || 0
+      })
     }
   }
   for (const tomb of readPlaylistTombstones()) {
     if (tomb.conflict || !tomb.pageId) continue
-    jobs.set(playlistKey(tomb.playlistId), { op: 'playlist-delete', playlistId: tomb.playlistId })
+    const key = playlistKey(tomb.playlistId)
+    if (saveConflictParked(key)) continue
+    const pending = jobs.get(key)
+    jobs.set(key, {
+      op: 'playlist-delete',
+      playlistId: tomb.playlistId,
+      attempts: pending?.attempts || 0
+    })
   }
 }
 
@@ -1139,7 +1288,7 @@ function setRemoteWatch(active) {
 export function pollNotionChanges() {
   if (!getNotionConfig().enabled) return null
   if (remoteCheck) return remoteCheck
-  remoteCheck = queuePending().finally(() => {
+  remoteCheck = oneAtATime(() => queuePending()).finally(() => {
     remoteCheck = null
     if (jobs.size) schedule(0)
   })
@@ -1159,6 +1308,7 @@ export function startNotionSync(nextHooks = {}) {
 
 export function enqueueNotionUpsert(id) {
   if (!id || !getNotionConfig().enabled) return
+  conflictCooldown.delete(id)
   const finding = readFinding(id)
   if (!finding || finding.notion?.conflict) return
   if (jobs.get(id)?.op === 'delete') return
@@ -1177,6 +1327,7 @@ export function enqueueNotionDelete(finding) {
 export function enqueueNotionPlaylistUpsert(id) {
   if (!id || !getNotionConfig().enabled) return
   const key = playlistKey(id)
+  conflictCooldown.delete(key)
   if (jobs.get(key)?.op === 'playlist-delete') return
   const playlist = readPlaylist(id)
   if (!playlist || playlist.notion?.conflict) return
@@ -1197,6 +1348,21 @@ export function enqueueNotionPlaylistDelete(playlist) {
 }
 
 export function getNotionSyncStatus() {
+  return publicStatus()
+}
+
+export function setNotionDrawingShare(choice) {
+  if (!['json', 'image', 'local'].includes(choice)) throw new Error('Elección desconocida')
+  const state = readState()
+  state.drawingShare = choice
+  writeState(state)
+  for (const finding of listFindingRecords()) {
+    const names = noteAssetNames(finding.body || '')
+    if (names.some((name) => String(name).toLowerCase().endsWith('.excalidraw'))) {
+      enqueueNotionUpsert(finding.id)
+    }
+  }
+  publish()
   return publicStatus()
 }
 
@@ -1223,7 +1389,7 @@ export async function saveNotionSettings({ enabled, token, databaseId } = {}) {
     jobs.clear()
     clearTimeout(timer)
     setRemoteWatch(false)
-    lastError = null
+    clearFailure()
     publish()
     return publicStatus()
   }
@@ -1238,14 +1404,14 @@ export async function saveNotionSettings({ enabled, token, databaseId } = {}) {
     const resolvedId = client.acceptedDatabaseId() || nextDatabaseId
     setNotionConfig({ enabled: true, token: nextToken, databaseId: resolvedId })
   } catch (error) {
-    lastError = describeError(error)
+    noteFailure(error)
     publish()
     throw new Error(lastError)
   }
 
-  lastError = null
+  clearFailure()
   setRemoteWatch(true)
-  await queuePending()
+  await oneAtATime(() => queuePending())
   schedule(0)
   publish()
   return publicStatus()
@@ -1258,9 +1424,11 @@ export async function syncNotionNow(findingId) {
     if (finding?.notion?.conflict) {
       throw new Error('Esa anotación está en conflicto. Elige una versión antes de sincronizar.')
     }
+    conflictCooldown.delete(findingId)
     jobs.set(findingId, { op: 'upsert' })
   } else {
-    await queuePending()
+    conflictCooldown.clear()
+    await oneAtATime(() => queuePending())
   }
   await flushQueued()
   return publicStatus()
@@ -1272,36 +1440,38 @@ export async function resolveNotionConflict(findingId, choice) {
   const finding = readFinding(findingId)
   if (!finding?.notion?.conflict) throw new Error('Esa anotación no está en conflicto')
   const client = clientFromConfig()
-  await client.loadSchema()
+  return oneAtATime(async () => {
+    await client.loadSchema()
 
-  if (choice === 'local') {
-    await writeLocal(client, finding)
-  } else if (choice === 'remote') {
-    const remote = await loadRemote(client, finding)
-    if (!remote) throw new Error('La página de Notion ya no está')
-    const hash = wireHash(remote.title, remote.body)
-    applyNotion(findingId, cursorFrom(remote, hash, { pulledAt: Date.now() }), remote)
-  } else if (choice === 'both') {
-    const remote = await loadRemote(client, finding)
-    if (!remote) throw new Error('La página de Notion ya no está')
-    const copy = withoutNoteWriteHook(() =>
-      forkFinding(findingId, {
-        title: normalizeTitle(remote.title) || null,
-        body: remote.body || ''
-      })
-    )
-    try {
-      await writeLocal(client, readFinding(findingId) || finding)
-    } finally {
-      enqueueNotionUpsert(copy.id)
+    if (choice === 'local') {
+      await writeLocal(client, finding)
+    } else if (choice === 'remote') {
+      const remote = await loadRemote(client, finding)
+      if (!remote) throw new Error('La página de Notion ya no está')
+      const hash = wireHash(remote.title, remote.body)
+      applyNotion(findingId, cursorFrom(remote, hash, { pulledAt: Date.now() }), remote)
+    } else if (choice === 'both') {
+      const remote = await loadRemote(client, finding)
+      if (!remote) throw new Error('La página de Notion ya no está')
+      const copy = withoutNoteWriteHook(() =>
+        forkFinding(findingId, {
+          title: normalizeTitle(remote.title) || null,
+          body: remote.body || ''
+        })
+      )
+      try {
+        await writeLocal(client, readFinding(findingId) || finding)
+      } finally {
+        enqueueNotionUpsert(copy.id)
+      }
+    } else {
+      throw new Error('Elección desconocida')
     }
-  } else {
-    throw new Error('Elección desconocida')
-  }
 
-  notifyNotes()
-  publish()
-  return publicStatus()
+    notifyNotes()
+    publish()
+    return publicStatus()
+  })
 }
 
 export async function resolveNotionDelete(findingId, choice) {
@@ -1310,35 +1480,117 @@ export async function resolveNotionDelete(findingId, choice) {
   const tomb = readTombstones().find((item) => item.findingId === findingId)
   if (!tomb?.conflict) throw new Error('Ese borrado no está en conflicto')
   const client = clientFromConfig()
-  await client.loadSchema()
+  return oneAtATime(async () => {
+    await client.loadSchema()
 
-  if (choice === 'discard') {
-    const remote = await client.readPage(tomb.pageId)
-    if (remote) await client.archivePage(tomb.pageId)
-  } else if (choice === 'keep') {
-    const remote = (await client.readPage(tomb.pageId)) || {
-      pageId: tomb.pageId,
-      title: tomb.conflict.remoteTitle,
-      body: tomb.conflict.remoteBody,
-      editedAt: tomb.conflict.remoteEditedAt
+    if (choice === 'discard') {
+      const remote = await client.readPage(tomb.pageId)
+      if (remote) await client.archivePage(tomb.pageId)
+    } else if (choice === 'keep') {
+      const remote = (await client.readPage(tomb.pageId)) || {
+        pageId: tomb.pageId,
+        title: tomb.conflict.remoteTitle,
+        body: tomb.conflict.remoteBody,
+        editedAt: tomb.conflict.remoteEditedAt
+      }
+      const hash = wireHash(remote.title, remote.body)
+      const snapshot = {
+        ...tomb.snapshot,
+        id: tomb.findingId,
+        title: normalizeTitle(remote.title) || null,
+        body: normalizeBody(remote.body),
+        bodyHtml: null,
+        bodyJson: null,
+        notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
+      }
+      withoutNoteWriteHook(() => restoreFinding(snapshot))
+      notifyNotes()
+    } else {
+      throw new Error('Elección desconocida')
     }
-    const hash = wireHash(remote.title, remote.body)
-    const snapshot = {
-      ...tomb.snapshot,
-      id: tomb.findingId,
-      title: normalizeTitle(remote.title) || null,
-      body: normalizeBody(remote.body),
-      bodyHtml: null,
-      bodyJson: null,
-      notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
-    }
-    withoutNoteWriteHook(() => restoreFinding(snapshot))
-    notifyNotes()
-  } else {
-    throw new Error('Elección desconocida')
-  }
 
-  writeTombstones(readTombstones().filter((item) => item.findingId !== findingId))
-  publish()
-  return publicStatus()
+    writeTombstones(readTombstones().filter((item) => item.findingId !== findingId))
+    publish()
+    return publicStatus()
+  })
+}
+
+async function pushPlaylist(client, playlist) {
+  const sectionId = await ensurePlaylistSection(client)
+  const remote = await loadPlaylistRemote(client, playlist, sectionId)
+  const page = await savePlaylistPage(client, playlist, remote)
+  if (!page?.pageId) throw new Error('Notion no devolvió la lista')
+  const wire = playlistWire(playlist)
+  const localHash = wireHash(wire.title, wire.body)
+  const remoteHash = page.body === undefined ? localHash : wireHash(page.title, page.body)
+  withoutNoteWriteHook(() => {
+    writePlaylistRecord({
+      ...playlist,
+      notion: cursorFrom(page, remoteHash === localHash ? localHash : remoteHash)
+    })
+  })
+}
+
+export async function resolveNotionPlaylistConflict(playlistId, choice) {
+  if (!getNotionConfig().enabled) throw new Error('La sincronización con Notion está apagada')
+  await flushQueued()
+  const playlist = readPlaylist(playlistId)
+  if (!playlist?.notion?.conflict) throw new Error('Esa lista no está en conflicto')
+  const client = clientFromConfig()
+  return oneAtATime(async () => {
+    await client.loadSchema()
+    if (choice === 'local') {
+      await pushPlaylist(client, readPlaylist(playlistId) || playlist)
+    } else if (choice === 'remote') {
+      const remote = await loadPlaylistRemote(
+        client,
+        playlist,
+        await ensurePlaylistSection(client)
+      )
+      if (!remote) throw new Error('La página de Notion ya no está')
+      const parsed = playlistFromBody(remote.body)
+      if (!parsed) throw new Error('La página de Notion ya no es una lista')
+      const hash = wireHash(remote.title, remote.body)
+      applyPlaylist(playlistId, cursorFrom(remote, hash, { pulledAt: Date.now() }), remote)
+      notifyPlaylists()
+    } else {
+      throw new Error('Elección desconocida')
+    }
+    publish()
+    return publicStatus()
+  })
+}
+
+export async function resolveNotionPlaylistDelete(playlistId, choice) {
+  if (!getNotionConfig().enabled) throw new Error('La sincronización con Notion está apagada')
+  await flushQueued()
+  const tomb = readPlaylistTombstones().find((item) => item.playlistId === playlistId)
+  if (!tomb?.conflict) throw new Error('Ese borrado no está en conflicto')
+  const client = clientFromConfig()
+  return oneAtATime(async () => {
+    await client.loadSchema()
+    if (choice === 'discard') {
+      const remote = tomb.pageId ? await client.readPage(tomb.pageId) : null
+      if (remote) await client.archivePage(tomb.pageId)
+    } else if (choice === 'keep') {
+      const remote = (tomb.pageId ? await client.readPage(tomb.pageId) : null) || {
+        pageId: tomb.pageId,
+        title: tomb.conflict.remoteTitle,
+        body: tomb.conflict.remoteBody,
+        editedAt: tomb.conflict.remoteEditedAt
+      }
+      const parsed = playlistFromBody(remote.body)
+      if (!parsed) throw new Error('La página de Notion ya no es una lista')
+      const hash = wireHash(remote.title, remote.body)
+      applyPlaylist(playlistId, cursorFrom(remote, hash, { pulledAt: Date.now() }), remote)
+      notifyPlaylists()
+    } else {
+      throw new Error('Elección desconocida')
+    }
+    writePlaylistTombstones(
+      readPlaylistTombstones().filter((item) => item.playlistId !== playlistId)
+    )
+    publish()
+    return publicStatus()
+  })
 }

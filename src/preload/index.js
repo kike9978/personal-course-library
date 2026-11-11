@@ -85,11 +85,16 @@ const api = {
   exportMarkdownBundle: (payload) => ipcRenderer.invoke('export-markdown-bundle', payload),
   getNotionSync: () => ipcRenderer.invoke('get-notion-sync'),
   setNotionSync: (payload) => ipcRenderer.invoke('set-notion-sync', payload || {}),
+  setNotionDrawingShare: (choice) => ipcRenderer.invoke('set-notion-drawing-share', choice),
   syncNotionNow: (findingId) => ipcRenderer.invoke('sync-notion-now', findingId || null),
   resolveNotionConflict: (findingId, choice) =>
     ipcRenderer.invoke('resolve-notion-conflict', { findingId, choice }),
   resolveNotionDelete: (findingId, choice) =>
     ipcRenderer.invoke('resolve-notion-delete', { findingId, choice }),
+  resolveNotionPlaylistConflict: (playlistId, choice) =>
+    ipcRenderer.invoke('resolve-notion-playlist-conflict', { playlistId, choice }),
+  resolveNotionPlaylistDelete: (playlistId, choice) =>
+    ipcRenderer.invoke('resolve-notion-playlist-delete', { playlistId, choice }),
   onNotionSync: (callback) => {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('notion-sync', listener)

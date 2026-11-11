@@ -36,6 +36,83 @@ function syncLabel(status) {
   return 'Activo'
 }
 
+function choiceLabel(choice, kind) {
+  if (choice === 'json') return 'Los dibujos se comparten como JSON'
+  if (choice === 'image') return 'Se comparte solo la imagen del dibujo'
+  if (choice === 'local') return 'Los dibujos se quedan en esta biblioteca'
+  if (choice === 'both') return 'La versión de Notion quedó en una nota nueva'
+  if (choice === 'remote') return 'Quedó el texto de Notion'
+  if (choice === 'keep') {
+    return kind === 'lista' ? 'Lista recuperada desde Notion' : 'Nota recuperada desde Notion'
+  }
+  if (choice === 'discard') return 'Página borrada en Notion'
+  return 'Quedó el texto de aquí'
+}
+
+const DRAWING_CHOICES = [
+  [
+    'json',
+    'Compartir como JSON',
+    'Notion recibe un archivo .json. La otra copia lo vuelve a guardar como dibujo editable, y también recibe la imagen.'
+  ],
+  [
+    'image',
+    'Solo la imagen',
+    'Se comparte la vista previa. El dibujo editable se queda en este equipo.'
+  ],
+  [
+    'local',
+    'Dejarlo aquí',
+    'Ni el dibujo ni su imagen se suben. El texto de la nota sí se sincroniza.'
+  ]
+]
+
+function VersionChoice({ title, localText, remoteText, busy, onChoose, allowBoth = false }) {
+  return (
+    <article>
+      <strong>{title}</strong>
+      <div className="notion-conflict__cols">
+        <div>
+          <h4>Esta biblioteca</h4>
+          <pre>{localText || 'Sin texto'}</pre>
+        </div>
+        <div>
+          <h4>Notion</h4>
+          <pre>{remoteText || 'Sin texto'}</pre>
+        </div>
+      </div>
+      <div className="dialog__actions-btns">
+        <button
+          type="button"
+          className="btn btn--primary"
+          disabled={busy}
+          onClick={() => onChoose('local')}
+        >
+          Usar esta
+        </button>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          disabled={busy}
+          onClick={() => onChoose('remote')}
+        >
+          Usar la de Notion
+        </button>
+        {allowBoth ? (
+          <button
+            type="button"
+            className="btn btn--ghost"
+            disabled={busy}
+            onClick={() => onChoose('both')}
+          >
+            Quedarme con las dos
+          </button>
+        ) : null}
+      </div>
+    </article>
+  )
+}
+
 export function NotionSyncButton() {
   const status = useNotionSync()
   const dialogRef = useRef(null)
@@ -44,6 +121,7 @@ export function NotionSyncButton() {
   const [databaseId, setDatabaseId] = useState('')
   const [saving, setSaving] = useState(false)
   const [syncingNow, setSyncingNow] = useState(false)
+  const [resolvingId, setResolvingId] = useState('')
   const statusRef = useRef(status)
   statusRef.current = status
 
@@ -104,16 +182,24 @@ export function NotionSyncButton() {
     }
   }
 
-  const resolveDelete = async (findingId, choice) => {
+  const resolveWith = async (id, choice, run, fallback, kind) => {
+    setResolvingId(id)
     try {
-      await window.api.resolveNotionDelete(findingId, choice)
-      toast.success(choice === 'keep' ? 'Nota recuperada desde Notion' : 'Página borrada en Notion')
+      await run()
+      toast.success(choiceLabel(choice, kind))
     } catch (error) {
-      toast.error(notionErrorText(error, 'No se pudo resolver el borrado'))
+      toast.error(notionErrorText(error, fallback))
+    } finally {
+      setResolvingId('')
     }
   }
 
-  const conflictCount = (status?.conflicts?.length || 0) + (status?.deleteConflicts?.length || 0)
+  const conflictCount =
+    (status?.conflicts?.length || 0) +
+    (status?.deleteConflicts?.length || 0) +
+    (status?.playlistConflicts?.length || 0) +
+    (status?.playlistDeleteConflicts?.length || 0)
+  const retryingSave = status?.lastErrorCode === 'conflict_error' && (status.syncing || status.queued)
 
   return (
     <>
@@ -202,7 +288,107 @@ export function NotionSyncButton() {
                 onChange={(event) => setDatabaseId(event.target.value)}
               />
             </div>
-            {status?.lastError ? <p className="notion-sync-error">{status.lastError}</p> : null}
+            {status?.drawings?.length ? (
+              <div className="notion-sync__deletes">
+                <h4>Dibujos</h4>
+                <p>
+                  Notion no acepta la extensión .excalidraw, así que el dibujo editable no se puede
+                  subir con ese nombre.
+                  {status.drawings.length === 1
+                    ? ` Hay uno en «${status.drawings[0].noteTitle}».`
+                    : ` Hay ${status.drawings.length} en las notas.`}
+                </p>
+                {!status.drawingShare ? (
+                  <p>
+                    Mientras no elijas, se comparte la imagen y el dibujo editable se queda en este
+                    equipo.
+                  </p>
+                ) : null}
+                <div className="dialog__actions-btns notion-sync__choices">
+                  {DRAWING_CHOICES.map(([choice, label]) => (
+                    <button
+                      key={choice}
+                      type="button"
+                      className={`btn ${status.drawingShare === choice ? 'btn--primary' : 'btn--ghost'}`}
+                      aria-pressed={status.drawingShare === choice}
+                      disabled={resolvingId === 'drawing-share'}
+                      onClick={() => {
+                        if (status.drawingShare === choice) return
+                        void resolveWith(
+                          'drawing-share',
+                          choice,
+                          () => window.api.setNotionDrawingShare(choice),
+                          'No se pudo guardar la elección'
+                        )
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p>
+                  {DRAWING_CHOICES.find(([choice]) => choice === status.drawingShare)?.[2] ||
+                    'Elige una opción. Puedes cambiarla después.'}
+                </p>
+              </div>
+            ) : null}
+            {status?.lastError ? (
+              <p className="notion-sync-error">
+                {status.lastError}
+                {retryingSave ? ' Se vuelve a intentar.' : ''}
+                {status.lastErrorCode === 'conflict_error' && !retryingSave
+                  ? ' Sincronizar ahora lo vuelve a intentar.'
+                  : ''}
+              </p>
+            ) : null}
+            {status?.conflicts?.length ? (
+              <div className="notion-sync__deletes">
+                <h4>Notas por elegir</h4>
+                <p>Cambiaron aquí y en Notion. Elige cuál se queda.</p>
+                {status.conflicts.map((item) => (
+                  <VersionChoice
+                    key={item.findingId}
+                    title={item.title || 'Sin título'}
+                    localText={[item.title, item.body].filter(Boolean).join('\n\n')}
+                    remoteText={[item.remoteTitle, item.remoteBody].filter(Boolean).join('\n\n')}
+                    busy={resolvingId === item.findingId}
+                    allowBoth
+                    onChoose={(choice) =>
+                      void resolveWith(
+                        item.findingId,
+                        choice,
+                        () => window.api.resolveNotionConflict(item.findingId, choice),
+                        'No se pudo resolver el conflicto'
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            ) : null}
+            {status?.playlistConflicts?.length ? (
+              <div className="notion-sync__deletes">
+                <h4>Listas por elegir</h4>
+                <p>Cambiaron aquí y en Notion. El lugar en el tablero se queda en este equipo.</p>
+                {status.playlistConflicts.map((item) => (
+                  <VersionChoice
+                    key={item.playlistId}
+                    title={item.title || 'Sin título'}
+                    localText={item.localBody}
+                    remoteText={[item.remoteTitle, item.remoteBody].filter(Boolean).join('\n\n')}
+                    busy={resolvingId === item.playlistId}
+                    onChoose={(choice) =>
+                      void resolveWith(
+                        item.playlistId,
+                        choice,
+                        () => window.api.resolveNotionPlaylistConflict(item.playlistId, choice),
+                        'No se pudo resolver el conflicto',
+                        'lista'
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            ) : null}
             {status?.deleteConflicts?.length ? (
               <div className="notion-sync__deletes">
                 <h4>Borrados a medias</h4>
@@ -215,14 +401,76 @@ export function NotionSyncButton() {
                       <button
                         type="button"
                         className="btn btn--ghost"
-                        onClick={() => resolveDelete(item.findingId, 'discard')}
+                        disabled={resolvingId === item.findingId}
+                        onClick={() =>
+                          void resolveWith(
+                            item.findingId,
+                            'discard',
+                            () => window.api.resolveNotionDelete(item.findingId, 'discard'),
+                            'No se pudo resolver el borrado'
+                          )
+                        }
                       >
                         Borrar en Notion
                       </button>
                       <button
                         type="button"
                         className="btn btn--primary"
-                        onClick={() => resolveDelete(item.findingId, 'keep')}
+                        disabled={resolvingId === item.findingId}
+                        onClick={() =>
+                          void resolveWith(
+                            item.findingId,
+                            'keep',
+                            () => window.api.resolveNotionDelete(item.findingId, 'keep'),
+                            'No se pudo resolver el borrado'
+                          )
+                        }
+                      >
+                        Recuperar la de Notion
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+            {status?.playlistDeleteConflicts?.length ? (
+              <div className="notion-sync__deletes">
+                <h4>Listas borradas a medias</h4>
+                <p>La lista se borró aquí y Notion cambió después de la última sincronización.</p>
+                {status.playlistDeleteConflicts.map((item) => (
+                  <article key={item.playlistId}>
+                    <strong>{item.title || 'Sin título'}</strong>
+                    <pre>{item.remoteBody || item.remoteTitle || 'Sin texto'}</pre>
+                    <div className="dialog__actions-btns">
+                      <button
+                        type="button"
+                        className="btn btn--ghost"
+                        disabled={resolvingId === item.playlistId}
+                        onClick={() =>
+                          void resolveWith(
+                            item.playlistId,
+                            'discard',
+                            () => window.api.resolveNotionPlaylistDelete(item.playlistId, 'discard'),
+                            'No se pudo resolver el borrado',
+                            'lista'
+                          )
+                        }
+                      >
+                        Borrar en Notion
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--primary"
+                        disabled={resolvingId === item.playlistId}
+                        onClick={() =>
+                          void resolveWith(
+                            item.playlistId,
+                            'keep',
+                            () => window.api.resolveNotionPlaylistDelete(item.playlistId, 'keep'),
+                            'No se pudo resolver el borrado',
+                            'lista'
+                          )
+                        }
                       >
                         Recuperar la de Notion
                       </button>

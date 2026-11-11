@@ -402,11 +402,51 @@ export function notionErrorMessage({ status, code, message } = {}) {
     return 'Notion no encuentra esa base. Ábrela, elige ··· → Conexiones y añade la integración.'
   }
   if (status === 429) return 'Notion está limitando las peticiones. Se reintenta solo.'
+  if (status === 409 || code === 'conflict_error') {
+    return 'Notion estaba guardando esa página al mismo tiempo.'
+  }
+  if (/not supported for the File Upload API/i.test(message || '')) {
+    return 'Notion no acepta ese tipo de archivo. Un dibujo .excalidraw se puede compartir como JSON, solo como imagen, o dejarlo en esta biblioteca.'
+  }
   return message || 'No se pudo hablar con Notion'
+}
+
+/**
+ * Which note files to send, and under which filename.
+ * Notion rejects `.excalidraw`. JSON keeps the drawing editable on the other copy.
+ * `image` sends the preview only. `local` sends neither the drawing nor its preview.
+ */
+export function notionAssetsToUpload(names, drawingShare) {
+  const list = Array.isArray(names) ? names : []
+  const sceneIds = new Set(
+    list
+      .filter((name) => String(name).toLowerCase().endsWith('.excalidraw'))
+      .map((name) => String(name).slice(0, -'.excalidraw'.length).toLowerCase())
+  )
+  const plans = []
+  for (const name of list) {
+    const lower = String(name).toLowerCase()
+    if (lower.endsWith('.excalidraw')) {
+      if (drawingShare !== 'json') continue
+      const base = String(name).slice(0, -'.excalidraw'.length)
+      plans.push({ name, filename: `${base}.json`, contentType: 'application/json' })
+      continue
+    }
+    if (
+      drawingShare === 'local' &&
+      lower.endsWith('.png') &&
+      sceneIds.has(lower.slice(0, -'.png'.length))
+    ) {
+      continue
+    }
+    plans.push({ name, filename: name, contentType: '' })
+  }
+  return plans
 }
 
 export function isRetryableNotionError(error) {
   const status = error?.status
+  if (status === 409 || error?.code === 'conflict_error') return true
   if (status === 429 || status === 0 || (typeof status === 'number' && status >= 500)) return true
   return false
 }

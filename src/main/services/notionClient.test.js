@@ -253,4 +253,94 @@ describe('notion client', () => {
     await client.updatePage('page-1', 'note-1', 'Nota', 'Hola')
     assert.deepEqual(deleted, ['code-1'])
   })
+
+  it('repeats a save when Notion reports a conflict, then accepts the next try', async () => {
+    let writes = 0
+    const sleeps = []
+    const fetchImpl = async (url, options = {}) => {
+      if (url.endsWith('/users/me')) return jsonResponse({ object: 'user', id: 'bot' })
+      if (url.endsWith('/databases/db-1') && (!options.method || options.method === 'GET')) {
+        return jsonResponse({ data_sources: [{ id: 'src-1', name: 'Anotaciones' }] })
+      }
+      if (url.endsWith('/data_sources/src-1') && options.method === 'PATCH') {
+        return jsonResponse({ ok: true })
+      }
+      if (url.endsWith('/data_sources/src-1')) {
+        return jsonResponse({
+          object: 'data_source',
+          id: 'src-1',
+          properties: { Nombre: { type: 'title' }, Finding: { type: 'rich_text' } }
+        })
+      }
+      if (url.endsWith('/pages') && options.method === 'POST') {
+        writes += 1
+        if (writes === 1) {
+          return jsonResponse(
+            {
+              object: 'error',
+              code: 'conflict_error',
+              message: 'Conflict occurred while saving. Please try again.'
+            },
+            409
+          )
+        }
+        return jsonResponse({ id: 'page-1', last_edited_time: '2026-11-08T00:00:00.000Z' })
+      }
+      return jsonResponse({ message: `unexpected ${url}` }, 500)
+    }
+
+    const client = createNotionClient({
+      token: 'secret',
+      databaseId: 'db-1',
+      fetchImpl,
+      sleepImpl: async (ms) => {
+        sleeps.push(ms)
+      }
+    })
+    const page = await client.createPage('finding-1', 'Título', 'Hola')
+    assert.equal(page.pageId, 'page-1')
+    assert.equal(writes, 2)
+    assert.deepEqual(sleeps, [400])
+  })
+
+  it('stops repeating a save conflict after three retries', async () => {
+    let writes = 0
+    const fetchImpl = async (url, options = {}) => {
+      if (url.endsWith('/users/me')) return jsonResponse({ object: 'user', id: 'bot' })
+      if (url.endsWith('/databases/db-1')) {
+        return jsonResponse({ data_sources: [{ id: 'src-1', name: 'Anotaciones' }] })
+      }
+      if (url.endsWith('/data_sources/src-1') && options.method === 'PATCH') {
+        return jsonResponse({ ok: true })
+      }
+      if (url.endsWith('/data_sources/src-1')) {
+        return jsonResponse({
+          object: 'data_source',
+          id: 'src-1',
+          properties: { Nombre: { type: 'title' }, Finding: { type: 'rich_text' } }
+        })
+      }
+      if (url.endsWith('/pages') && options.method === 'POST') {
+        writes += 1
+        return jsonResponse(
+          { code: 'conflict_error', message: 'Conflict occurred while saving. Please try again.' },
+          409
+        )
+      }
+      return jsonResponse({ message: `unexpected ${url}` }, 500)
+    }
+
+    const client = createNotionClient({
+      token: 'secret',
+      databaseId: 'db-1',
+      fetchImpl,
+      sleepImpl: async () => {}
+    })
+    await assert.rejects(client.createPage('finding-1', 'Título', 'Hola'), (error) => {
+      assert.equal(error.status, 409)
+      assert.equal(error.code, 'conflict_error')
+      return true
+    })
+    assert.equal(writes, 4)
+  })
 })

@@ -7803,7 +7803,15 @@ button.annotations-doc__save-status {
 }
 
 .notion-sync-dialog {
-  max-width: 34rem;
+  max-width: 40rem;
+}
+
+.notion-sync-dialog .notion-conflict__cols {
+  grid-template-columns: 1fr;
+}
+
+.notion-sync__choices {
+  flex-wrap: wrap;
 }
 
 .notion-sync-error {

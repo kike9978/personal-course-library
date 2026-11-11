@@ -53,7 +53,7 @@ export function createNotionClient({
 
   async function request(
     pathname,
-    { method = 'GET', body, attempt = 0, version = apiVersion } = {}
+    { method = 'GET', body, attempt = 0, conflictAttempt = 0, version = apiVersion } = {}
   ) {
     if (!version) throw new Error('Falta la versión de la API de Notion')
     let response
@@ -76,11 +76,22 @@ export function createNotionClient({
     if (response.status === 429 && attempt < 4) {
       const retryAfter = Number(response.headers.get('retry-after'))
       await sleepImpl(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000)
-      return request(pathname, { method, body, attempt: attempt + 1, version })
+      return request(pathname, { method, body, attempt: attempt + 1, conflictAttempt, version })
     }
 
     const data = await readJson(response)
     if (!response.ok) {
+      // Notion returns this when two saves land on the same page. The same request is safe to repeat.
+      if ((response.status === 409 || data.code === 'conflict_error') && conflictAttempt < 3) {
+        await sleepImpl(400 * 2 ** conflictAttempt)
+        return request(pathname, {
+          method,
+          body,
+          attempt,
+          conflictAttempt: conflictAttempt + 1,
+          version
+        })
+      }
       const error = new Error(data.message || `Notion respondió ${response.status}`)
       error.status = response.status
       error.code = data.code
@@ -533,18 +544,20 @@ export function createNotionClient({
     return data
   }
 
-  async function attachNoteFile(pageId, name, bytes, contentType) {
+  async function attachNoteFile(pageId, name, bytes, contentType, uploadName = name) {
     const version = await useCurrentVersion()
+    const filename = uploadName || name
+    const type = contentType || 'application/octet-stream'
     const created = await request('/file_uploads', {
       method: 'POST',
       version,
       body: {
         mode: 'single_part',
-        filename: name,
-        content_type: contentType || 'application/octet-stream'
+        filename,
+        content_type: type
       }
     })
-    await sendFile(created.id, name, bytes, contentType)
+    await sendFile(created.id, filename, bytes, type)
     await request(`/blocks/${pageId}/children`, {
       method: 'PATCH',
       version,

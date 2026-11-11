@@ -87,7 +87,10 @@ import {
   pollNotionChanges,
   resolveNotionConflict,
   resolveNotionDelete,
+  resolveNotionPlaylistConflict,
+  resolveNotionPlaylistDelete,
   saveNotionSettings,
+  setNotionDrawingShare,
   startNotionSync,
   syncNotionNow
 } from './services/notionSync.js'
@@ -912,12 +915,19 @@ function registerIpcHandlers() {
 
   ipcMain.handle('get-notion-sync', () => getNotionSyncStatus())
   ipcMain.handle('set-notion-sync', (_event, payload = {}) => saveNotionSettings(payload))
+  ipcMain.handle('set-notion-drawing-share', (_event, choice) => setNotionDrawingShare(choice))
   ipcMain.handle('sync-notion-now', (_event, findingId) => syncNotionNow(findingId || null))
   ipcMain.handle('resolve-notion-conflict', (_event, { findingId, choice } = {}) =>
     resolveNotionConflict(findingId, choice)
   )
   ipcMain.handle('resolve-notion-delete', (_event, { findingId, choice } = {}) =>
     resolveNotionDelete(findingId, choice)
+  )
+  ipcMain.handle('resolve-notion-playlist-conflict', (_event, { playlistId, choice } = {}) =>
+    resolveNotionPlaylistConflict(playlistId, choice)
+  )
+  ipcMain.handle('resolve-notion-playlist-delete', (_event, { playlistId, choice } = {}) =>
+    resolveNotionPlaylistDelete(playlistId, choice)
   )
 
   ipcMain.handle('open-project-link', async (_event, { coursePath, projectId }) => {
