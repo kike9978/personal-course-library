@@ -117,6 +117,11 @@ const api = {
     ipcRenderer.on('notes-changed', listener)
     return () => ipcRenderer.removeListener('notes-changed', listener)
   },
+  onPlaylistsChanged: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('playlists-changed', listener)
+    return () => ipcRenderer.removeListener('playlists-changed', listener)
+  },
   onAnnotationsJump: (callback) => {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('annotations-jump', listener)

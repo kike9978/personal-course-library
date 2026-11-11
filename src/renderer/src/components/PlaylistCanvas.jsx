@@ -810,6 +810,18 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
   }, [])
 
   useEffect(() => {
+    return window.api.onPlaylistsChanged?.(() => {
+      const cardHeight = bigCoverRef.current ? PLAYLIST_COVER_H : PLAYLIST_CARD_H
+      window.api
+        .listPlaylists?.()
+        .then((list) => {
+          if (list) setPlaylists(showPlaylists(list, cardHeight))
+        })
+        .catch(() => {})
+    })
+  }, [])
+
+  useEffect(() => {
     if (catalogKeyRef.current === null) {
       catalogKeyRef.current = catalogKey
       return undefined

@@ -3,12 +3,17 @@ import {
   bodyToBlocks,
   chunkRichText,
   findingIdFromBlocks,
+  playlistIdFromBlocks,
+  fileNameFromCaption,
   markerBlocks,
   markerFromBlocks,
+  noteAssetsFromBlocks,
   normalizeBody,
   normalizeTitle,
   plainRichText
 } from '../../shared/notionSync.js'
+
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'])
 
 // Newest first. Notion requires a version on every request and only publishes a
 // new date when a change would break older clients. The previous date keeps
@@ -294,7 +299,9 @@ export function createNotionClient({
         ...summary,
         body: blocksToBody(blocks),
         findingId: findingIdFromBlocks(blocks) || fromProperty,
-        marker: markerFromBlocks(blocks)
+        playlistId: playlistIdFromBlocks(blocks),
+        marker: markerFromBlocks(blocks),
+        assets: noteAssetsFromBlocks(blocks)
       }
     } catch (error) {
       if (error.status === 404 || error.code === 'object_not_found') return null
@@ -302,10 +309,15 @@ export function createNotionClient({
     }
   }
 
+  function keepsBlock(block) {
+    if (block.type === 'child_page' || block.archived || block.in_trash) return true
+    return Boolean(fileNameFromCaption(plainRichText(block[block.type]?.caption)))
+  }
+
   async function replaceContent(pageId, children) {
     const existing = await listChildren(pageId)
     for (const block of existing) {
-      if (block.type === 'child_page' || block.archived || block.in_trash) continue
+      if (keepsBlock(block)) continue
       await request(`/blocks/${block.id}`, { method: 'DELETE' })
     }
     if (!children.length) return
@@ -315,10 +327,11 @@ export function createNotionClient({
     })
   }
 
-  async function writeBody(pageId, body, findingId) {
+  async function writeBody(pageId, body, findingId, kind = 'finding') {
     const existing = await listChildren(pageId)
-    const stamped = findingIdFromBlocks(existing)
-    await replaceContent(pageId, bodyToBlocks(body, stamped || findingId || null))
+    const stamped =
+      kind === 'playlist' ? playlistIdFromBlocks(existing) : findingIdFromBlocks(existing)
+    await replaceContent(pageId, bodyToBlocks(body, stamped || findingId || null, kind))
   }
 
   async function writeMarker(pageId, marker) {
@@ -335,9 +348,17 @@ export function createNotionClient({
     return emoji ? { type: 'emoji', emoji } : undefined
   }
 
-  async function createPage(findingId, title, body, parentPageId = null, emoji = null, marker = null) {
+  async function createPage(
+    findingId,
+    title,
+    body,
+    parentPageId = null,
+    emoji = null,
+    marker = null,
+    kind = 'finding'
+  ) {
     const names = await loadSchema()
-    const children = marker ? markerBlocks(marker) : bodyToBlocks(body, findingId)
+    const children = marker ? markerBlocks(marker) : bodyToBlocks(body, findingId, kind)
     const inDatabase = !parentPageId
     const icon = emojiIcon(emoji)
     const page = await request('/pages', {
@@ -390,7 +411,7 @@ export function createNotionClient({
     return pageSummary(page, names.titleName)
   }
 
-  async function updatePage(pageId, findingId, title, body, emoji = null) {
+  async function updatePage(pageId, findingId, title, body, emoji = null, kind = 'finding') {
     const names = await loadSchema()
     const current = await request(`/pages/${pageId}`)
     const inDatabase = current.parent?.type !== 'page_id'
@@ -402,7 +423,7 @@ export function createNotionClient({
       method: 'PATCH',
       body: { properties, ...(icon ? { icon } : {}) }
     })
-    await writeBody(pageId, normalizeBody(body), findingId)
+    await writeBody(pageId, normalizeBody(body), findingId, kind)
     return readPage(pageId)
   }
 
@@ -462,6 +483,98 @@ export function createNotionClient({
       }))
   }
 
+  async function listNoteAssets(pageId) {
+    return noteAssetsFromBlocks(await listChildren(pageId))
+  }
+
+  function assetBlock(name, uploadId) {
+    const ext = name.slice(name.lastIndexOf('.')).toLowerCase()
+    const caption = [{ type: 'text', text: { content: `file:${name}` } }]
+    if (IMAGE_EXTENSIONS.has(ext)) {
+      return {
+        object: 'block',
+        type: 'image',
+        image: { type: 'file_upload', file_upload: { id: uploadId }, caption }
+      }
+    }
+    return {
+      object: 'block',
+      type: 'file',
+      file: { type: 'file_upload', file_upload: { id: uploadId }, caption }
+    }
+  }
+
+  async function sendFile(uploadId, filename, bytes, contentType) {
+    const version = await useCurrentVersion()
+    const form = new FormData()
+    form.append('file', new Blob([bytes], { type: contentType || 'application/octet-stream' }), filename)
+    let response
+    try {
+      response = await fetchImpl(`https://api.notion.com/v1/file_uploads/${uploadId}/send`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Notion-Version': version
+        },
+        body: form
+      })
+    } catch (error) {
+      const wrapped = new Error(error?.message || 'No se pudo subir el archivo a Notion')
+      wrapped.status = 0
+      throw wrapped
+    }
+    const data = await readJson(response)
+    if (!response.ok) {
+      const error = new Error(data.message || `Notion respondió ${response.status}`)
+      error.status = response.status
+      error.code = data.code
+      throw error
+    }
+    return data
+  }
+
+  async function attachNoteFile(pageId, name, bytes, contentType) {
+    const version = await useCurrentVersion()
+    const created = await request('/file_uploads', {
+      method: 'POST',
+      version,
+      body: {
+        mode: 'single_part',
+        filename: name,
+        content_type: contentType || 'application/octet-stream'
+      }
+    })
+    await sendFile(created.id, name, bytes, contentType)
+    await request(`/blocks/${pageId}/children`, {
+      method: 'PATCH',
+      version,
+      body: { children: [assetBlock(name, created.id)] }
+    })
+  }
+
+  async function downloadAsset(url) {
+    let response
+    try {
+      response = await fetchImpl(url)
+    } catch (error) {
+      const wrapped = new Error(error?.message || 'No se pudo descargar el archivo')
+      wrapped.status = 0
+      throw wrapped
+    }
+    if (!response.ok) {
+      const error = new Error(`Notion respondió ${response.status}`)
+      error.status = response.status
+      throw error
+    }
+    const buffer = await response.arrayBuffer()
+    return Buffer.from(buffer)
+  }
+
+  async function deleteBlock(blockId) {
+    if (!blockId) return
+    await request(`/blocks/${blockId}`, { method: 'DELETE' })
+  }
+
   async function archivePage(pageId) {
     const version = await useCurrentVersion()
     await request(`/pages/${pageId}`, {
@@ -483,6 +596,10 @@ export function createNotionClient({
     renamePage,
     setPageIcon,
     listChildPages,
+    listNoteAssets,
+    attachNoteFile,
+    downloadAsset,
+    deleteBlock,
     pageParent,
     recentPages,
     archivePage,

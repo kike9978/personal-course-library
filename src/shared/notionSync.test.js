@@ -8,7 +8,11 @@ import {
   decideSync,
   filePageMarker,
   findingIdFromBlocks,
+  playlistFromBody,
+  playlistIdFromBlocks,
+  playlistWire,
   markerBlocks,
+  noteAssetNames,
   normalizeDatabaseId,
   notionErrorMessage,
   notionPlace,
@@ -22,12 +26,57 @@ describe('notion wire text', () => {
     assert.equal(left, right)
   })
 
+  it('keeps a playlist id on its page without looking like a note', () => {
+    const wire = playlistWire({
+      title: 'Repaso',
+      why: 'Cierre',
+      coursePaths: ['pack'],
+      childIds: ['child-1'],
+      courseWhys: { pack: 'porque' }
+    })
+    const blocks = bodyToBlocks(wire.body, 'list-1', 'playlist')
+    assert.equal(findingIdFromBlocks(blocks), '')
+    assert.equal(playlistIdFromBlocks(blocks), 'list-1')
+    assert.deepEqual(playlistFromBody(blocksToBody(blocks)), {
+      why: 'Cierre',
+      coursePaths: ['pack'],
+      childIds: ['child-1'],
+      courseWhys: { pack: 'porque' }
+    })
+    assert.equal(playlistWire({ title: 'Repaso', why: 'Cierre', coursePaths: ['pack'], childIds: ['child-1'], courseWhys: { pack: 'porque' } }).body, wire.body)
+  })
+
   it('round-trips markdown through one code block', () => {
     const body = 'Nota\n\n@[time:12.5](0:12)\n\n[[lesson|Uno|abc]]'
     const blocks = bodyToBlocks(body)
     assert.equal(blocks.length, 1)
     assert.equal(blocks[0].type, 'code')
     assert.equal(blocksToBody(blocks), 'Nota\n\n@[time:12.5](0:12)\n\n[[lesson|Uno|abc]]')
+  })
+
+  it('lists image and drawing files without putting them in the note text', () => {
+    const body = [
+      'Hola',
+      '![Captura](course-media://note/?file=mw2pazt9-4b174209be23.jpg)',
+      '![excalidraw:draw-1](course-media://note/?file=draw-1.png)'
+    ].join('\n\n')
+    assert.deepEqual(noteAssetNames(body), [
+      'mw2pazt9-4b174209be23.jpg',
+      'draw-1.png',
+      'draw-1.excalidraw'
+    ])
+    const blocks = [
+      ...bodyToBlocks(body, 'note-1'),
+      {
+        type: 'image',
+        image: {
+          caption: [{ plain_text: 'file:mw2pazt9-4b174209be23.jpg' }],
+          file: { url: 'https://files.example/shot.jpg' }
+        }
+      }
+    ]
+    assert.equal(blocksToBody(blocks), body)
+    assert.equal(findingIdFromBlocks(blocks), 'note-1')
   })
 
   it('keeps the finding id out of the note text', () => {

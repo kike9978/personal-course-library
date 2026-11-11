@@ -82,8 +82,8 @@ export function NotionSyncButton() {
       if (next) setDatabaseId(next.databaseId || '')
       toast.success(
         turningOn
-          ? 'Notion activado. Las notas se envían al guardar.'
-          : 'Notion apagado. No se envió nada.'
+          ? 'Notion activado. Notas y listas se comparten al guardar.'
+          : 'Notion apagado. Esta biblioteca deja de compartir.'
       )
     } catch (error) {
       toast.error(notionErrorText(error, 'No se pudo guardar Notion'))
@@ -119,9 +119,9 @@ export function NotionSyncButton() {
     <>
       <button
         type="button"
-        className="btn btn--ghost notion-sync-btn"
+        className={`btn btn--ghost notion-sync-btn${status?.enabled ? ' is-on' : ''}${status?.lastError ? ' is-error' : ''}`}
         onClick={() => setOpen(true)}
-        title={status?.lastError || 'Sincronizar anotaciones con Notion'}
+        title={status?.lastError || 'Conectar la biblioteca con Notion'}
       >
         Notion
         {status?.enabled || conflictCount ? (
@@ -153,14 +153,34 @@ export function NotionSyncButton() {
           >
             <h3>Notion</h3>
             <p className="dialog__lead">
-              Apagado, las anotaciones se quedan en este equipo. Encendido, el título y el texto se
-              envían al guardar y al abrir la app. Cada curso es una página, cada archivo queda
-              dentro, y la nota dentro de ese archivo. Otra copia de la app conectada a esta misma
-              base recoge esas notas. Si los dos lados cambiaron, la nota espera a que elijas una
-              versión. El cuerpo de la página en Notion es el texto de la nota.
+              Conecta esta biblioteca con una base de Notion. Otra copia de la app que use la misma
+              base comparte lo que se guarda aquí.
+            </p>
+            <ul className="notion-sync__scope">
+              <li>
+                <strong>Notas</strong>
+                <span>
+                  Título, texto e imágenes. Cada curso es una página, cada archivo queda dentro y la
+                  nota dentro de ese archivo.
+                </span>
+              </li>
+              <li>
+                <strong>Listas</strong>
+                <span>
+                  Título, motivo, cursos y listas anidadas, bajo una página Listas. El lugar en el
+                  tablero se queda en este equipo.
+                </span>
+              </li>
+            </ul>
+            <p className="dialog__lead">
+              El título, la academia, el instructor, la descripción y la portada de cada curso siguen
+              en su carpeta, igual que los archivos del curso. Si una nota cambió aquí y en Notion,
+              espera a que elijas una versión.
             </p>
             <p className="notion-sync__enable">
-              {status?.enabled ? 'La sincronización está encendida.' : 'La sincronización está apagada.'}
+              {status?.enabled
+                ? 'Esta biblioteca está conectada.'
+                : 'Esta biblioteca está desconectada.'}
             </p>
             <div className="field">
               <label htmlFor="notion-token">Token de integración</label>

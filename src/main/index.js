@@ -75,10 +75,13 @@ import {
   deletePlaylist,
   getPlaylistIntent,
   savePlaylistIntent,
-  setNoteWriteHook
+  setNoteWriteHook,
+  setPlaylistWriteHook
 } from './services/learningStore.js'
 import {
   enqueueNotionDelete,
+  enqueueNotionPlaylistDelete,
+  enqueueNotionPlaylistUpsert,
   enqueueNotionUpsert,
   getNotionSyncStatus,
   pollNotionChanges,
@@ -428,6 +431,10 @@ function registerIpcHandlers() {
   setNoteWriteHook((event) => {
     if (event.op === 'delete') enqueueNotionDelete(event.finding)
     else enqueueNotionUpsert(event.id)
+  })
+  setPlaylistWriteHook((event) => {
+    if (event.op === 'delete') enqueueNotionPlaylistDelete(event.playlist)
+    else enqueueNotionPlaylistUpsert(event.id)
   })
   ipcMain.handle('get-library-path', () => {
     const libraryPath = getLibraryPath()
@@ -933,6 +940,7 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   startNotionSync({
     notifyNotes: () => broadcastToWindows('notes-changed', {}),
+    notifyPlaylists: () => broadcastToWindows('playlists-changed', {}),
     notifyStatus: (status) => broadcastToWindows('notion-sync', status)
   })
   app.on('browser-window-focus', () => {

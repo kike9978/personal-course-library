@@ -108,6 +108,49 @@ export function findingIdFromBlocks(blocks) {
   return ''
 }
 
+export function playlistIdFromBlocks(blocks) {
+  for (const block of blocks || []) {
+    const caption = blockCaption(block)
+    if (caption.startsWith('playlist:')) return caption.slice('playlist:'.length).trim()
+  }
+  return ''
+}
+
+/** Shared list fields. Position, size, and collapsed stay on this machine. */
+export function playlistWire(playlist) {
+  const rawWhys =
+    playlist?.courseWhys && typeof playlist.courseWhys === 'object' ? playlist.courseWhys : {}
+  const courseWhys = {}
+  for (const key of Object.keys(rawWhys).sort()) courseWhys[key] = String(rawWhys[key] ?? '')
+  const body = normalizeBody(
+    JSON.stringify({
+      why: String(playlist?.why || ''),
+      coursePaths: Array.isArray(playlist?.coursePaths) ? playlist.coursePaths.map(String) : [],
+      childIds: Array.isArray(playlist?.childIds) ? playlist.childIds.map(String) : [],
+      courseWhys
+    })
+  )
+  return { title: normalizeTitle(playlist?.title) || 'Nueva lista', body }
+}
+
+export function playlistFromBody(body) {
+  try {
+    const data = JSON.parse(String(body || ''))
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+    return {
+      why: String(data.why || ''),
+      coursePaths: Array.isArray(data.coursePaths) ? data.coursePaths.map(String) : [],
+      childIds: Array.isArray(data.childIds) ? data.childIds.map(String) : [],
+      courseWhys:
+        data.courseWhys && typeof data.courseWhys === 'object' && !Array.isArray(data.courseWhys)
+          ? data.courseWhys
+          : {}
+    }
+  } catch {
+    return null
+  }
+}
+
 export function markerFromBlocks(blocks) {
   for (const block of blocks || []) {
     const caption = blockCaption(block)
@@ -223,11 +266,12 @@ function captionRichText(value) {
 }
 
 /** One markdown code block so a note is a single Notion write. The caption keeps the id. */
-export function bodyToBlocks(body, findingId = null) {
+export function bodyToBlocks(body, findingId = null, kind = 'finding') {
   const text = normalizeBody(body)
   const id = String(findingId || '').trim()
   if (!text && !id) return []
-  const caption = captionRichText(id ? `finding:${id}` : '')
+  const prefix = kind === 'playlist' ? 'playlist' : 'finding'
+  const caption = captionRichText(id ? `${prefix}:${id}` : '')
   return [
     {
       object: 'block',
@@ -258,12 +302,68 @@ export function markerBlocks(marker) {
   ]
 }
 
+const ASSET_NAME = /^[a-z0-9-]+\.[a-z0-9]+$/i
+
+function addAssetName(names, raw) {
+  let text = String(raw || '').trim()
+  try {
+    text = decodeURIComponent(text)
+  } catch {
+    // The markdown already has the raw name.
+  }
+  const base = text.split(/[/\\]/).pop()
+  if (!base || !ASSET_NAME.test(base) || names.includes(base)) return
+  names.push(base)
+}
+
+/** Basenames a note's markdown points at, including an Excalidraw scene file. */
+export function noteAssetNames(body) {
+  const names = []
+  const text = String(body || '')
+  for (const match of text.matchAll(/!\[[^\]]*]\(course-media:\/\/note\/\?file=([^)\s]+)\)/gi)) {
+    addAssetName(names, match[1])
+  }
+  for (const match of text.matchAll(/!\[excalidraw:([^\]]*)\]\(([^)]*)\)/gi)) {
+    const id = String(match[1] || '').trim()
+    if (/^[a-z0-9-]+$/i.test(id)) addAssetName(names, `${id}.excalidraw`)
+    const file = /[?&]file=([^)\s]+)/i.exec(match[2] || '')
+    if (file) addAssetName(names, file[1])
+  }
+  return names
+}
+
+export function fileNameFromCaption(caption) {
+  const text = String(caption || '').trim()
+  if (!text.startsWith('file:')) return ''
+  const name = text.slice('file:'.length).trim()
+  return ASSET_NAME.test(name) ? name : ''
+}
+
+/** Image and file blocks carried next to a note. The caption is the local basename. */
+export function noteAssetsFromBlocks(blocks) {
+  const assets = []
+  for (const block of blocks || []) {
+    const type = block?.type
+    if (type !== 'image' && type !== 'file') continue
+    const name = fileNameFromCaption(plainRichText(block[type]?.caption))
+    if (!name || assets.some((item) => item.name === name)) continue
+    const hosted = block[type]?.file || block[type]?.external || {}
+    assets.push({
+      name,
+      url: typeof hosted.url === 'string' ? hosted.url : '',
+      blockId: block.id || ''
+    })
+  }
+  return assets
+}
+
 export function blocksToBody(blocks) {
   const parts = []
   for (const block of blocks || []) {
     const type = block?.type
     if (!TEXT_BLOCK_TYPES.has(type)) continue
-    if (blockCaption(block).startsWith('node:')) continue
+    const caption = blockCaption(block)
+    if (caption.startsWith('node:') || caption.startsWith('file:')) continue
     const text = plainRichText(block[type]?.rich_text).replace(/\u200b/g, '')
     if (text) parts.push(text)
   }

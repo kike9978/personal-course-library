@@ -171,6 +171,29 @@ export function loadNoteDrawing(drawingId) {
  * @param {string[]} fileNames
  * @returns {{ fileName: string, absolutePath: string }[]}
  */
+/**
+ * Write bytes at an existing attachment basename so a synced note keeps its URL.
+ * @param {string} fileName
+ * @param {Buffer | Uint8Array} bytes
+ */
+export function saveNoteAttachmentBytes(fileName, bytes) {
+  const base = path.basename(String(fileName || ''))
+  if (!/^[a-z0-9-]+\.[a-z0-9]+$/i.test(base)) {
+    throw new Error('Nombre de archivo inválido')
+  }
+  const absolute = path.join(getAttachmentsDir(), base)
+  fs.writeFileSync(absolute, Buffer.from(bytes))
+  return absolute
+}
+
+/** @param {string} fileName */
+export function readNoteAttachment(fileName) {
+  const absolute = resolveNoteAttachmentPath(fileName)
+  if (!absolute || !fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) return null
+  const bytes = fs.readFileSync(absolute)
+  return { bytes, contentType: getNoteAttachmentMime(absolute), size: bytes.length }
+}
+
 export function resolveExistingNoteAttachments(fileNames) {
   const out = []
   for (const name of fileNames || []) {

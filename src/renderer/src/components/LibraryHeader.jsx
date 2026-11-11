@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import AppNav from './AppNav'
 import CourseFilterBar from './CourseFilterBar'
+import { NotionSyncButton } from './NotionSyncControl'
 import brandMark from '../assets/img/brand-mark.svg'
 
 const SORT_OPTIONS = [
@@ -111,6 +112,7 @@ function LibraryHeader({
         </div>
 
         <div className="header-tools">
+          <NotionSyncButton />
           <button
             type="button"
             className="header-icon"

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import NoteEditor from './NoteEditor'
-import { NotionSyncButton, NotionSyncConflict, NotionSyncNoteButton } from './NotionSyncControl'
+import { NotionSyncConflict, NotionSyncNoteButton } from './NotionSyncControl'
 import { TreeSection } from './LessonTree'
 import KnowledgeGraphView from './KnowledgeGraphView'
 import { formatTime } from './StudySidePanel'
@@ -1051,7 +1051,6 @@ function AnnotationsWorkspace({
               Ventana
             </button>
           ) : null}
-          <NotionSyncButton />
           {onCreate ? (
             <button type="button" className="btn btn--primary" onClick={onCreate}>
               Nueva

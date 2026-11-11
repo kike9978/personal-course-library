@@ -154,4 +154,103 @@ describe('notion client', () => {
     assert.equal(created.body.children[0].code.rich_text[0].text.content, 'Hola')
     assert.equal(page.pageId, 'note-1')
   })
+
+  it('uploads a note image as a captioned image block', async () => {
+    const calls = []
+    const fetchImpl = async (url, options = {}) => {
+      calls.push({
+        url,
+        method: options.method || 'GET',
+        body: options.body,
+        contentType: options.headers?.['Content-Type']
+      })
+      if (url.endsWith('/users/me')) return jsonResponse({ object: 'user', id: 'bot' })
+      if (url.endsWith('/file_uploads') && options.method === 'POST') {
+        return jsonResponse({ id: 'up-1' })
+      }
+      if (url.endsWith('/file_uploads/up-1/send')) return jsonResponse({ id: 'up-1', status: 'uploaded' })
+      if (url.includes('/blocks/page-1/children') && options.method === 'PATCH') {
+        return jsonResponse({ results: [] })
+      }
+      return jsonResponse({ message: `unexpected ${url}` }, 500)
+    }
+    const client = createNotionClient({ token: 'secret', databaseId: 'db-1', fetchImpl })
+    await client.attachNoteFile('page-1', 'shot.png', Buffer.from('img'), 'image/png')
+    const created = calls.find((call) => call.url.endsWith('/file_uploads'))
+    assert.equal(JSON.parse(created.body).filename, 'shot.png')
+    const appended = calls.find(
+      (call) => call.method === 'PATCH' && call.url.includes('/blocks/page-1/children')
+    )
+    const body = JSON.parse(appended.body)
+    assert.equal(body.children[0].type, 'image')
+    assert.equal(body.children[0].image.caption[0].text.content, 'file:shot.png')
+    assert.equal(body.children[0].image.file_upload.id, 'up-1')
+    assert.equal(appended.contentType, 'application/json')
+  })
+
+  it('keeps a file block when the note body is rewritten', async () => {
+    const deleted = []
+    const fetchImpl = async (url, options = {}) => {
+      const method = options.method || 'GET'
+      if (url.endsWith('/users/me')) return jsonResponse({ object: 'user', id: 'bot' })
+      if (url.endsWith('/databases/db-1') && method === 'GET') {
+        return jsonResponse({ data_sources: [{ id: 'src-1', name: 'Anotaciones' }] })
+      }
+      if (url.endsWith('/data_sources/src-1') && method === 'GET') {
+        return jsonResponse({
+          object: 'data_source',
+          id: 'src-1',
+          properties: {
+            Nombre: { type: 'title' },
+            Finding: { type: 'rich_text' },
+            Nodo: { type: 'rich_text' }
+          }
+        })
+      }
+      if (url.endsWith('/pages/page-1') && method === 'GET') {
+        return jsonResponse({
+          id: 'page-1',
+          parent: { type: 'page_id', page_id: 'file-page' },
+          last_edited_time: '2026-11-08T00:00:00.000Z',
+          properties: { title: { title: [{ plain_text: 'Nota' }] } }
+        })
+      }
+      if (url.endsWith('/pages/page-1') && method === 'PATCH') return jsonResponse({ id: 'page-1' })
+      if (url.includes('/blocks/page-1/children') && method === 'GET') {
+        return jsonResponse({
+          results: [
+            {
+              id: 'code-1',
+              type: 'code',
+              code: { rich_text: [{ plain_text: 'Hola' }], caption: [] }
+            },
+            {
+              id: 'img-1',
+              type: 'image',
+              image: {
+                caption: [{ plain_text: 'file:shot.png' }],
+                type: 'file',
+                file: { url: 'https://files.example/shot.png' }
+              }
+            }
+          ]
+        })
+      }
+      if (url.endsWith('/blocks/code-1') && method === 'DELETE') {
+        deleted.push('code-1')
+        return jsonResponse({})
+      }
+      if (url.endsWith('/blocks/img-1') && method === 'DELETE') {
+        deleted.push('img-1')
+        return jsonResponse({})
+      }
+      if (url.includes('/blocks/page-1/children') && method === 'PATCH') {
+        return jsonResponse({ results: [] })
+      }
+      return jsonResponse({ message: `unexpected ${method} ${url}` }, 500)
+    }
+    const client = createNotionClient({ token: 'secret', databaseId: 'db-1', fetchImpl })
+    await client.updatePage('page-1', 'note-1', 'Nota', 'Hola')
+    assert.deepEqual(deleted, ['code-1'])
+  })
 })

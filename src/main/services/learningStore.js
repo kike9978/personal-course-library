@@ -60,11 +60,16 @@ function makeId() {
 }
 
 let noteWriteHook = null
+let playlistWriteHook = null
 let noteWriteSuppress = 0
 
 /** Main-process listener for saves and deletes. Sync uses this to enqueue work. */
 export function setNoteWriteHook(fn) {
   noteWriteHook = typeof fn === 'function' ? fn : null
+}
+
+export function setPlaylistWriteHook(fn) {
+  playlistWriteHook = typeof fn === 'function' ? fn : null
 }
 
 /** Store writes from the sync worker must not enqueue another sync. */
@@ -80,6 +85,11 @@ export function withoutNoteWriteHook(fn) {
 function emitNoteWrite(event) {
   if (noteWriteSuppress > 0 || !noteWriteHook) return
   noteWriteHook(event)
+}
+
+function emitPlaylistWrite(event) {
+  if (noteWriteSuppress > 0 || !playlistWriteHook) return
+  playlistWriteHook(event)
 }
 
 function ensureArrays(course) {
@@ -1161,6 +1171,7 @@ function normalizePlaylist(input, existing) {
     hidden
   )
   const now = Date.now()
+  const notion = source.notion !== undefined ? source.notion : existing?.notion || null
   return {
     id,
     title,
@@ -1172,7 +1183,8 @@ function normalizePlaylist(input, existing) {
     courseWhys,
     collapsed: Boolean(source.collapsed !== undefined ? source.collapsed : existing?.collapsed),
     createdAt: existing?.createdAt || now,
-    updatedAt: source === existing && existing?.updatedAt ? existing.updatedAt : now
+    updatedAt: source === existing && existing?.updatedAt ? existing.updatedAt : now,
+    ...(notion ? { notion } : {})
   }
 }
 
@@ -1194,6 +1206,31 @@ function playlistsForDisplay(playlists) {
   return playlists.map((playlist) => playlistForDisplay(playlist, hidden))
 }
 
+export function listPlaylistRecords() {
+  const store = readStore()
+  return settleNesting((store.playlists || []).map((playlist) => normalizePlaylist(playlist, playlist)))
+}
+
+export function readPlaylist(id) {
+  return listPlaylistRecords().find((playlist) => playlist.id === id) || null
+}
+
+/** Store a playlist without asking Notion to sync again. */
+export function writePlaylistRecord(playlist) {
+  const store = readStore()
+  if (!Array.isArray(store.playlists)) store.playlists = []
+  const existing = store.playlists.find((item) => item.id === playlist?.id)
+  const next = normalizePlaylist(playlist, existing)
+  if (existing) {
+    const index = store.playlists.findIndex((item) => item.id === next.id)
+    store.playlists[index] = next
+  } else {
+    store.playlists.push(next)
+  }
+  writeStore(store)
+  return next
+}
+
 export function listPlaylists() {
   const store = readStore()
   return playlistsForDisplay(
@@ -1213,6 +1250,7 @@ export function upsertPlaylist(payload) {
     store.playlists.push(next)
   }
   writeStore(store)
+  emitPlaylistWrite({ op: 'upsert', id: next.id })
   return playlistForDisplay(next, hiddenCoursePathSet())
 }
 
@@ -1220,15 +1258,20 @@ export function deletePlaylist(playlistId) {
   const store = readStore()
   if (!Array.isArray(store.playlists)) store.playlists = []
   const id = String(playlistId || '')
+  const removed = store.playlists.find((playlist) => playlist.id === id) || null
+  const parentIds = []
   const next = store.playlists
     .filter((playlist) => playlist.id !== id)
-    .map((playlist) => ({
-      ...playlist,
-      childIds: (playlist.childIds || []).filter((childId) => childId !== id)
-    }))
+    .map((playlist) => {
+      const childIds = (playlist.childIds || []).filter((childId) => childId !== id)
+      if (childIds.length !== (playlist.childIds || []).length) parentIds.push(playlist.id)
+      return { ...playlist, childIds }
+    })
   if (next.length !== store.playlists.length) {
     store.playlists = next
     writeStore(store)
+    if (removed) emitPlaylistWrite({ op: 'delete', playlist: removed })
+    for (const parentId of parentIds) emitPlaylistWrite({ op: 'upsert', id: parentId })
   }
   return { ok: true }
 }
