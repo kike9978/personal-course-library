@@ -32,6 +32,18 @@ describe('course hide', () => {
     assert.deepEqual(whys, { 'School - New': 'Ahora', 'School - Old': 'Luego' })
   })
 
+  it('treats a decomposed folder name as the same hidden course', () => {
+    const hidden = new Set(['School - Old'])
+    const stored = 'School - Old'.normalize('NFD')
+    const paths = retainHiddenCoursePaths(['School - New'], [stored, 'School - New'], hidden)
+    assert.deepEqual(paths, ['School - New', stored])
+    const shown = playlistForDisplay(
+      { id: 'list', coursePaths: ['School - New', stored], courseWhys: { [stored]: 'Luego' } },
+      hidden
+    )
+    assert.deepEqual(shown.coursePaths, ['School - New'])
+  })
+
   it('omits hidden courses from the playlist shown in the app', () => {
     const shown = playlistForDisplay(
       {

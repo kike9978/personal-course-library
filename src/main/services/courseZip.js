@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { getLibraryPath, isLibraryPathValid } from './config.js'
 import { courseFolderName, folderIsInsideLibrary } from '../../shared/courseExportSelection.js'
+import { folderResolver } from '../../shared/courseFolderMatch.js'
 import { zipFolders } from './zipFolders.js'
 
 /**
@@ -14,12 +15,23 @@ export function resolveCourseFolders(coursePaths) {
     throw new Error('La biblioteca no está configurada')
   }
   const libraryReal = fs.realpathSync(libraryPath)
+  let folderNames = []
+  try {
+    folderNames = fs
+      .readdirSync(libraryReal, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+  } catch {
+    folderNames = []
+  }
+  const resolve = folderResolver(folderNames)
   const folders = []
   const skipped = []
   const seen = new Set()
 
   for (const raw of Array.isArray(coursePaths) ? coursePaths : []) {
-    const name = courseFolderName(raw)
+    const requested = courseFolderName(raw)
+    const name = requested ? resolve(requested) : ''
     if (!name || seen.has(name)) continue
     seen.add(name)
     const linked = path.join(libraryReal, name)

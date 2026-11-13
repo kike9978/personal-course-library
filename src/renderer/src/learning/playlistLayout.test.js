@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { courseCatalog } from '../../../shared/courseFolderMatch.js'
 import {
   PLAYLIST_COVER_H,
   PLAYLIST_GAP,
@@ -78,7 +79,9 @@ describe('playlist layout', () => {
     assert.equal(nodes[0].type, 'playlist')
     assert.equal(nodes[1].parentId, 'pl1')
     assert.equal(nodes[1].data.title, 'Lighting')
+    assert.equal(nodes[1].data.libraryPath, 'lighting')
     assert.equal(nodes[2].data.missing, true)
+    assert.equal(nodes[2].data.libraryPath, '')
     assert.equal(nodes[2].position.y, courseNodeY(1))
     assert.equal(nodes[1].data.continues, true)
     assert.equal(nodes[2].data.continues, false)
@@ -101,6 +104,34 @@ describe('playlist layout', () => {
     assert.equal(covers.nodes[1].height, PLAYLIST_COVER_H)
     assert.equal(covers.nodes[1].data.bigCover, true)
     assert.ok(covers.nodes[0].height >= contentHeight(1, PLAYLIST_COVER_H))
+  })
+
+  it('shows the course title when the list folder only differs by encoding', () => {
+    const folder = 'Domestika - Fundamentos de la tipografía'
+    const { nodes } = buildFlow(
+      [
+        {
+          id: 'pl1',
+          title: 'Ruta',
+          position: { x: 0, y: 0 },
+          size: { width: 320, height: 400 },
+          coursePaths: [folder.normalize('NFD')]
+        }
+      ],
+      courseCatalog([
+        {
+          path: folder,
+          title: 'Fundamentos de la tipografía',
+          institution: 'DOMESTIKA',
+          hasCover: true
+        }
+      ])
+    )
+    assert.equal(nodes[1].data.missing, false)
+    assert.equal(nodes[1].data.title, 'Fundamentos de la tipografía')
+    assert.equal(nodes[1].data.institution, 'DOMESTIKA')
+    assert.equal(nodes[1].data.libraryPath, folder)
+    assert.equal(nodes[1].data.coursePath, folder.normalize('NFD'))
   })
 
   it('keeps a new list off existing frames', () => {

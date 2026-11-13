@@ -39,6 +39,7 @@ import brandMark from '../assets/img/brand-mark.svg'
 import { InstitutionMark } from './InstitutionMark'
 import { MAX_NESTED, settleNesting } from '../../../shared/playlistNest.js'
 import { applyCoursePick, collectExportCoursePaths } from '../../../shared/courseExportSelection.js'
+import { courseCatalog, sameFolder } from '../../../shared/courseFolderMatch.js'
 import {
   PLAYLIST_CARD_H,
   PLAYLIST_COVER_H,
@@ -442,7 +443,7 @@ function CourseNode({ data }) {
 
   return (
     <article
-      className={`playlist-course${data.missing ? ' is-missing' : ''}${data.inProcess ? ' is-active' : ''}${data.continues ? ' has-next' : ''}${data.bigCover ? ' is-cover' : ''}${actions?.detailPath === data.coursePath ? ' is-preview' : ''}${actions?.isCoursePicked?.(data.coursePath) ? ' is-picked' : ''}`}
+      className={`playlist-course${data.missing ? ' is-missing' : ''}${data.inProcess ? ' is-active' : ''}${data.continues ? ' has-next' : ''}${data.bigCover ? ' is-cover' : ''}${actions?.detailPath === data.coursePath || actions?.detailPath === data.libraryPath ? ' is-preview' : ''}${actions?.isCoursePicked?.(data.coursePath) ? ' is-picked' : ''}`}
     >
       <CoursePickBox
         className="nodrag nopan"
@@ -451,7 +452,7 @@ function CourseNode({ data }) {
         onPick={(pick) => actions?.toggleCoursePick(data.coursePath, pick)}
       />
       <CourseCover
-        coursePath={data.missing ? '' : data.coursePath}
+        coursePath={data.missing ? '' : data.libraryPath || data.coursePath}
         hasCover={data.hasCover}
         coverStamp={data.coverStamp}
         className="playlist-course__cover"
@@ -693,11 +694,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
   bigCoverRef.current = bigCover
   sidebarWidthRef.current = sidebarWidth
   boardFiltersRef.current = boardFilters
-  displayRef.current = projectPlaylists(
-    playlists,
-    new Map(courses.map((course) => [course.path, course])),
-    boardFilters
-  )
+  displayRef.current = projectPlaylists(playlists, courseCatalog(courses), boardFilters)
   coursesRef.current = courses
   selectedIdRef.current = selectedId
 
@@ -706,10 +703,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
   const nodesReady = useNodesInitialized()
   const courseSignature = useMemo(() => courseSignatureOf(courses), [courses])
 
-  const courseMap = useCallback(
-    () => new Map(coursesRef.current.map((course) => [course.path, course])),
-    []
-  )
+  const courseMap = useCallback(() => courseCatalog(coursesRef.current), [])
 
   const syncFlow = useCallback(
     (list, covers = bigCoverRef.current) => {
@@ -973,7 +967,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
     (playlistId, coursePath, title) => {
       const current = playlistsRef.current.find((playlist) => playlist.id === playlistId)
       if (!current) return
-      const course = coursesRef.current.find((item) => item.path === coursePath)
+      const course = courseCatalog(coursesRef.current).get(coursePath)
       const label = String(title || course?.title || 'este curso').trim() || 'este curso'
       const list = current.title || 'la lista'
       if (!window.confirm(`¿Quitar «${label}» de «${list}»? El curso sigue en la biblioteca.`)) {
@@ -981,7 +975,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
       }
       persistPlaylist({
         ...current,
-        coursePaths: current.coursePaths.filter((item) => item !== coursePath)
+        coursePaths: current.coursePaths.filter((item) => !sameFolder(item, coursePath))
       })
     },
     [persistPlaylist]
@@ -989,7 +983,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
 
   const openCourse = useCallback(
     (coursePath) => {
-      const course = coursesRef.current.find((item) => item.path === coursePath)
+      const course = courseCatalog(coursesRef.current).get(coursePath)
       if (!course) {
         toast.error('Ese curso no está en la biblioteca')
         return
@@ -1000,12 +994,12 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
   )
 
   const previewCourse = useCallback((coursePath) => {
-    const course = coursesRef.current.find((item) => item.path === coursePath)
+    const course = courseCatalog(coursesRef.current).get(coursePath)
     if (!course) {
       toast.error('Ese curso no está en la biblioteca')
       return
     }
-    setDetailPath(coursePath)
+    setDetailPath(course.path)
   }, [])
 
   const toggleInProcess = useCallback(async (course, newValue) => {
@@ -1063,7 +1057,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
       }
       const playlist = list.find((item) => item.id === id)
       if (!playlist) return
-      if (playlist.coursePaths.includes(coursePath)) {
+      if (playlist.coursePaths.some((item) => sameFolder(item, coursePath))) {
         toast('Ese curso ya está en la lista')
         return
       }
@@ -1334,7 +1328,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
         maxRowWidth = Math.max(PLAYLIST_DEFAULT_W, rect.width / zoom - 72)
       }
       const byId = new Map(current.map((playlist) => [playlist.id, playlist]))
-      const courseByPath = new Map(coursesRef.current.map((course) => [course.path, course]))
+      const courseByPath = courseCatalog(coursesRef.current)
       const next =
         mode === 'clean'
           ? separateOverlaps(current, { cardHeight })
@@ -1779,7 +1773,11 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
       openCourse,
       selectPlaylist,
       unnestPlaylist,
-      isCoursePicked: (coursePath) => pickedCourses.has(coursePath),
+      isCoursePicked: (coursePath) => {
+        if (pickedCourses.has(coursePath)) return true
+        const course = courseCatalog(coursesRef.current).get(coursePath)
+        return Boolean(course && pickedCourses.has(course.path))
+      },
       isListPicked: (playlistId) => pickedLists.has(playlistId),
       toggleCoursePick,
       toggleListPick
@@ -1831,23 +1829,30 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
   }, [courses])
   const listedCourses = useMemo(() => {
     const paths = new Set()
+    let stored = 0
+    const catalog = courseCatalog(courses)
     for (const playlist of playlists) {
-      for (const coursePath of playlist.coursePaths || []) paths.add(coursePath)
+      for (const coursePath of playlist.coursePaths || []) {
+        stored += 1
+        const course = catalog.get(coursePath)
+        if (course) paths.add(course.path)
+      }
     }
-    if (paths.size === 0) return courses
+    if (stored === 0) return courses
     return courses.filter((course) => paths.has(course.path))
   }, [courses, playlists])
   const boardFacets = useMemo(() => collectCourseFacets(listedCourses), [listedCourses])
   const boardStats = useMemo(() => {
-    const byPath = new Map(courses.map((course) => [course.path, course]))
+    const byPath = courseCatalog(courses)
     const active = libraryFiltersActive(boardFilters)
     const all = new Set()
     let visible = 0
     for (const playlist of playlists) {
       for (const coursePath of playlist.coursePaths || []) {
-        if (all.has(coursePath)) continue
-        all.add(coursePath)
         const course = byPath.get(coursePath)
+        const key = course?.path || coursePath
+        if (all.has(key)) continue
+        all.add(key)
         if (!active || (course && courseMatchesLibraryFilters(course, boardFilters))) visible += 1
       }
     }
@@ -1859,7 +1864,11 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
   )
   const visibleCourses = useMemo(() => {
     const query = search.trim().toLowerCase()
-    const listed = new Set(selectedPlaylist?.coursePaths || [])
+    const catalog = courseCatalog(courses)
+    const listed = new Set()
+    for (const coursePath of selectedPlaylist?.coursePaths || []) {
+      listed.add(catalog.get(coursePath)?.path || coursePath)
+    }
     return [...courses]
       .filter((course) => {
         if (institutionFilter && course.institution !== institutionFilter) return false
@@ -1919,15 +1928,24 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
 
   const membership = useMemo(() => {
     const map = new Map()
+    const catalog = courseCatalog(courses)
     for (const playlist of playlists) {
       for (const coursePath of playlist.coursePaths) {
-        map.set(coursePath, (map.get(coursePath) || 0) + 1)
+        const key = catalog.get(coursePath)?.path || coursePath
+        map.set(key, (map.get(key) || 0) + 1)
       }
     }
     return map
-  }, [playlists])
+  }, [playlists, courses])
 
-  const inSelected = new Set(selectedPlaylist?.coursePaths || [])
+  const inSelected = useMemo(() => {
+    const catalog = courseCatalog(courses)
+    const selected = new Set()
+    for (const coursePath of selectedPlaylist?.coursePaths || []) {
+      selected.add(catalog.get(coursePath)?.path || coursePath)
+    }
+    return selected
+  }, [courses, selectedPlaylist])
 
   return (
     <BoardActions.Provider value={actions}>

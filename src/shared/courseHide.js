@@ -1,3 +1,5 @@
+import { folderResolver, sameFolder } from './courseFolderMatch.js'
+
 /**
  * `hide: true` in courseProps.json removes a course from the catalog.
  * Stored playlist membership is kept so clearing the flag brings it back.
@@ -16,13 +18,19 @@ function courseName(value) {
   )
 }
 
+function matchesHidden(name, hiddenPaths, resolve) {
+  if (hiddenPaths.has(name)) return true
+  const resolved = resolve(name)
+  return Boolean(resolved) && resolved !== name && hiddenPaths.has(resolved)
+}
+
 export function retainHiddenCoursePaths(coursePaths, existingPaths, hiddenPaths) {
   const next = [...(coursePaths || [])]
   if (!hiddenPaths?.size || !existingPaths?.length) return next
-  const seen = new Set(next)
+  const resolve = folderResolver(hiddenPaths)
   for (const name of existingPaths) {
-    if (!hiddenPaths.has(name) || seen.has(name)) continue
-    seen.add(name)
+    if (!matchesHidden(name, hiddenPaths, resolve)) continue
+    if (next.some((item) => sameFolder(item, name))) continue
     next.push(name)
   }
   return next
@@ -31,8 +39,13 @@ export function retainHiddenCoursePaths(coursePaths, existingPaths, hiddenPaths)
 export function restoreHiddenCourseWhys(courseWhys, existingWhys, hiddenPaths) {
   const next = { ...(courseWhys || {}) }
   if (!hiddenPaths?.size) return next
+  const resolve = folderResolver(hiddenPaths)
+  const present = new Set(Object.keys(next))
   for (const [name, why] of Object.entries(existingWhys || {})) {
-    if (hiddenPaths.has(name) && why && next[name] == null) next[name] = why
+    if (!why || !matchesHidden(name, hiddenPaths, resolve)) continue
+    if ([...present].some((key) => sameFolder(key, name))) continue
+    next[name] = why
+    present.add(name)
   }
   return next
 }
@@ -40,11 +53,14 @@ export function restoreHiddenCourseWhys(courseWhys, existingWhys, hiddenPaths) {
 /** Copy sent to the UI. Hidden courses stay in the saved playlist. */
 export function playlistForDisplay(playlist, hiddenPaths) {
   if (!playlist || !hiddenPaths?.size) return playlist
-  const coursePaths = (playlist.coursePaths || []).filter((name) => !hiddenPaths.has(name))
+  const resolve = folderResolver(hiddenPaths)
+  const coursePaths = (playlist.coursePaths || []).filter(
+    (name) => !matchesHidden(name, hiddenPaths, resolve)
+  )
   if (coursePaths.length === (playlist.coursePaths || []).length) return playlist
   const courseWhys = {}
   for (const [name, why] of Object.entries(playlist.courseWhys || {})) {
-    if (!hiddenPaths.has(name)) courseWhys[name] = why
+    if (!matchesHidden(name, hiddenPaths, resolve)) courseWhys[name] = why
   }
   return { ...playlist, coursePaths, courseWhys }
 }
@@ -58,9 +74,10 @@ export function visibleFinding(finding, hiddenPaths) {
   if (!finding || !hiddenPaths?.size) return finding
   const anchors = Array.isArray(finding.anchors) ? finding.anchors : []
   if (!anchors.length) return finding
+  const resolve = folderResolver(hiddenPaths)
   const next = anchors.filter((anchor) => {
     const name = courseName(anchor?.coursePath)
-    return !name || !hiddenPaths.has(name)
+    return !name || !matchesHidden(name, hiddenPaths, resolve)
   })
   if (!next.length) return null
   if (next.length === anchors.length) return finding
