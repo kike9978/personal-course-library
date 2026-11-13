@@ -381,6 +381,129 @@ function captionRichText(value) {
   return [{ type: 'text', text: { content: text } }]
 }
 
+const NESTED_LIST_HEADING = 'Listas anidadas'
+
+function richBlock(type, content, link) {
+  const rich = chunkRichText(content)
+  if (link && rich[0]?.text) rich[0] = { type: 'text', text: { content: rich[0].text.content, link: { url: link } } }
+  return {
+    object: 'block',
+    type,
+    [type]: { rich_text: rich }
+  }
+}
+
+function playlistChildUrl(id) {
+  return `https://www.notion.so/p/${encodeURIComponent(id)}`
+}
+
+function linkedPlaylistId(items) {
+  for (const item of items || []) {
+    const url = item?.text?.link?.url || item?.href || ''
+    const match = /\/p\/([^/?#]+)/.exec(String(url))
+    if (!match) continue
+    try {
+      return decodeURIComponent(match[1])
+    } catch {
+      return match[1]
+    }
+  }
+  return ''
+}
+
+function playlistCodeText(blocks) {
+  for (const block of blocks || []) {
+    if (blockCaption(block).startsWith('playlist:')) {
+      return plainRichText(block[block.type]?.rich_text).replace(/\u200b/g, '')
+    }
+  }
+  return ''
+}
+
+/**
+ * A list page Notion can read: the reason, one bullet per course, then nested lists.
+ * The code block only carries the id. Older pages keep the whole list as JSON in that block.
+ */
+export function playlistBlocks(body, playlistId, childTitles = {}) {
+  const data = playlistFromBody(body) || {
+    why: '',
+    coursePaths: [],
+    childIds: [],
+    courseWhys: {}
+  }
+  const id = String(playlistId || '').trim()
+  const blocks = []
+  if (id) {
+    const caption = captionRichText(`playlist:${id}`)
+    blocks.push({
+      object: 'block',
+      type: 'code',
+      code: {
+        language: 'plain text',
+        rich_text: chunkRichText(' '),
+        ...(caption ? { caption } : {})
+      }
+    })
+  }
+  if (data.why) blocks.push(richBlock('paragraph', data.why))
+  for (const coursePath of data.coursePaths) {
+    const note = String(data.courseWhys?.[coursePath] || '').trim()
+    blocks.push(richBlock('bulleted_list_item', note ? `${coursePath}\n${note}` : coursePath))
+  }
+  if (data.childIds.length) {
+    blocks.push(richBlock('heading_3', NESTED_LIST_HEADING))
+    for (const childId of data.childIds) {
+      const title = String(childTitles?.[childId] || '').trim() || 'Lista'
+      blocks.push(richBlock('bulleted_list_item', title, playlistChildUrl(childId)))
+    }
+  }
+  return blocks
+}
+
+/** True when the page still stores the list as JSON instead of list blocks. */
+export function playlistIsLegacy(blocks) {
+  if (!playlistFromBody(playlistCodeText(blocks))) return false
+  return !(blocks || []).some(
+    (block) => block?.type === 'bulleted_list_item' || block?.type === 'numbered_list_item'
+  )
+}
+
+/** Canonical list payload from Notion blocks, including a JSON page from an older sync. */
+export function playlistBodyFromBlocks(blocks) {
+  if (playlistIsLegacy(blocks)) return playlistWire(playlistFromBody(playlistCodeText(blocks))).body
+  let why = ''
+  const coursePaths = []
+  const courseWhys = {}
+  const childIds = []
+  let inChildren = false
+  for (const block of blocks || []) {
+    const type = block?.type
+    const rich = block?.[type]?.rich_text
+    const text = plainRichText(rich).replace(/\u200b/g, '').trim()
+    if (type === 'heading_1' || type === 'heading_2' || type === 'heading_3') {
+      if (text === NESTED_LIST_HEADING) inChildren = true
+      continue
+    }
+    if (type === 'paragraph') {
+      if (text) why = why ? `${why}\n${text}` : text
+      continue
+    }
+    if (type !== 'bulleted_list_item' && type !== 'numbered_list_item') continue
+    if (inChildren) {
+      const childId = linkedPlaylistId(rich)
+      if (childId) childIds.push(childId)
+      continue
+    }
+    const newline = text.indexOf('\n')
+    const coursePath = (newline === -1 ? text : text.slice(0, newline)).trim()
+    const note = newline === -1 ? '' : text.slice(newline + 1).trim()
+    if (!coursePath) continue
+    coursePaths.push(coursePath)
+    if (note) courseWhys[coursePath] = note
+  }
+  return playlistWire({ why, coursePaths, childIds, courseWhys }).body
+}
+
 /** One markdown code block so a note is a single Notion write. The caption keeps the id. */
 export function bodyToBlocks(body, findingId = null, kind = 'finding') {
   const text = normalizeBody(body)

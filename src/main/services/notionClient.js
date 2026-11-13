@@ -1,6 +1,9 @@
 import {
   blocksToBody,
   bodyToBlocks,
+  playlistBlocks,
+  playlistBodyFromBlocks,
+  playlistIsLegacy,
   chunkRichText,
   findingIdFromBlocks,
   playlistIdFromBlocks,
@@ -307,11 +310,13 @@ export function createNotionClient({
       if (!summary || summary.archived) return null
       const blocks = await listChildren(pageId)
       const fromProperty = plainRichText(page.properties?.[names.findingName]?.rich_text).trim()
+      const playlistId = playlistIdFromBlocks(blocks)
       return {
         ...summary,
-        body: blocksToBody(blocks),
+        body: playlistId ? playlistBodyFromBlocks(blocks) : blocksToBody(blocks),
         findingId: findingIdFromBlocks(blocks) || fromProperty,
-        playlistId: playlistIdFromBlocks(blocks),
+        playlistId,
+        playlistLegacy: playlistId ? playlistIsLegacy(blocks) : false,
         progressId: progressIdFromBlocks(blocks),
         marker: markerFromBlocks(blocks),
         assets: noteAssetsFromBlocks(blocks)
@@ -333,14 +338,24 @@ export function createNotionClient({
       if (keepsBlock(block)) continue
       await request(`/blocks/${block.id}`, { method: 'DELETE' })
     }
-    if (!children.length) return
-    await request(`/blocks/${pageId}/children`, {
-      method: 'PATCH',
-      body: { children }
-    })
+    await appendChildren(pageId, children)
   }
 
-  async function writeBody(pageId, body, findingId, kind = 'finding') {
+  async function appendChildren(blockId, children) {
+    for (let index = 0; index < children.length; index += 100) {
+      await request(`/blocks/${blockId}/children`, {
+        method: 'PATCH',
+        body: { children: children.slice(index, index + 100) }
+      })
+    }
+  }
+
+  function pageChildren(body, findingId, kind, childTitles) {
+    if (kind === 'playlist') return playlistBlocks(body, findingId, childTitles)
+    return bodyToBlocks(body, findingId, kind)
+  }
+
+  async function writeBody(pageId, body, findingId, kind = 'finding', childTitles = null) {
     const existing = await listChildren(pageId)
     const stamped =
       kind === 'playlist'
@@ -348,7 +363,10 @@ export function createNotionClient({
         : kind === 'progress'
           ? progressIdFromBlocks(existing)
           : findingIdFromBlocks(existing)
-    await replaceContent(pageId, bodyToBlocks(body, stamped || findingId || null, kind))
+    await replaceContent(
+      pageId,
+      pageChildren(body, stamped || findingId || null, kind, childTitles)
+    )
   }
 
   async function writeMarker(pageId, marker) {
@@ -372,10 +390,13 @@ export function createNotionClient({
     parentPageId = null,
     emoji = null,
     marker = null,
-    kind = 'finding'
+    kind = 'finding',
+    childTitles = null
   ) {
     const names = await loadSchema()
-    const children = marker ? markerBlocks(marker) : bodyToBlocks(body, findingId, kind)
+    const children = marker ? markerBlocks(marker) : pageChildren(body, findingId, kind, childTitles)
+    const first = children.slice(0, 100)
+    const rest = children.slice(100)
     const inDatabase = !parentPageId
     const icon = emojiIcon(emoji)
     const page = await request('/pages', {
@@ -388,9 +409,10 @@ export function createNotionClient({
         properties: inDatabase
           ? propertiesFor(names, findingId, title)
           : pageTitleProperties(title, false, names),
-        ...(children.length ? { children } : {})
+        ...(first.length ? { children: first } : {})
       }
     })
+    if (rest.length && page?.id) await appendChildren(page.id, rest)
     const summary = pageSummary(page, inDatabase ? names.titleName : 'title')
     return summary ? { ...summary, body: normalizeBody(body) } : null
   }
@@ -428,7 +450,7 @@ export function createNotionClient({
     return pageSummary(page, names.titleName)
   }
 
-  async function updatePage(pageId, findingId, title, body, emoji = null, kind = 'finding') {
+  async function updatePage(pageId, findingId, title, body, emoji = null, kind = 'finding', childTitles = null) {
     const names = await loadSchema()
     const current = await request(`/pages/${pageId}`)
     const inDatabase = current.parent?.type !== 'page_id'
@@ -440,7 +462,7 @@ export function createNotionClient({
       method: 'PATCH',
       body: { properties, ...(icon ? { icon } : {}) }
     })
-    await writeBody(pageId, normalizeBody(body), findingId, kind)
+    await writeBody(pageId, normalizeBody(body), findingId, kind, childTitles)
     return readPage(pageId)
   }
 

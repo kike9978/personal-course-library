@@ -9,8 +9,11 @@ import {
   filePageMarker,
   findingIdFromBlocks,
   mergeCourseProgress,
+  playlistBlocks,
+  playlistBodyFromBlocks,
   playlistFromBody,
   playlistIdFromBlocks,
+  playlistIsLegacy,
   playlistWire,
   progressFromBody,
   progressIdFromBlocks,
@@ -42,15 +45,38 @@ describe('notion wire text', () => {
       childIds: ['child-1'],
       courseWhys: { pack: 'porque' }
     })
-    const blocks = bodyToBlocks(wire.body, 'list-1', 'playlist')
+    const blocks = playlistBlocks(wire.body, 'list-1', { 'child-1': 'Figura' })
     assert.equal(findingIdFromBlocks(blocks), '')
     assert.equal(playlistIdFromBlocks(blocks), 'list-1')
-    assert.deepEqual(playlistFromBody(blocksToBody(blocks)), {
+    assert.equal(playlistIsLegacy(blocks), false)
+    assert.equal(blocks.some((block) => block.type === 'bulleted_list_item'), true)
+    const asRead = blocks.map((block) => {
+      const rich = (block[block.type].rich_text || []).map((item) => ({
+        plain_text: item.text.content,
+        text: item.text,
+        href: item.text.link?.url || null
+      }))
+      const caption = block[block.type].caption
+      return {
+        type: block.type,
+        [block.type]: {
+          rich_text: rich,
+          ...(caption ? { caption: caption.map((item) => ({ plain_text: item.text.content })) } : {})
+        }
+      }
+    })
+    assert.equal(playlistBodyFromBlocks(blocks), wire.body)
+    assert.equal(playlistBodyFromBlocks(asRead), wire.body)
+    assert.equal(asRead.find((block) => block.type === 'bulleted_list_item').bulleted_list_item.rich_text[0].plain_text, 'pack\nporque')
+    assert.deepEqual(playlistFromBody(playlistBodyFromBlocks(blocks)), {
       why: 'Cierre',
       coursePaths: ['pack'],
       childIds: ['child-1'],
       courseWhys: { pack: 'porque' }
     })
+    const legacy = bodyToBlocks(wire.body, 'list-1', 'playlist')
+    assert.equal(playlistIsLegacy(legacy), true)
+    assert.equal(playlistBodyFromBlocks(legacy), wire.body)
     assert.equal(playlistWire({ title: 'Repaso', why: 'Cierre', coursePaths: ['pack'], childIds: ['child-1'], courseWhys: { pack: 'porque' } }).body, wire.body)
   })
 

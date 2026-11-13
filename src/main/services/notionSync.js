@@ -696,7 +696,9 @@ async function drain() {
         continue
       }
       try {
-        if (job.op === 'playlist-upsert') await reconcilePlaylist(client, job.playlistId)
+        if (job.op === 'playlist-upsert') {
+          await reconcilePlaylist(client, job.playlistId, { refresh: job.refresh })
+        }
         else if (job.op === 'playlist-delete') await reconcilePlaylistDelete(client, job.playlistId)
         else if (job.op === 'progress-upsert') await reconcileProgress(client, job.coursePath)
         else if (job.op === 'delete') await reconcileDelete(client, id)
@@ -1177,8 +1179,17 @@ async function loadPlaylistRemote(client, playlist, sectionId) {
   return null
 }
 
+function playlistChildTitles(playlist) {
+  const titles = {}
+  for (const childId of playlist?.childIds || []) {
+    titles[childId] = readPlaylist(childId)?.title || 'Lista'
+  }
+  return titles
+}
+
 async function savePlaylistPage(client, playlist, remote) {
   const wire = playlistWire(playlist)
+  const titles = playlistChildTitles(playlist)
   const parentId = await ensurePlaylistSection(client)
   if (remote?.pageId) {
     const parent = await client.pageParent(remote.pageId)
@@ -1189,7 +1200,8 @@ async function savePlaylistPage(client, playlist, remote) {
         wire.title,
         wire.body,
         PAGE_ICONS.playlist,
-        'playlist'
+        'playlist',
+        titles
       )
     }
     const created = await client.createPage(
@@ -1199,7 +1211,8 @@ async function savePlaylistPage(client, playlist, remote) {
       parentId,
       PAGE_ICONS.playlist,
       null,
-      'playlist'
+      'playlist',
+      titles
     )
     await client.archivePage(remote.pageId)
     return created
@@ -1211,23 +1224,25 @@ async function savePlaylistPage(client, playlist, remote) {
     parentId,
     PAGE_ICONS.playlist,
     null,
-    'playlist'
+    'playlist',
+    titles
   )
 }
 
-async function reconcilePlaylist(client, id) {
+async function reconcilePlaylist(client, id, { refresh = false } = {}) {
   const playlist = readPlaylist(id)
   if (!playlist || playlist.notion?.conflict) return
   const wire = playlistWire(playlist)
   const localHash = wireHash(wire.title, wire.body)
   const sectionId = await ensurePlaylistSection(client)
   const remote = await loadPlaylistRemote(client, playlist, sectionId)
-  const action = decideSync({
+  let action = decideSync({
     hasRemote: Boolean(remote),
     localHash,
     remoteHash: remote ? wireHash(remote.title, remote.body) : null,
     ackedHash: playlist.notion?.ackedHash || null
   })
+  if (action === 'relink' && (remote?.playlistLegacy || refresh)) action = 'push'
   if (action === 'create' || action === 'push') {
     const page = await savePlaylistPage(client, playlist, remote)
     if (!page?.pageId) throw new Error('Notion no devolvió la lista')
@@ -1364,7 +1379,7 @@ async function queuePlaylists(client, remotePages) {
     const missingPage = !remote
     const key = playlistKey(playlist.id)
     if (saveConflictParked(key)) continue
-    if (localChanged || remoteChanged || missingPage) {
+    if (localChanged || remoteChanged || missingPage || remote?.playlistLegacy) {
       const pending = jobs.get(key)
       jobs.set(key, {
         op: 'playlist-upsert',
@@ -1734,7 +1749,19 @@ export function enqueueNotionPlaylistUpsert(id) {
   if (jobs.get(key)?.op === 'playlist-delete') return
   const playlist = readPlaylist(id)
   if (!playlist || playlist.notion?.conflict) return
-  jobs.set(key, { op: 'playlist-upsert', playlistId: id })
+  jobs.set(key, { op: 'playlist-upsert', playlistId: id, attempts: jobs.get(key)?.attempts || 0 })
+  for (const other of listPlaylistRecords()) {
+    if (!(other.childIds || []).includes(id) || other.notion?.conflict) continue
+    const parentKey = playlistKey(other.id)
+    const pending = jobs.get(parentKey)
+    if (pending?.op === 'playlist-delete') continue
+    jobs.set(parentKey, {
+      op: 'playlist-upsert',
+      playlistId: other.id,
+      attempts: pending?.attempts || 0,
+      refresh: true
+    })
+  }
   schedule(1200)
 }
 
