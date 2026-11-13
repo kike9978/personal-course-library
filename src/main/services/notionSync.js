@@ -48,6 +48,7 @@ const STATE_FILE = 'notion-sync.json'
 
 let jobs = new Map()
 const sharedIdsConfirmed = new Set()
+let lastProbe = null
 const sharedFileInfo = new Map()
 let timer = null
 let pollTimer = null
@@ -771,7 +772,47 @@ function shouldRetarget(finding, anchor) {
   return provisional && Boolean(anchor.lessonRelativePath) && !incomingProvisional
 }
 
-async function takeSharedNote(client, pageId, place, seen) {
+function notionPageKey(id) {
+  return String(id || '')
+    .replace(/-/g, '')
+    .toLowerCase()
+}
+
+function noteQueued(probe, id, reason) {
+  if (!probe || probe.queued.length >= 50) return
+  probe.queued.push(`${id} · ${reason}`)
+}
+
+function oldestRemoteEditedAt() {
+  const times = []
+  for (const finding of listFindingRecords()) {
+    if (finding.notion?.remoteEditedAt) times.push(finding.notion.remoteEditedAt)
+  }
+  for (const course of listCourseProgressRecords()) {
+    if (course.notion?.remoteEditedAt) times.push(course.notion.remoteEditedAt)
+  }
+  for (const playlist of listPlaylistRecords()) {
+    if (playlist.notion?.remoteEditedAt) times.push(playlist.notion.remoteEditedAt)
+  }
+  if (!times.length) return null
+  times.sort()
+  return times[0]
+}
+
+async function notePageUnchanged(client, pageId, storedEditedAt, recent) {
+  if (!storedEditedAt) return false
+  const seenAt = recent?.byId?.get(notionPageKey(pageId))?.editedAt || ''
+  if (seenAt) return seenAt === storedEditedAt
+  if (recent?.complete) return true
+  try {
+    const editedAt = await client.pageEditedAt(pageId)
+    return Boolean(editedAt && editedAt === storedEditedAt)
+  } catch {
+    return false
+  }
+}
+
+async function takeSharedNote(client, pageId, place, seen, recent) {
   if (!pageId || seen.has(pageId)) return false
   const anchor = anchorFromNotion({
     courseMarker: place.courseMarker,
@@ -780,17 +821,21 @@ async function takeSharedNote(client, pageId, place, seen) {
     filePageId: place.filePageId
   })
   const known = listFindingRecords().find((finding) => finding.notion?.pageId === pageId)
-  if (
-    known &&
-    sharedIdsConfirmed.has(pageId) &&
-    place.editedAt &&
-    known.notion?.remoteEditedAt === place.editedAt &&
-    !shouldRetarget(known, anchor)
-  ) {
-    seen.add(pageId)
-    return false
+  if (known && sharedIdsConfirmed.has(pageId) && !shouldRetarget(known, anchor)) {
+    const unchanged = await notePageUnchanged(
+      client,
+      pageId,
+      known.notion?.remoteEditedAt || '',
+      recent
+    )
+    if (unchanged) {
+      seen.add(pageId)
+      if (recent?.probe) recent.probe.skipped += 1
+      return false
+    }
   }
   seen.add(pageId)
+  if (recent?.probe) recent.probe.opened += 1
   const page = await client.readPage(pageId)
   if (!page || page.playlistId) return false
   await reconcileNoteFiles(client, page.pageId, page.body)
@@ -825,6 +870,7 @@ async function takeSharedNote(client, pageId, place, seen) {
     if (existing.notion?.conflict) return changed
     if (page.editedAt && page.editedAt !== existing.notion?.remoteEditedAt) {
       jobs.set(existing.id, { op: 'upsert' })
+      noteQueued(recent?.probe, existing.id, 'la página cambió')
     }
     return changed
   }
@@ -853,7 +899,7 @@ async function takeSharedNote(client, pageId, place, seen) {
   return true
 }
 
-async function importSharedNotes(client, rows) {
+async function importSharedNotes(client, rows, recent) {
   let changed = false
   const seen = new Set()
   for (const row of rows || []) {
@@ -862,7 +908,8 @@ async function importSharedNotes(client, rows) {
     if (!courseMarker.startsWith('node:')) {
       if (row.findingId && !String(row.findingId).startsWith('node:')) {
         changed =
-          (await takeSharedNote(client, row.pageId, { editedAt: row.editedAt }, seen)) || changed
+          (await takeSharedNote(client, row.pageId, { editedAt: row.editedAt }, seen, recent)) ||
+          changed
       }
       continue
     }
@@ -879,7 +926,8 @@ async function importSharedNotes(client, rows) {
             client,
             child.pageId,
             { courseMarker, editedAt: child.editedAt },
-            seen
+            seen,
+            recent
           )) || changed
         continue
       }
@@ -898,7 +946,8 @@ async function importSharedNotes(client, rows) {
               client,
               child.pageId,
               { courseMarker, editedAt: child.editedAt },
-              seen
+              seen,
+              recent
             )) || changed
           continue
         }
@@ -922,7 +971,8 @@ async function importSharedNotes(client, rows) {
               filePageId: child.pageId,
               editedAt: note.editedAt
             },
-            seen
+            seen,
+            recent
           )) || changed
       }
     }
@@ -933,18 +983,37 @@ async function importSharedNotes(client, rows) {
 async function queuePending() {
   if (!getNotionConfig().enabled) return
   let remotePages = null
-  let recent = []
+  let recent = { pages: [], complete: false }
   const client = clientFromConfig()
+  const probe = {
+    at: new Date().toISOString(),
+    error: null,
+    recentCount: 0,
+    recentOldest: null,
+    recentComplete: false,
+    skipped: 0,
+    opened: 0,
+    queued: []
+  }
+  const errorBefore = lastError
+  lastProbe = probe
   try {
     remotePages = await client.listPages()
   } catch (error) {
     noteFailure(error)
   }
   try {
-    recent = await client.recentPages()
+    recent = await client.recentPages({ before: oldestRemoteEditedAt() })
   } catch {
-    recent = []
+    recent = { pages: [], complete: false }
   }
+  const recentById = new Map(
+    (recent.pages || []).map((page) => [notionPageKey(page.pageId), page])
+  )
+  probe.recentCount = recentById.size
+  probe.recentOldest = recent.pages?.length ? recent.pages[recent.pages.length - 1].editedAt : null
+  probe.recentComplete = Boolean(recent.complete)
+  const recentCtx = { byId: recentById, complete: Boolean(recent.complete), probe }
   if (remotePages) {
     try {
       await paintIcons(client, remotePages)
@@ -952,7 +1021,7 @@ async function queuePending() {
       // The next pass sets any icon that did not land.
     }
     try {
-      await importSharedNotes(client, remotePages)
+      await importSharedNotes(client, remotePages, recentCtx)
     } catch (error) {
       noteFailure(error)
     }
@@ -965,13 +1034,12 @@ async function queuePending() {
       remoteByFinding.set(page.findingId, page)
     }
   }
-  const recentById = new Map(recent.map((page) => [page.pageId, page]))
   const rowIds = new Set((remotePages || []).map((page) => page.pageId))
   for (const finding of findings) {
     const localHash = wireHash(finding.title, finding.body)
     const row = (remotePages || []).find((page) => page.pageId === finding.notion?.pageId)
     const remote =
-      row || recentById.get(finding.notion?.pageId) || remoteByFinding.get(finding.id)
+      row || recentById.get(notionPageKey(finding.notion?.pageId)) || remoteByFinding.get(finding.id)
     const localChanged = !finding.notion?.ackedHash || finding.notion.ackedHash !== localHash
     const remoteChanged = Boolean(
       remote?.editedAt && remote.editedAt !== finding.notion?.remoteEditedAt
@@ -988,6 +1056,18 @@ async function queuePending() {
     if (localChanged || remoteChanged || needsPlace || missingHere) {
       const pending = jobs.get(finding.id)
       jobs.set(finding.id, { op: 'upsert', attempts: pending?.attempts || 0 })
+      noteQueued(
+        probe,
+        finding.id,
+        [
+          localChanged ? 'local' : '',
+          remoteChanged ? 'notion' : '',
+          needsPlace ? 'lugar' : '',
+          missingHere ? 'no está en la base' : ''
+        ]
+          .filter(Boolean)
+          .join(', ') || 'upsert'
+      )
     }
   }
   for (const tomb of readTombstones()) {
@@ -1011,6 +1091,7 @@ async function queuePending() {
   } catch (error) {
     noteFailure(error)
   }
+  probe.error = lastError !== errorBefore ? lastError : null
 }
 
 const PAGE_ICONS = {
@@ -1546,6 +1627,11 @@ async function queueProgress(client) {
     if (!localChanged && !remoteChanged && !missingPage && !adoptRemote) continue
     const pending = jobs.get(key)
     jobs.set(key, { op: 'progress-upsert', coursePath, attempts: pending?.attempts || 0 })
+    noteQueued(
+      lastProbe,
+      key,
+      adoptRemote ? 'sin cursor' : remoteChanged ? 'notion' : localChanged ? 'local' : 'falta la página'
+    )
   }
 }
 
@@ -1666,6 +1752,80 @@ export function enqueueNotionPlaylistDelete(playlist) {
 
 export function getNotionSyncStatus() {
   return publicStatus()
+}
+
+function clipDebug(value, max = 70) {
+  const text = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!text) return '—'
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
+export function notionDebugReport() {
+  const config = getNotionConfig()
+  const findings = listFindingRecords()
+  const progress = listCourseProgressRecords()
+  const playlists = listPlaylistRecords()
+  const probe = lastProbe
+  const withCursor = findings.filter((finding) => finding.notion?.ackedHash).length
+  const noteConflicts = findings.filter((finding) => finding.notion?.conflict).length
+  const lines = [
+    'Diagnóstico de Notion',
+    `hora: ${new Date().toISOString()}`,
+    `conectado: ${config.enabled ? 'sí' : 'no'}`,
+    `base: ${config.databaseId || '—'}`,
+    `sincronizando: ${syncing ? `sí (${syncDone} de ${syncTotal || '?'})` : 'no'}`,
+    `en cola ahora: ${jobs.size}`,
+    `último error: ${lastError || '—'}`
+  ]
+  if (!probe) {
+    lines.push('último recorrido: todavía no. Abre Notion, espera unos segundos y copia de nuevo.')
+  } else {
+    lines.push(`último recorrido: ${probe.at}`)
+    lines.push(
+      `ventana reciente: ${probe.recentCount} páginas, ${probe.recentComplete ? 'completa' : 'incompleta'}, más antigua ${probe.recentOldest || '—'}`
+    )
+    lines.push(`notas saltadas porque la página no cambió: ${probe.skipped}`)
+    lines.push(`notas abiertas en ese recorrido: ${probe.opened}`)
+    lines.push(`error del recorrido: ${probe.error || '—'}`)
+    lines.push('encoladas en ese recorrido:')
+    if (!probe.queued.length) lines.push('- ninguna')
+    for (const item of probe.queued) lines.push(`- ${item}`)
+  }
+  lines.push(`notas: ${findings.length} (${withCursor} con cursor, ${noteConflicts} en conflicto)`)
+  const pendingNotes = findings.filter(
+    (finding) => !finding.notion?.pageId || !finding.notion?.ackedHash || finding.notion?.conflict
+  )
+  for (const finding of pendingNotes.slice(0, 40)) {
+    lines.push(
+      `- ${clipDebug(finding.title || finding.id)} | página ${finding.notion?.pageId || 'no'} | cursor ${finding.notion?.ackedHash ? 'sí' : 'no'} | editada ${finding.notion?.remoteEditedAt || '—'} | conflicto ${finding.notion?.conflict ? 'sí' : 'no'}`
+    )
+  }
+  if (pendingNotes.length > 40) lines.push(`- y ${pendingNotes.length - 40} más sin cursor o en conflicto`)
+  lines.push(`progreso: ${progress.length} cursos`)
+  const pendingProgress = progress.filter(
+    (course) => !course.notion?.pageId || !course.notion?.ackedHash || course.notion?.conflict
+  )
+  if (!pendingProgress.length) lines.push('- todos tienen cursor')
+  for (const course of pendingProgress.slice(0, 40)) {
+    const local = localProgress(course.id)
+    lines.push(
+      `- ${clipDebug(courseTitle(course.id))} | en curso ${local?.inProcess ? 'sí' : 'no'} | página ${course.notion?.pageId || 'no'} | cursor ${course.notion?.ackedHash ? 'sí' : 'no'} | editada ${course.notion?.remoteEditedAt || '—'} | conflicto ${course.notion?.conflict ? 'sí' : 'no'}`
+    )
+  }
+  if (pendingProgress.length > 40) {
+    lines.push(`- y ${pendingProgress.length - 40} cursos más sin cursor o en conflicto`)
+  }
+  lines.push(
+    `listas: ${playlists.length}, en conflicto ${playlists.filter((item) => item.notion?.conflict).length}`
+  )
+  lines.push('cola actual:')
+  const jobLines = [...jobs.entries()].slice(0, 40)
+  if (!jobLines.length) lines.push('- vacía')
+  for (const [id, job] of jobLines) lines.push(`- ${job.op || 'trabajo'} ${id}`)
+  if (jobs.size > jobLines.length) lines.push(`- y ${jobs.size - jobLines.length} más`)
+  return lines.join('\n')
 }
 
 export function setNotionDrawingShare(choice) {

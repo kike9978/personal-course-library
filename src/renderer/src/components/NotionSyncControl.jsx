@@ -60,6 +60,50 @@ function SyncProgress({ status, active }) {
   )
 }
 
+function NotionDebug() {
+  const [report, setReport] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = async () => {
+    const text = await window.api.getNotionDebug?.()
+    const next = String(text || '')
+    setReport(next)
+    return next
+  }
+
+  const copy = async () => {
+    setBusy(true)
+    try {
+      const text = await load()
+      if (!text) throw new Error('El diagnóstico está vacío')
+      await navigator.clipboard.writeText(text)
+      toast.success('Diagnóstico copiado. Pégalo en el chat.')
+    } catch (error) {
+      toast.error(notionErrorText(error, 'No se pudo copiar. Selecciona el texto de abajo.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <details className="notion-sync__debug">
+      <summary>Depuración</summary>
+      <p>
+        Muestra si esta biblioteca vio los cambios de Notion. Copia el texto y pégalo en el chat.
+      </p>
+      <div className="dialog__actions-btns">
+        <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => void load()}>
+          Ver
+        </button>
+        <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void copy()}>
+          {busy ? 'Copiando…' : 'Copiar diagnóstico'}
+        </button>
+      </div>
+      {report ? <pre>{report}</pre> : null}
+    </details>
+  )
+}
+
 function choiceLabel(choice, kind) {
   if (choice === 'local' && kind === 'progress') return 'En curso se quedó como en esta biblioteca'
   if (choice === 'remote' && kind === 'progress') return 'En curso se quedó como en Notion'
@@ -573,6 +617,7 @@ export function NotionSyncButton() {
                 ))}
               </div>
             ) : null}
+            <NotionDebug />
             <SyncProgress
               status={status}
               active={Boolean(syncingNow || status?.syncing || status?.queued)}

@@ -265,10 +265,10 @@ describe('notion reconcile', () => {
     )
   })
 
-  it('pauses when a page exists and this app has no cursor', () => {
+  it('pulls when a page exists and this app has no cursor', () => {
     assert.equal(
       decideSync({ hasRemote: true, localHash: 'local', remoteHash: 'remote', ackedHash: null }),
-      'conflict'
+      'pull'
     )
   })
 

@@ -491,11 +491,13 @@ export function blocksToBody(blocks) {
  * `create` writes a new page. `push` and `pull` copy the side that moved.
  * `relink` repairs the cursor when the texts already match.
  * `conflict` waits until someone chooses a side.
+ * A page that already exists in Notion and has no cursor here is pulled:
+ * another library connected to the same database adopts that copy.
  */
 export function decideSync({ hasRemote, localHash, remoteHash, ackedHash }) {
   if (!hasRemote) return 'create'
   if (localHash && localHash === remoteHash) return 'relink'
-  if (!ackedHash) return 'conflict'
+  if (!ackedHash) return 'pull'
   const localChanged = localHash !== ackedHash
   const remoteChanged = remoteHash !== ackedHash
   if (localChanged && remoteChanged) return 'conflict'

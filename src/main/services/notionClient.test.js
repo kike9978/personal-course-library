@@ -343,4 +343,51 @@ describe('notion client', () => {
     })
     assert.equal(writes, 4)
   })
+
+  it('uses the page edit time and keeps searching past the first hundred', async () => {
+    const searches = []
+    const fetchImpl = async (url, options = {}) => {
+      const body = options.body ? JSON.parse(options.body) : null
+      if (url.endsWith('/users/me')) return jsonResponse({ object: 'user', id: 'bot' })
+      if (url.endsWith('/pages/page-note')) {
+        return jsonResponse({
+          object: 'page',
+          id: 'page-note',
+          last_edited_time: '2026-11-12T20:00:00.000Z'
+        })
+      }
+      if (url.endsWith('/search') && options.method === 'POST') {
+        searches.push(body.start_cursor || '')
+        if (!body.start_cursor) {
+          return jsonResponse({
+            has_more: true,
+            next_cursor: 'next',
+            results: Array.from({ length: 100 }, (_, index) => ({
+              object: 'page',
+              id: `page-${index}`,
+              last_edited_time: '2026-11-12T23:00:00.000Z'
+            }))
+          })
+        }
+        return jsonResponse({
+          has_more: false,
+          results: [
+            {
+              object: 'page',
+              id: 'page-note',
+              last_edited_time: '2026-11-12T18:00:00.000Z'
+            }
+          ]
+        })
+      }
+      return jsonResponse({ message: `unexpected ${url}` }, 500)
+    }
+    const client = createNotionClient({ token: 'secret', databaseId: 'db-1', fetchImpl })
+    const editedAt = await client.pageEditedAt('page-note')
+    assert.equal(editedAt, '2026-11-12T20:00:00.000Z')
+    const recent = await client.recentPages({ before: '2026-11-12T18:00:00.000Z' })
+    assert.deepEqual(searches, ['', 'next'])
+    assert.equal(recent.complete, true)
+    assert.equal(recent.pages.at(-1).pageId, 'page-note')
+  })
 })

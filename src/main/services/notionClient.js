@@ -484,20 +484,57 @@ export function createNotionClient({
     }
   }
 
-  async function recentPages() {
-    const data = await request('/search', {
-      method: 'POST',
-      body: {
-        page_size: 100,
-        sort: { direction: 'descending', timestamp: 'last_edited_time' }
+  async function pageEditedAt(pageId) {
+    await useCurrentVersion()
+    try {
+      const page = await request(`/pages/${pageId}`)
+      if (!page || page.archived || page.in_trash) return null
+      return page.last_edited_time || null
+    } catch (error) {
+      if (isMissing(error)) return null
+      throw error
+    }
+  }
+
+  async function recentPages({ before } = {}) {
+    await useCurrentVersion()
+    const pages = []
+    let cursor = ''
+    let complete = true
+    const cap = 300
+    do {
+      const data = await request('/search', {
+        method: 'POST',
+        body: {
+          page_size: 100,
+          sort: { direction: 'descending', timestamp: 'last_edited_time' },
+          ...(cursor ? { start_cursor: cursor } : {})
+        }
+      })
+      const batch = (data.results || [])
+        .filter((item) => item?.object === 'page' && item.id)
+        .map((item) => ({
+          pageId: item.id,
+          editedAt: item.last_edited_time || null
+        }))
+      pages.push(...batch)
+      const oldest = batch.length ? batch[batch.length - 1].editedAt : ''
+      const more = Boolean(data.has_more && data.next_cursor)
+      if (!more) {
+        complete = true
+        break
       }
-    })
-    return (data.results || [])
-      .filter((item) => item?.object === 'page' && item.id)
-      .map((item) => ({
-        pageId: item.id,
-        editedAt: item.last_edited_time || null
-      }))
+      if (before && oldest && oldest <= before) {
+        complete = true
+        break
+      }
+      if (pages.length >= cap) {
+        complete = false
+        break
+      }
+      cursor = data.next_cursor || ''
+    } while (cursor)
+    return { pages, complete }
   }
 
   async function listNoteAssets(pageId) {
@@ -620,6 +657,7 @@ export function createNotionClient({
     downloadAsset,
     deleteBlock,
     pageParent,
+    pageEditedAt,
     recentPages,
     archivePage,
     acceptedDatabaseId: () => acceptedId
