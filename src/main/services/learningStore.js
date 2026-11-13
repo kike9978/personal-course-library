@@ -96,6 +96,8 @@ function ensureArrays(course) {
   if (!Array.isArray(course.notes)) course.notes = []
   if (!Array.isArray(course.bookmarks)) course.bookmarks = []
   if (!Array.isArray(course.projects)) course.projects = []
+  if (!Array.isArray(course.playableLessons)) course.playableLessons = []
+  if (!course.lessons || typeof course.lessons !== 'object') course.lessons = {}
   migrateBookmarksIntoNotes(course)
   return course
 }

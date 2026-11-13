@@ -58,7 +58,10 @@ let syncing = false
 let syncTotal = 0
 let syncDone = 0
 let prepareDetail = ''
+let prepareDone = 0
+let prepareTotal = 0
 let preparePublishedAt = 0
+let prepareTimer = null
 let lastError = null
 let lastErrorCode = ''
 let turn = Promise.resolve()
@@ -263,6 +266,8 @@ function publicStatus() {
     syncTotal,
     syncDone,
     prepareDetail,
+    prepareDone,
+    prepareTotal,
     lastError,
     lastErrorCode,
     queued: jobs.size,
@@ -280,12 +285,43 @@ function publish() {
   hooks.notifyStatus(publicStatus())
 }
 
-function notePrepare(detail) {
+function clearPrepare() {
+  prepareDetail = ''
+  prepareDone = 0
+  prepareTotal = 0
+  if (prepareTimer) {
+    clearTimeout(prepareTimer)
+    prepareTimer = null
+  }
+}
+
+function notePrepare(detail, done = 0, total = 0) {
   prepareDetail = detail
+  prepareDone = done
+  prepareTotal = total
+  const send = () => {
+    preparePublishedAt = Date.now()
+    publish()
+  }
   const now = Date.now()
-  if (detail && now - preparePublishedAt < 500) return
-  preparePublishedAt = now
-  publish()
+  if (!detail || now - preparePublishedAt >= 400) {
+    if (prepareTimer) {
+      clearTimeout(prepareTimer)
+      prepareTimer = null
+    }
+    send()
+    return
+  }
+  if (prepareTimer) return
+  prepareTimer = setTimeout(() => {
+    prepareTimer = null
+    send()
+  }, 400)
+}
+
+function listShapeExtra(page, extra = {}) {
+  if (page?.playlistLegacy) return extra
+  return { listShape: 'blocks', ...extra }
 }
 
 function notifyNotes() {
@@ -882,6 +918,13 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
     if (page.findingId) sharedIdsConfirmed.add(page.pageId)
     if (existing.notion?.conflict) return changed
     if (page.editedAt && page.editedAt !== existing.notion?.remoteEditedAt) {
+      const sameText = wireHash(existing.title, existing.body) === wireHash(page.title, page.body)
+      if (sameText) {
+        withoutNoteWriteHook(() =>
+          applyNotion(existing.id, cursorFrom(page, wireHash(page.title, page.body)))
+        )
+        return changed
+      }
       jobs.set(existing.id, { op: 'upsert' })
       noteQueued(recent?.probe, existing.id, 'la página cambió')
     }
@@ -915,10 +958,13 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
 async function importSharedNotes(client, rows, recent) {
   let changed = false
   const seen = new Set()
-  for (const row of rows || []) {
+  const courseRows = (rows || []).filter(
+    (row) => !String(row.nodeMarker || '').startsWith('node:table:')
+  )
+  for (let index = 0; index < courseRows.length; index += 1) {
+    const row = courseRows[index]
     const courseMarker = String(row.nodeMarker || '')
-    if (courseMarker.startsWith('node:table:')) continue
-    notePrepare('Revisando notas')
+    notePrepare(`Notas, ${index + 1} de ${courseRows.length}`, index + 1, courseRows.length)
     if (!courseMarker.startsWith('node:')) {
       if (row.findingId && !String(row.findingId).startsWith('node:')) {
         changed =
@@ -1058,7 +1104,10 @@ async function queuePending() {
       row || recentById.get(notionPageKey(finding.notion?.pageId)) || remoteByFinding.get(finding.id)
     const localChanged = !finding.notion?.ackedHash || finding.notion.ackedHash !== localHash
     const remoteChanged = Boolean(
-      remote?.editedAt && remote.editedAt !== finding.notion?.remoteEditedAt
+      remote?.editedAt &&
+        remote.editedAt !== finding.notion?.remoteEditedAt &&
+        finding.notion?.ackedHash &&
+        finding.notion.ackedHash !== localHash
     )
     const place = notionPlace(finding, courseTitles)
     const canPlace = Boolean(place.fileKey) || place.courseKey !== 'course:__loose__'
@@ -1108,8 +1157,7 @@ async function queuePending() {
     noteFailure(error)
   }
   probe.error = lastError !== errorBefore ? lastError : null
-  prepareDetail = ''
-  preparePublishedAt = 0
+  clearPrepare()
   publish()
 }
 
@@ -1271,7 +1319,11 @@ async function reconcilePlaylist(client, id, { refresh = false } = {}) {
     withoutNoteWriteHook(() => {
       writePlaylistRecord({
         ...playlist,
-        notion: cursorFrom(page, remoteHash === localHash ? localHash : remoteHash)
+        notion: cursorFrom(
+          page,
+          remoteHash === localHash ? localHash : remoteHash,
+          listShapeExtra(page)
+        )
       })
     })
   } else if (action === 'pull') {
@@ -1295,12 +1347,15 @@ async function reconcilePlaylist(client, id, { refresh = false } = {}) {
       })
     } else {
       const hash = wireHash(remote.title, remote.body)
-      applyPlaylist(id, cursorFrom(remote, hash, { pulledAt: Date.now() }), remote)
+      applyPlaylist(id, cursorFrom(remote, hash, listShapeExtra(remote, { pulledAt: Date.now() })), remote)
       notifyPlaylists()
     }
   } else if (action === 'relink') {
     withoutNoteWriteHook(() => {
-      writePlaylistRecord({ ...playlist, notion: cursorFrom(remote, localHash) })
+      writePlaylistRecord({
+        ...playlist,
+        notion: cursorFrom(remote, localHash, listShapeExtra(remote))
+      })
     })
   } else {
     withoutNoteWriteHook(() => {
@@ -1368,24 +1423,63 @@ async function reconcilePlaylistDelete(client, playlistId) {
 
 async function queuePlaylists(client, remotePages) {
   if (!remotePages) return
-  notePrepare('Revisando listas')
+  notePrepare('Buscando la página de listas')
   const sectionId = await ensurePlaylistSection(client)
+  notePrepare('Contando listas')
   const children = await client.listChildPages(sectionId)
+  const knownByPage = new Map(
+    listPlaylistRecords()
+      .filter((playlist) => playlist.notion?.pageId)
+      .map((playlist) => [playlist.notion.pageId, playlist])
+  )
   const remoteById = new Map()
   let adopted = 0
-  for (const child of children) {
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index]
+    const known = knownByPage.get(child.pageId)
+    notePrepare(
+      `Listas, ${index + 1} de ${children.length}${known?.title ? ` · ${known.title}` : ''}`,
+      index + 1,
+      children.length
+    )
+    const unchanged =
+      known?.notion?.listShape === 'blocks' &&
+      known.notion.remoteEditedAt &&
+      known.notion.remoteEditedAt === child.editedAt
+    if (unchanged) {
+      const wire = playlistWire(known)
+      remoteById.set(known.id, {
+        pageId: child.pageId,
+        title: known.title || wire.title,
+        body: wire.body,
+        editedAt: child.editedAt,
+        playlistId: known.id,
+        playlistLegacy: false
+      })
+      continue
+    }
     const page = await client.readPage(child.pageId)
     if (!page?.playlistId) continue
+    notePrepare(
+      `Listas, ${index + 1} de ${children.length}${page.title ? ` · ${page.title}` : ''}`,
+      index + 1,
+      children.length
+    )
     remoteById.set(page.playlistId, page)
     if (readPlaylistTombstones().some((item) => item.playlistId === page.playlistId)) continue
     if (!readPlaylist(page.playlistId)) {
       const parsed = playlistFromBody(page.body)
       if (!parsed) continue
       const hash = wireHash(page.title, page.body)
-      applyPlaylist(page.playlistId, cursorFrom(page, hash, { pulledAt: Date.now() }), page)
+      applyPlaylist(
+        page.playlistId,
+        cursorFrom(page, hash, listShapeExtra(page, { pulledAt: Date.now() })),
+        page
+      )
       adopted += 1
     }
   }
+  if (children.length) notePrepare(`Listas, ${children.length} de ${children.length}`, children.length, children.length)
   if (adopted) notifyPlaylists()
   for (const playlist of listPlaylistRecords()) {
     if (playlist.notion?.conflict) continue
@@ -1825,6 +1919,11 @@ export function notionDebugReport() {
     `conectado: ${config.enabled ? 'sí' : 'no'}`,
     `base: ${config.databaseId || '—'}`,
     `sincronizando: ${syncing ? `sí (${syncDone} de ${syncTotal || '?'})` : 'no'}`,
+    `paso: ${
+      prepareDetail
+        ? `${prepareDetail}${prepareTotal ? ` (${prepareDone} de ${prepareTotal})` : ''}`
+        : '—'
+    }`,
     `en cola ahora: ${jobs.size}`,
     `último error: ${lastError || '—'}`
   ]
@@ -1946,7 +2045,7 @@ export async function saveNotionSettings({ enabled, token, databaseId } = {}) {
       if (jobs.size) schedule(0)
     } catch (error) {
       noteFailure(error)
-      prepareDetail = ''
+      clearPrepare()
       publish()
     }
   })
@@ -2062,7 +2161,11 @@ async function pushPlaylist(client, playlist) {
   withoutNoteWriteHook(() => {
     writePlaylistRecord({
       ...playlist,
-      notion: cursorFrom(page, remoteHash === localHash ? localHash : remoteHash)
+      notion: cursorFrom(
+        page,
+        remoteHash === localHash ? localHash : remoteHash,
+        listShapeExtra(page)
+      )
     })
   })
 }
@@ -2087,7 +2190,7 @@ export async function resolveNotionPlaylistConflict(playlistId, choice) {
       const parsed = playlistFromBody(remote.body)
       if (!parsed) throw new Error('La página de Notion ya no es una lista')
       const hash = wireHash(remote.title, remote.body)
-      applyPlaylist(playlistId, cursorFrom(remote, hash, { pulledAt: Date.now() }), remote)
+      applyPlaylist(playlistId, cursorFrom(remote, hash, listShapeExtra(remote, { pulledAt: Date.now() })), remote)
       notifyPlaylists()
     } else {
       throw new Error('Elección desconocida')
@@ -2118,7 +2221,7 @@ export async function resolveNotionPlaylistDelete(playlistId, choice) {
       const parsed = playlistFromBody(remote.body)
       if (!parsed) throw new Error('La página de Notion ya no es una lista')
       const hash = wireHash(remote.title, remote.body)
-      applyPlaylist(playlistId, cursorFrom(remote, hash, { pulledAt: Date.now() }), remote)
+      applyPlaylist(playlistId, cursorFrom(remote, hash, listShapeExtra(remote, { pulledAt: Date.now() })), remote)
       notifyPlaylists()
     } else {
       throw new Error('Elección desconocida')

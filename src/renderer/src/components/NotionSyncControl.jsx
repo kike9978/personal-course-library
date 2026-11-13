@@ -51,8 +51,11 @@ function syncLabel(status) {
 function SyncProgress({ status, active }) {
   const total = status?.syncTotal || 0
   const done = status?.syncDone || 0
-  const known = Boolean(status?.syncing && total)
-  const percent = known ? Math.min(100, Math.round((done / total) * 100)) : 0
+  const scanning = Boolean(status?.prepareDetail && status?.prepareTotal)
+  const known = Boolean((status?.syncing && total) || scanning)
+  const shownTotal = status?.syncing && total ? total : status?.prepareTotal || 0
+  const shownDone = status?.syncing && total ? done : status?.prepareDone || 0
+  const percent = known ? Math.min(100, Math.round((shownDone / shownTotal) * 100)) : 0
   const label = progressLabel(status)
   if (!active) return null
   return (
@@ -60,8 +63,8 @@ function SyncProgress({ status, active }) {
       className={`notion-sync__progress${known ? '' : ' is-waiting'}`}
       role="progressbar"
       aria-valuemin={0}
-      aria-valuemax={known ? total : undefined}
-      aria-valuenow={known ? done : undefined}
+      aria-valuemax={known ? shownTotal : undefined}
+      aria-valuenow={known ? shownDone : undefined}
       aria-label="Sincronización con Notion"
     >
       <span>{label}</span>
