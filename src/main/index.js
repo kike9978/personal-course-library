@@ -82,13 +82,16 @@ import {
   enqueueNotionDelete,
   enqueueNotionPlaylistDelete,
   enqueueNotionPlaylistUpsert,
+  enqueueNotionProgress,
   enqueueNotionUpsert,
+  localProgressTrack,
   getNotionSyncStatus,
   pollNotionChanges,
   resolveNotionConflict,
   resolveNotionDelete,
   resolveNotionPlaylistConflict,
   resolveNotionPlaylistDelete,
+  resolveNotionProgress,
   saveNotionSettings,
   setNotionDrawingShare,
   startNotionSync,
@@ -480,6 +483,9 @@ function registerIpcHandlers() {
 
   ipcMain.handle('update-course', async (_event, { coursePath, updates }) => {
     const data = await updateCourse(coursePath, updates)
+    if (Object.prototype.hasOwnProperty.call(updates || {}, 'isInProcess')) {
+      enqueueNotionProgress(coursePath, { soon: true })
+    }
     BrowserWindow.getAllWindows().forEach((win) => {
       win.webContents.send('course-updated', { coursePath, fullData: data })
     })
@@ -488,6 +494,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('update-course-property', async (_event, { coursePath, property, value }) => {
     const data = await updateCourseProperty(coursePath, property, value)
+    if (property === 'isInProcess') enqueueNotionProgress(coursePath, { soon: true })
     BrowserWindow.getAllWindows().forEach((win) => {
       win.webContents.send('course-updated', {
         coursePath,
@@ -639,7 +646,10 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('set-lesson-progress', (_event, { coursePath, ...update }) => {
-    return setLessonProgress(coursePath, update)
+    const before = localProgressTrack(coursePath)
+    const next = setLessonProgress(coursePath, update)
+    enqueueNotionProgress(coursePath, { soon: localProgressTrack(coursePath) !== before })
+    return next
   })
 
   ipcMain.handle('record-course-view', (_event, coursePath) => {
@@ -929,6 +939,9 @@ function registerIpcHandlers() {
   ipcMain.handle('resolve-notion-playlist-delete', (_event, { playlistId, choice } = {}) =>
     resolveNotionPlaylistDelete(playlistId, choice)
   )
+  ipcMain.handle('resolve-notion-progress', (_event, { coursePath, choice } = {}) =>
+    resolveNotionProgress(coursePath, choice)
+  )
 
   ipcMain.handle('open-project-link', async (_event, { coursePath, projectId }) => {
     const linked = getProjectLinkedPath(coursePath, projectId)
@@ -951,6 +964,14 @@ app.whenReady().then(() => {
   startNotionSync({
     notifyNotes: () => broadcastToWindows('notes-changed', {}),
     notifyPlaylists: () => broadcastToWindows('playlists-changed', {}),
+    notifyProgress: () => broadcastToWindows('progress-changed', {}),
+    notifyCourse: (coursePath, data) =>
+      broadcastToWindows('course-updated', {
+        coursePath,
+        property: 'isInProcess',
+        value: Boolean(data?.isInProcess),
+        fullData: data
+      }),
     notifyStatus: (status) => broadcastToWindows('notion-sync', status)
   })
   app.on('browser-window-focus', () => {

@@ -4,6 +4,7 @@ import {
   chunkRichText,
   findingIdFromBlocks,
   playlistIdFromBlocks,
+  progressIdFromBlocks,
   fileNameFromCaption,
   markerBlocks,
   markerFromBlocks,
@@ -311,6 +312,7 @@ export function createNotionClient({
         body: blocksToBody(blocks),
         findingId: findingIdFromBlocks(blocks) || fromProperty,
         playlistId: playlistIdFromBlocks(blocks),
+        progressId: progressIdFromBlocks(blocks),
         marker: markerFromBlocks(blocks),
         assets: noteAssetsFromBlocks(blocks)
       }
@@ -341,7 +343,11 @@ export function createNotionClient({
   async function writeBody(pageId, body, findingId, kind = 'finding') {
     const existing = await listChildren(pageId)
     const stamped =
-      kind === 'playlist' ? playlistIdFromBlocks(existing) : findingIdFromBlocks(existing)
+      kind === 'playlist'
+        ? playlistIdFromBlocks(existing)
+        : kind === 'progress'
+          ? progressIdFromBlocks(existing)
+          : findingIdFromBlocks(existing)
     await replaceContent(pageId, bodyToBlocks(body, stamped || findingId || null, kind))
   }
 

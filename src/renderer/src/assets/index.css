@@ -7814,6 +7814,55 @@ button.annotations-doc__save-status {
   flex-wrap: wrap;
 }
 
+.notion-sync__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.notion-sync__progress span {
+  color: var(--clr-ink-soft);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.notion-sync__progress-track {
+  height: 0.45rem;
+  overflow: hidden;
+  border: var(--border-thick);
+  border-radius: var(--radius-pill);
+  background: var(--clr-cream-deep);
+}
+
+.notion-sync__progress-fill {
+  height: 100%;
+  background: var(--clr-coral);
+  border-radius: inherit;
+  transition: width 150ms var(--ease-pop);
+}
+
+.notion-sync__progress.is-waiting .notion-sync__progress-fill {
+  width: 35%;
+  animation: notion-sync-wait 1.1s var(--ease-pop) infinite;
+}
+
+@keyframes notion-sync-wait {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notion-sync__progress.is-waiting .notion-sync__progress-fill {
+    animation: none;
+    width: 100%;
+    opacity: 0.45;
+  }
+}
+
 .notion-sync-error {
   margin: 0;
   color: var(--clr-coral-deep);

@@ -8,9 +8,15 @@ import {
   decideSync,
   filePageMarker,
   findingIdFromBlocks,
+  mergeCourseProgress,
   playlistFromBody,
   playlistIdFromBlocks,
   playlistWire,
+  progressFromBody,
+  progressIdFromBlocks,
+  progressIsEmpty,
+  progressTrackKey,
+  progressWire,
   markerBlocks,
   noteAssetNames,
   normalizeDatabaseId,
@@ -176,6 +182,57 @@ describe('notion wire text', () => {
     )
     assert.equal(normalizeDatabaseId(''), '')
     assert.equal(normalizeDatabaseId('no es un id'), '')
+  })
+})
+
+describe('course progress wire', () => {
+  it('stamps a progress page and round-trips the payload', () => {
+    const wire = progressWire({
+      inProcess: true,
+      lessons: {
+        'b.mp4': { completed: false, positionSec: 12.4, durationSec: 40, lastOpenedAt: 5 },
+        'a.mp4': { completed: true, positionSec: 3, durationSec: 10, lastOpenedAt: 2 }
+      },
+      lastLessonRelativePath: 'b.mp4',
+      lastLessonTitle: 'B',
+      lastPositionSec: 12.4,
+      lastOpenedAt: 5
+    })
+    const blocks = bodyToBlocks(wire.body, 'Pack', 'progress')
+    assert.equal(progressIdFromBlocks(blocks), 'Pack')
+    assert.equal(progressFromBody(blocksToBody(blocks)).inProcess, true)
+    assert.equal(progressFromBody(wire.body).lessons['b.mp4'].positionSec, 12)
+    assert.equal(progressIsEmpty(wire), false)
+    assert.equal(progressIsEmpty(progressWire({ inProcess: false, lessons: {} })), true)
+  })
+
+  it('unions completed lessons and keeps the later last-watched lesson', () => {
+    const merged = mergeCourseProgress(
+      {
+        inProcess: false,
+        lessons: { 'a.mp4': { completed: true, positionSec: 10, durationSec: 10, lastOpenedAt: 1 } },
+        lastLessonRelativePath: 'a.mp4',
+        lastLessonTitle: 'A',
+        lastPositionSec: 10,
+        lastOpenedAt: 1
+      },
+      {
+        inProcess: true,
+        lessons: { 'b.mp4': { completed: true, positionSec: 8, durationSec: 8, lastOpenedAt: 4 } },
+        lastLessonRelativePath: 'b.mp4',
+        lastLessonTitle: 'B',
+        lastPositionSec: 8,
+        lastOpenedAt: 4
+      }
+    )
+    assert.equal(merged.inProcess, false)
+    assert.equal(merged.lessons['a.mp4'].completed, true)
+    assert.equal(merged.lessons['b.mp4'].completed, true)
+    assert.equal(merged.lastLessonRelativePath, 'b.mp4')
+    assert.notEqual(
+      progressTrackKey({ ...merged, inProcess: false }),
+      progressTrackKey({ ...merged, inProcess: true })
+    )
   })
 })
 

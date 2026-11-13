@@ -116,6 +116,14 @@ export function playlistIdFromBlocks(blocks) {
   return ''
 }
 
+export function progressIdFromBlocks(blocks) {
+  for (const block of blocks || []) {
+    const caption = blockCaption(block)
+    if (caption.startsWith('progress:')) return caption.slice('progress:'.length).trim()
+  }
+  return ''
+}
+
 /** Shared list fields. Position, size, and collapsed stay on this machine. */
 export function playlistWire(playlist) {
   const rawWhys =
@@ -131,6 +139,114 @@ export function playlistWire(playlist) {
     })
   )
   return { title: normalizeTitle(playlist?.title) || 'Nueva lista', body }
+}
+
+function lessonWire(lesson) {
+  return {
+    completed: Boolean(lesson?.completed),
+    positionSec: Math.max(0, Math.round(Number(lesson?.positionSec) || 0)),
+    durationSec: Math.max(0, Math.round(Number(lesson?.durationSec) || 0)),
+    lastOpenedAt: Math.max(0, Math.round(Number(lesson?.lastOpenedAt) || 0))
+  }
+}
+
+/** Progress shared between copies. The scanned lesson list stays on each computer. */
+export function progressWire(progress) {
+  const lessons = {}
+  const source = progress?.lessons && typeof progress.lessons === 'object' ? progress.lessons : {}
+  for (const key of Object.keys(source).sort()) {
+    if (!key) continue
+    lessons[key] = lessonWire(source[key])
+  }
+  const body = normalizeBody(
+    JSON.stringify({
+      inProcess: Boolean(progress?.inProcess),
+      lessons,
+      lastLessonRelativePath: String(progress?.lastLessonRelativePath || ''),
+      lastLessonTitle: String(progress?.lastLessonTitle || ''),
+      lastPositionSec: Math.max(0, Math.round(Number(progress?.lastPositionSec) || 0)),
+      lastOpenedAt: Math.max(0, Math.round(Number(progress?.lastOpenedAt) || 0))
+    })
+  )
+  return { body }
+}
+
+export function progressFromBody(body) {
+  try {
+    const data = JSON.parse(String(body || ''))
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+    const lessons = {}
+    const source = data.lessons && typeof data.lessons === 'object' ? data.lessons : {}
+    for (const key of Object.keys(source).sort()) {
+      if (!key) continue
+      lessons[key] = lessonWire(source[key])
+    }
+    return {
+      inProcess: Boolean(data.inProcess),
+      lessons,
+      lastLessonRelativePath: String(data.lastLessonRelativePath || ''),
+      lastLessonTitle: String(data.lastLessonTitle || ''),
+      lastPositionSec: Math.max(0, Math.round(Number(data.lastPositionSec) || 0)),
+      lastOpenedAt: Math.max(0, Math.round(Number(data.lastOpenedAt) || 0))
+    }
+  } catch {
+    return null
+  }
+}
+
+export function progressIsEmpty(progress) {
+  const data = progress?.lessons ? progress : progressFromBody(progress?.body || progress)
+  if (!data) return true
+  if (data.inProcess) return false
+  if (data.lastLessonRelativePath) return false
+  return !Object.values(data.lessons).some((lesson) => lesson.completed || lesson.positionSec > 0)
+}
+
+/** Completed lessons and the En curso flag, without the playback position. */
+export function progressTrackKey(progress) {
+  const data = progress?.lessons ? progressWire(progress) && progressFromBody(progressWire(progress).body) : progressFromBody(progress)
+  if (!data) return ''
+  const done = Object.entries(data.lessons)
+    .filter(([, lesson]) => lesson.completed)
+    .map(([name]) => name)
+    .sort()
+    .join('\n')
+  return `${data.inProcess ? 1 : 0}\n${data.lastLessonRelativePath}\n${done}`
+}
+
+/**
+ * Keep a lesson completed if either copy finished it.
+ * The last-watched lesson is the one opened later.
+ * `inProcess` stays on the local side so a flag conflict can be chosen afterwards.
+ */
+export function mergeCourseProgress(local, remote) {
+  const left = local?.lessons ? local : progressFromBody(local)
+  const right = remote?.lessons ? remote : progressFromBody(remote)
+  if (!left || !right) return null
+  const lessons = { ...left.lessons }
+  for (const [key, remoteLesson] of Object.entries(right.lessons)) {
+    const current = lessons[key]
+    if (!current) {
+      lessons[key] = remoteLesson
+      continue
+    }
+    const completed = current.completed || remoteLesson.completed
+    const newer = (remoteLesson.lastOpenedAt || 0) >= (current.lastOpenedAt || 0) ? remoteLesson : current
+    lessons[key] = {
+      ...newer,
+      completed,
+      positionSec: completed && newer.durationSec ? newer.durationSec : newer.positionSec
+    }
+  }
+  const last = (right.lastOpenedAt || 0) >= (left.lastOpenedAt || 0) ? right : left
+  return {
+    inProcess: Boolean(left.inProcess),
+    lessons,
+    lastLessonRelativePath: last.lastLessonRelativePath,
+    lastLessonTitle: last.lastLessonTitle,
+    lastPositionSec: last.lastPositionSec,
+    lastOpenedAt: last.lastOpenedAt
+  }
 }
 
 export function playlistFromBody(body) {
@@ -270,7 +386,7 @@ export function bodyToBlocks(body, findingId = null, kind = 'finding') {
   const text = normalizeBody(body)
   const id = String(findingId || '').trim()
   if (!text && !id) return []
-  const prefix = kind === 'playlist' ? 'playlist' : 'finding'
+  const prefix = kind === 'playlist' ? 'playlist' : kind === 'progress' ? 'progress' : 'finding'
   const caption = captionRichText(id ? `${prefix}:${id}` : '')
   return [
     {

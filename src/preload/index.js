@@ -95,6 +95,8 @@ const api = {
     ipcRenderer.invoke('resolve-notion-playlist-conflict', { playlistId, choice }),
   resolveNotionPlaylistDelete: (playlistId, choice) =>
     ipcRenderer.invoke('resolve-notion-playlist-delete', { playlistId, choice }),
+  resolveNotionProgress: (coursePath, choice) =>
+    ipcRenderer.invoke('resolve-notion-progress', { coursePath, choice }),
   onNotionSync: (callback) => {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('notion-sync', listener)
@@ -126,6 +128,11 @@ const api = {
     const listener = () => callback()
     ipcRenderer.on('playlists-changed', listener)
     return () => ipcRenderer.removeListener('playlists-changed', listener)
+  },
+  onProgressChanged: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('progress-changed', listener)
+    return () => ipcRenderer.removeListener('progress-changed', listener)
   },
   onAnnotationsJump: (callback) => {
     const listener = (_event, data) => callback(data)

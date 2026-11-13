@@ -1,18 +1,21 @@
 import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
-import { getNotionConfig, setNotionConfig } from './config.js'
-import { readCourseTitleMap } from './courses.js'
+import { getLibraryPath, getNotionConfig, setNotionConfig } from './config.js'
+import { listCourseDirs, readCourseTitleMap, updateCourse } from './courses.js'
 import { createNotionClient } from './notionClient.js'
 import {
   forkFinding,
   listFindingRecords,
+  listCourseProgressRecords,
   listPlaylistRecords,
   mutateFinding,
+  readCourseProgressRecord,
   readFinding,
   readPlaylist,
   restoreFinding,
   withoutNoteWriteHook,
+  writeCourseProgress,
   writePlaylistRecord
 } from './learningStore.js'
 import { findingFromLegacyNote } from '../../shared/knowledgeGraph.js'
@@ -30,8 +33,13 @@ import {
   noteAssetNames,
   notionAssetsToUpload,
   notionPlace,
+  mergeCourseProgress,
   playlistFromBody,
   playlistWire,
+  progressFromBody,
+  progressIsEmpty,
+  progressTrackKey,
+  progressWire,
   wireHash
 } from '../../shared/notionSync.js'
 import { readNoteAttachment, saveNoteAttachmentBytes } from './noteAttachments.js'
@@ -46,6 +54,8 @@ let pollTimer = null
 let remoteCheck = null
 let draining = null
 let syncing = false
+let syncTotal = 0
+let syncDone = 0
 let lastError = null
 let lastErrorCode = ''
 let turn = Promise.resolve()
@@ -65,6 +75,8 @@ function oneAtATime(task) {
 let hooks = {
   notifyNotes() {},
   notifyPlaylists() {},
+  notifyProgress() {},
+  notifyCourse() {},
   notifyStatus() {}
 }
 
@@ -245,6 +257,8 @@ function publicStatus() {
     hasToken: Boolean(config.token),
     databaseId: config.databaseId || '',
     syncing,
+    syncTotal,
+    syncDone,
     lastError,
     lastErrorCode,
     queued: jobs.size,
@@ -253,7 +267,8 @@ function publicStatus() {
     playlistConflicts,
     playlistDeleteConflicts,
     drawingShare: readState().drawingShare || '',
-    drawings: listDrawingFiles()
+    drawings: listDrawingFiles(),
+    progressConflicts: listProgressConflicts()
   }
 }
 
@@ -267,6 +282,10 @@ function notifyNotes() {
 
 function notifyPlaylists() {
   hooks.notifyPlaylists()
+}
+
+function notifyProgress() {
+  hooks.notifyProgress()
 }
 
 function cursorFrom(page, hash, extra = {}) {
@@ -442,6 +461,17 @@ function listDrawingFiles() {
     }
   }
   return drawings
+}
+
+function listProgressConflicts() {
+  return listCourseProgressRecords()
+    .filter((course) => course.notion?.conflict)
+    .map((course) => ({
+      coursePath: course.id,
+      title: courseTitle(course.id),
+      localInProcess: readInProcess(course.id, course),
+      remoteInProcess: Boolean(course.notion.conflict.remoteInProcess)
+    }))
 }
 
 async function reconcileNoteFiles(client, pageId, body) {
@@ -643,12 +673,16 @@ function kick() {
 async function drain() {
   if (!getNotionConfig().enabled) {
     jobs.clear()
+    syncTotal = 0
+    syncDone = 0
     publish()
     return
   }
   if (!jobs.size) return
   const batch = new Map(jobs)
   jobs.clear()
+  syncTotal = batch.size
+  syncDone = 0
   syncing = true
   publish()
   let retryDelay = 0
@@ -663,19 +697,26 @@ async function drain() {
       try {
         if (job.op === 'playlist-upsert') await reconcilePlaylist(client, job.playlistId)
         else if (job.op === 'playlist-delete') await reconcilePlaylistDelete(client, job.playlistId)
+        else if (job.op === 'progress-upsert') await reconcileProgress(client, job.coursePath)
         else if (job.op === 'delete') await reconcileDelete(client, id)
         else await reconcileUpsert(client, id)
         clearFailure()
+        syncDone += 1
+        publish()
       } catch (error) {
         noteFailure(error)
         if (job.op === 'playlist-upsert') rememberPlaylistError(job.playlistId, lastError)
+        else if (job.op === 'progress-upsert') rememberProgressError(job.coursePath, lastError)
         else if (job.op !== 'delete' && job.op !== 'playlist-delete') rememberError(id, lastError)
         if (requeueJob(id, job, error)) {
           const wait = error.status === 429 ? 5000 : isSaveConflict(error) ? 1500 : 15000
           retryDelay = Math.max(retryDelay, wait)
         }
         if (job.op === 'playlist-upsert' || job.op === 'playlist-delete') notifyPlaylists()
+        else if (job.op === 'progress-upsert') notifyProgress()
         else notifyNotes()
+        syncDone += 1
+        publish()
       }
     }
   } catch (error) {
@@ -691,6 +732,10 @@ async function drain() {
     retryDelay = conflict ? 1500 : 30000
   } finally {
     syncing = false
+    if (!jobs.size) {
+      syncTotal = 0
+      syncDone = 0
+    }
     publish()
   }
   if (jobs.size) schedule(retryDelay || 200)
@@ -961,6 +1006,11 @@ async function queuePending() {
   } catch (error) {
     noteFailure(error)
   }
+  try {
+    await queueProgress(client)
+  } catch (error) {
+    noteFailure(error)
+  }
 }
 
 const PAGE_ICONS = {
@@ -968,14 +1018,20 @@ const PAGE_ICONS = {
   file: '📄',
   note: '📝',
   playlists: '📋',
-  playlist: '🗂️'
+  playlist: '🗂️',
+  progress: '✅'
 }
 
 const PLAYLIST_MARKER = 'node:table:playlists'
+const PROGRESS_MARKER = 'node:table:progress'
 let playlistSectionTask = null
 
 function playlistKey(id) {
   return `playlist:${id}`
+}
+
+function progressKey(id) {
+  return `progress:${id}`
 }
 
 function rememberPlaylistError(id, message) {
@@ -1249,6 +1305,250 @@ async function queuePlaylists(client, remotePages) {
   }
 }
 
+function coursePropsFile(coursePath) {
+  const library = getLibraryPath()
+  const key = path.basename(String(coursePath || ''))
+  if (!library || !key) return ''
+  return path.join(library, key, 'courseProps.json')
+}
+
+function readInProcess(coursePath, course) {
+  const file = coursePropsFile(coursePath)
+  if (file && fs.existsSync(file)) {
+    try {
+      return Boolean(JSON.parse(fs.readFileSync(file, 'utf8')).isInProcess)
+    } catch {
+      return Boolean(course?.inProcess)
+    }
+  }
+  return Boolean(course?.inProcess)
+}
+
+function courseTitle(coursePath) {
+  const file = coursePropsFile(coursePath)
+  if (file && fs.existsSync(file)) {
+    try {
+      const title = JSON.parse(fs.readFileSync(file, 'utf8')).title
+      if (String(title || '').trim()) return String(title).trim()
+    } catch {
+      // The folder name is the page title when the catalog file cannot be read.
+    }
+  }
+  return path.basename(String(coursePath || '')) || 'Curso'
+}
+
+function localProgress(coursePath) {
+  const course = readCourseProgressRecord(coursePath)
+  return progressFromBody(
+    progressWire({
+      inProcess: readInProcess(coursePath, course),
+      lessons: course?.lessons || {},
+      lastLessonRelativePath: course?.lastLessonRelativePath || '',
+      lastLessonTitle: course?.lastLessonTitle || '',
+      lastPositionSec: course?.lastPositionSec || 0,
+      lastOpenedAt: course?.lastOpenedAt || 0
+    }).body
+  )
+}
+
+function rememberProgressError(coursePath, message) {
+  const course = readCourseProgressRecord(coursePath)
+  writeCourseProgress(coursePath, {
+    notion: {
+      pageId: course?.notion?.pageId || null,
+      ackedHash: course?.notion?.ackedHash || null,
+      remoteEditedAt: course?.notion?.remoteEditedAt || null,
+      conflict: course?.notion?.conflict || null,
+      error: message,
+      pulledAt: course?.notion?.pulledAt || null,
+      syncedAt: course?.notion?.syncedAt || null
+    }
+  })
+}
+
+async function applyProgress(coursePath, data, notion) {
+  writeCourseProgress(coursePath, {
+    lessons: data.lessons,
+    replaceLessons: true,
+    lastLessonRelativePath: data.lastLessonRelativePath || null,
+    lastLessonTitle: data.lastLessonTitle || null,
+    lastPositionSec: data.lastPositionSec || 0,
+    lastOpenedAt: data.lastOpenedAt || null,
+    inProcess: Boolean(data.inProcess),
+    notion
+  })
+  const file = coursePropsFile(coursePath)
+  if (file && fs.existsSync(path.dirname(file))) {
+    const saved = await updateCourse(coursePath, { isInProcess: Boolean(data.inProcess) })
+    hooks.notifyCourse?.(coursePath, saved)
+  }
+  notifyProgress()
+}
+
+let progressSectionTask = null
+
+async function ensureProgressSection(client) {
+  if (progressSectionTask) return progressSectionTask
+  progressSectionTask = (async () => {
+    let page = await client.findNode(PROGRESS_MARKER)
+    if (!page?.pageId) {
+      page = await client.createNodePage(PROGRESS_MARKER, 'Progreso', PAGE_ICONS.progress)
+    } else if (page.title !== 'Progreso') {
+      await client.renamePage(page.pageId, 'Progreso')
+    }
+    return page.pageId
+  })().finally(() => {
+    progressSectionTask = null
+  })
+  return progressSectionTask
+}
+
+async function loadProgressRemote(client, course, sectionId) {
+  if (course?.notion?.pageId) {
+    const direct = await client.readPage(course.notion.pageId)
+    if (direct?.progressId) return direct
+  }
+  if (!sectionId) return null
+  const children = await client.listChildPages(sectionId)
+  for (const child of children) {
+    const page = await client.readPage(child.pageId)
+    if (page?.progressId === course?.id) return page
+  }
+  return null
+}
+
+async function saveProgressPage(client, coursePath, data, remote) {
+  const wire = progressWire(data)
+  const parentId = await ensureProgressSection(client)
+  const title = courseTitle(coursePath)
+  if (remote?.pageId) {
+    const parent = await client.pageParent(remote.pageId)
+    if (parent?.type === 'page_id' && parent.id === parentId) {
+      return client.updatePage(remote.pageId, coursePath, title, wire.body, PAGE_ICONS.progress, 'progress')
+    }
+    const created = await client.createPage(
+      coursePath,
+      title,
+      wire.body,
+      parentId,
+      PAGE_ICONS.progress,
+      null,
+      'progress'
+    )
+    await client.archivePage(remote.pageId)
+    return created
+  }
+  return client.createPage(
+    coursePath,
+    title,
+    wire.body,
+    parentId,
+    PAGE_ICONS.progress,
+    null,
+    'progress'
+  )
+}
+
+async function reconcileProgress(client, coursePath) {
+  const course = readCourseProgressRecord(coursePath) || { id: coursePath }
+  if (course.notion?.conflict) return
+  const local = localProgress(coursePath)
+  if (progressIsEmpty(local) && !course.notion?.pageId) return
+  const localHash = wireHash(coursePath, progressWire(local).body)
+  const sectionId = course.notion?.pageId ? null : await ensureProgressSection(client)
+  const remote = await loadProgressRemote(client, { ...course, id: coursePath }, sectionId)
+  const remoteData = remote ? progressFromBody(remote.body) : null
+  const action = decideSync({
+    hasRemote: Boolean(remote && remoteData),
+    localHash,
+    remoteHash: remoteData ? wireHash(coursePath, progressWire(remoteData).body) : null,
+    ackedHash: course.notion?.ackedHash || null
+  })
+  if ((action === 'create' || action === 'push') && progressIsEmpty(local) && !remote) return
+  if (action === 'create' || action === 'push') {
+    const page = await saveProgressPage(client, coursePath, local, remote)
+    if (!page?.pageId) throw new Error('Notion no devolvió el progreso')
+    const written = progressWire(local).body
+    const remoteHash = page.body === undefined ? localHash : wireHash(page.title, page.body || written)
+    writeCourseProgress(coursePath, { notion: cursorFrom(page, remoteHash === localHash ? localHash : remoteHash) })
+    return
+  }
+  if (!remoteData) return
+  if (action === 'pull' || action === 'relink') {
+    const hash = action === 'relink' ? localHash : wireHash(coursePath, progressWire(remoteData).body)
+    await applyProgress(coursePath, remoteData, cursorFrom(remote, hash, action === 'pull' ? { pulledAt: Date.now() } : {}))
+    return
+  }
+  const merged = mergeCourseProgress(local, remoteData)
+  if (!merged) return
+  if (local.inProcess === remoteData.inProcess) {
+    const page = await saveProgressPage(client, coursePath, merged, remote)
+    const hash = wireHash(coursePath, progressWire(merged).body)
+    await applyProgress(coursePath, merged, cursorFrom(page || remote, hash))
+    return
+  }
+  writeCourseProgress(coursePath, {
+    lessons: merged.lessons,
+    lastLessonRelativePath: merged.lastLessonRelativePath || null,
+    lastLessonTitle: merged.lastLessonTitle || null,
+    lastPositionSec: merged.lastPositionSec || 0,
+    lastOpenedAt: merged.lastOpenedAt || null,
+    inProcess: local.inProcess,
+    notion: {
+      pageId: remote.pageId,
+      ackedHash: course.notion?.ackedHash || null,
+      remoteEditedAt: remote.editedAt || null,
+      conflict: { remoteInProcess: remoteData.inProcess },
+      error: null,
+      pulledAt: course.notion?.pulledAt || null,
+      syncedAt: course.notion?.syncedAt || null
+    }
+  })
+  notifyProgress()
+  publish()
+}
+
+async function queueProgress(client) {
+  let remoteById = new Map()
+  const section = await client.findNode(PROGRESS_MARKER)
+  if (section?.pageId) {
+    const children = await client.listChildPages(section.pageId)
+    remoteById = new Map()
+    for (const child of children) {
+      const page = await client.readPage(child.pageId)
+      if (page?.progressId) remoteById.set(page.progressId, page)
+    }
+  }
+  let folders = []
+  try {
+    folders = await listCourseDirs()
+  } catch {
+    folders = []
+  }
+  const keys = new Set([
+    ...listCourseProgressRecords().map((course) => course.id),
+    ...folders,
+    ...remoteById.keys()
+  ])
+  for (const coursePath of keys) {
+    const course = readCourseProgressRecord(coursePath)
+    if (course?.notion?.conflict) continue
+    const key = progressKey(coursePath)
+    if (saveConflictParked(key)) continue
+    const local = localProgress(coursePath)
+    const localHash = wireHash(coursePath, progressWire(local).body)
+    const remote = remoteById.get(coursePath)
+    const acked = course?.notion?.ackedHash || ''
+    const localChanged = Boolean(acked) && acked !== localHash
+    const remoteChanged = Boolean(remote && remote.editedAt !== course?.notion?.remoteEditedAt)
+    const missingPage = !remote && !progressIsEmpty(local)
+    const adoptRemote = Boolean(remote) && !acked
+    if (!localChanged && !remoteChanged && !missingPage && !adoptRemote) continue
+    const pending = jobs.get(key)
+    jobs.set(key, { op: 'progress-upsert', coursePath, attempts: pending?.attempts || 0 })
+  }
+}
+
 let iconsPainted = false
 
 async function paintIcons(client, rows) {
@@ -1299,6 +1599,8 @@ export function startNotionSync(nextHooks = {}) {
   hooks = {
     notifyNotes: nextHooks.notifyNotes || (() => {}),
     notifyPlaylists: nextHooks.notifyPlaylists || (() => {}),
+    notifyProgress: nextHooks.notifyProgress || (() => {}),
+    notifyCourse: nextHooks.notifyCourse || (() => {}),
     notifyStatus: nextHooks.notifyStatus || (() => {})
   }
   const enabled = getNotionConfig().enabled
@@ -1322,6 +1624,21 @@ export function enqueueNotionDelete(finding) {
   if (!finding.notion?.pageId) return
   jobs.set(finding.id, { op: 'delete' })
   schedule(1200)
+}
+
+export function enqueueNotionProgress(coursePath, { soon = false } = {}) {
+  const keyName = path.basename(String(coursePath || ''))
+  if (!keyName || !getNotionConfig().enabled) return
+  const key = progressKey(keyName)
+  conflictCooldown.delete(key)
+  const course = readCourseProgressRecord(keyName)
+  if (course?.notion?.conflict) return
+  jobs.set(key, { op: 'progress-upsert', coursePath: keyName, attempts: jobs.get(key)?.attempts || 0 })
+  if (soon || !timer) schedule(soon ? 1200 : 8000)
+}
+
+export function localProgressTrack(coursePath) {
+  return progressTrackKey(localProgress(coursePath))
 }
 
 export function enqueueNotionPlaylistUpsert(id) {
@@ -1388,6 +1705,8 @@ export async function saveNotionSettings({ enabled, token, databaseId } = {}) {
   if (!nextEnabled) {
     jobs.clear()
     clearTimeout(timer)
+    syncTotal = 0
+    syncDone = 0
     setRemoteWatch(false)
     clearFailure()
     publish()
@@ -1590,6 +1909,33 @@ export async function resolveNotionPlaylistDelete(playlistId, choice) {
     writePlaylistTombstones(
       readPlaylistTombstones().filter((item) => item.playlistId !== playlistId)
     )
+    publish()
+    return publicStatus()
+  })
+}
+
+export async function resolveNotionProgress(coursePath, choice) {
+  if (!getNotionConfig().enabled) throw new Error('La sincronización con Notion está apagada')
+  await flushQueued()
+  const keyName = path.basename(String(coursePath || ''))
+  const course = readCourseProgressRecord(keyName)
+  if (!course?.notion?.conflict) throw new Error('Ese curso no está en conflicto')
+  const client = clientFromConfig()
+  return oneAtATime(async () => {
+    await client.loadSchema()
+    if (choice !== 'local' && choice !== 'remote') throw new Error('Elección desconocida')
+    const current = localProgress(keyName)
+    const inProcess =
+      choice === 'remote' ? Boolean(course.notion.conflict.remoteInProcess) : current.inProcess
+    const next = { ...current, inProcess }
+    const remote = await loadProgressRemote(
+      client,
+      { ...course, id: keyName },
+      await ensureProgressSection(client)
+    )
+    const page = await saveProgressPage(client, keyName, next, remote)
+    const hash = wireHash(keyName, progressWire(next).body)
+    await applyProgress(keyName, next, cursorFrom(page || remote, hash))
     publish()
     return publicStatus()
   })

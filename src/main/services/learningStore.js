@@ -342,6 +342,55 @@ export function summarizeCourseState(courseState) {
   }
 }
 
+export function readCourseProgressRecord(coursePath) {
+  const key = courseKey(coursePath)
+  if (!key) return null
+  const course = readStore().courses?.[key]
+  return course ? { id: key, ...course } : null
+}
+
+export function listCourseProgressRecords() {
+  return Object.entries(readStore().courses || {}).map(([id, course]) => ({ id, ...course }))
+}
+
+/** Replace the shared progress fields. Playback code keeps calling setLessonProgress. */
+export function writeCourseProgress(coursePath, patch = {}) {
+  const store = readStore()
+  const key = courseKey(coursePath)
+  if (!key) return null
+  const course = ensureArrays(store.courses[key] || emptyCourseState())
+  if (patch.lessons && typeof patch.lessons === 'object') {
+    const next = {}
+    for (const [relativePath, lesson] of Object.entries(patch.lessons)) {
+      if (!relativePath) continue
+      next[relativePath] = {
+        positionSec: Math.max(0, Number(lesson?.positionSec) || 0),
+        durationSec: Math.max(0, Number(lesson?.durationSec) || 0),
+        completed: Boolean(lesson?.completed),
+        lastOpenedAt: Number(lesson?.lastOpenedAt) || null
+      }
+      if (!course.playableLessons.some((item) => item.relativePath === relativePath)) {
+        course.playableLessons.push({
+          relativePath,
+          title: lessonTitleFromPath(relativePath)
+        })
+      }
+    }
+    course.lessons = next
+  }
+  if ('lastLessonRelativePath' in patch) {
+    course.lastLessonRelativePath = patch.lastLessonRelativePath || null
+  }
+  if ('lastLessonTitle' in patch) course.lastLessonTitle = patch.lastLessonTitle || null
+  if ('lastPositionSec' in patch) course.lastPositionSec = Math.max(0, Number(patch.lastPositionSec) || 0)
+  if ('lastOpenedAt' in patch) course.lastOpenedAt = Number(patch.lastOpenedAt) || null
+  if ('inProcess' in patch) course.inProcess = Boolean(patch.inProcess)
+  if ('notion' in patch) course.notion = patch.notion
+  store.courses[key] = course
+  writeStore(store)
+  return presentCourse(store, key, course)
+}
+
 export function getCourseProgress(coursePath) {
   const store = readStore()
   const key = courseKey(coursePath)

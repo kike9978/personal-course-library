@@ -31,15 +31,41 @@ function useNotionSync() {
 
 function syncLabel(status) {
   if (!status?.enabled) return 'Apagado'
+  if (status.syncing && status.syncTotal) return `${status.syncDone} de ${status.syncTotal}`
   if (status.syncing || status.queued) return 'Sincronizando…'
   if (status.lastError) return 'Error'
   return 'Activo'
 }
 
+function SyncProgress({ status, active }) {
+  const total = status?.syncTotal || 0
+  const done = status?.syncDone || 0
+  const known = Boolean(status?.syncing && total)
+  const percent = known ? Math.min(100, Math.round((done / total) * 100)) : 0
+  if (!active) return null
+  return (
+    <div
+      className={`notion-sync__progress${known ? '' : ' is-waiting'}`}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={known ? total : undefined}
+      aria-valuenow={known ? done : undefined}
+      aria-label="Sincronización con Notion"
+    >
+      <span>{known ? `${done} de ${total}` : 'Preparando…'}</span>
+      <div className="notion-sync__progress-track">
+        <div className="notion-sync__progress-fill" style={known ? { width: `${percent}%` } : undefined} />
+      </div>
+    </div>
+  )
+}
+
 function choiceLabel(choice, kind) {
+  if (choice === 'local' && kind === 'progress') return 'En curso se quedó como en esta biblioteca'
+  if (choice === 'remote' && kind === 'progress') return 'En curso se quedó como en Notion'
   if (choice === 'json') return 'Los dibujos se comparten como JSON'
   if (choice === 'image') return 'Se comparte solo la imagen del dibujo'
-  if (choice === 'local') return 'Los dibujos se quedan en esta biblioteca'
+  if (choice === 'local' && kind === 'dibujo') return 'Los dibujos se quedan en esta biblioteca'
   if (choice === 'both') return 'La versión de Notion quedó en una nota nueva'
   if (choice === 'remote') return 'Quedó el texto de Notion'
   if (choice === 'keep') {
@@ -198,7 +224,8 @@ export function NotionSyncButton() {
     (status?.conflicts?.length || 0) +
     (status?.deleteConflicts?.length || 0) +
     (status?.playlistConflicts?.length || 0) +
-    (status?.playlistDeleteConflicts?.length || 0)
+    (status?.playlistDeleteConflicts?.length || 0) +
+    (status?.progressConflicts?.length || 0)
   const retryingSave = status?.lastErrorCode === 'conflict_error' && (status.syncing || status.queued)
 
   return (
@@ -248,6 +275,14 @@ export function NotionSyncButton() {
                 <span>
                   Título, texto e imágenes. Cada curso es una página, cada archivo queda dentro y la
                   nota dentro de ese archivo.
+                </span>
+              </li>
+              <li>
+                <strong>Progreso</strong>
+                <span>
+                  En curso, lecciones completadas y la última lección, bajo una página Progreso. Si
+                  en curso cambió aquí y en Notion, eliges cuál se queda. Las lecciones completadas
+                  se unen.
                 </span>
               </li>
               <li>
@@ -318,7 +353,8 @@ export function NotionSyncButton() {
                           'drawing-share',
                           choice,
                           () => window.api.setNotionDrawingShare(choice),
-                          'No se pudo guardar la elección'
+                          'No se pudo guardar la elección',
+                          'dibujo'
                         )
                       }}
                     >
@@ -340,6 +376,64 @@ export function NotionSyncButton() {
                   ? ' Sincronizar ahora lo vuelve a intentar.'
                   : ''}
               </p>
+            ) : null}
+            {status?.progressConflicts?.length ? (
+              <div className="notion-sync__deletes">
+                <h4>En curso por elegir</h4>
+                <p>
+                  El interruptor cambió aquí y en Notion. Las lecciones completadas de los dos lados
+                  ya se unieron.
+                </p>
+                {status.progressConflicts.map((item) => (
+                  <article key={item.coursePath}>
+                    <strong>{item.title || item.coursePath}</strong>
+                    <div className="notion-conflict__cols">
+                      <div>
+                        <h4>Esta biblioteca</h4>
+                        <pre>{item.localInProcess ? 'En curso' : 'Sin marcar'}</pre>
+                      </div>
+                      <div>
+                        <h4>Notion</h4>
+                        <pre>{item.remoteInProcess ? 'En curso' : 'Sin marcar'}</pre>
+                      </div>
+                    </div>
+                    <div className="dialog__actions-btns">
+                      <button
+                        type="button"
+                        className="btn btn--primary"
+                        disabled={resolvingId === item.coursePath}
+                        onClick={() =>
+                          void resolveWith(
+                            item.coursePath,
+                            'local',
+                            () => window.api.resolveNotionProgress(item.coursePath, 'local'),
+                            'No se pudo resolver el progreso',
+                            'progress'
+                          )
+                        }
+                      >
+                        Usar esta
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--ghost"
+                        disabled={resolvingId === item.coursePath}
+                        onClick={() =>
+                          void resolveWith(
+                            item.coursePath,
+                            'remote',
+                            () => window.api.resolveNotionProgress(item.coursePath, 'remote'),
+                            'No se pudo resolver el progreso',
+                            'progress'
+                          )
+                        }
+                      >
+                        Usar la de Notion
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
             ) : null}
             {status?.conflicts?.length ? (
               <div className="notion-sync__deletes">
@@ -479,6 +573,10 @@ export function NotionSyncButton() {
                 ))}
               </div>
             ) : null}
+            <SyncProgress
+              status={status}
+              active={Boolean(syncingNow || status?.syncing || status?.queued)}
+            />
             <div className="dialog__actions dialog__actions--spread">
               <button type="button" className="btn btn--ghost" onClick={close}>
                 Cerrar

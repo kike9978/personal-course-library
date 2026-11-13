@@ -1009,6 +1009,13 @@ function App() {
       loadCourses()
     })
 
+    const unsubscribeProgress = window.api.onProgressChanged?.(() => {
+      if (!coursesRef.current.length) return
+      mergeLearning(coursesRef.current).then((next) => {
+        if (next) setCourses(next)
+      })
+    })
+
     const unsubscribeJump = annotationsWindowMode
       ? null
       : window.api.onAnnotationsJump?.((payload) => {
@@ -1042,6 +1049,7 @@ function App() {
     return () => {
       unsubscribeUpdated()
       unsubscribeLibrary()
+      unsubscribeProgress?.()
       unsubscribeJump?.()
       window.removeEventListener('keydown', handleKeyDown)
     }
