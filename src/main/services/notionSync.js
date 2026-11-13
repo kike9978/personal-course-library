@@ -57,6 +57,8 @@ let draining = null
 let syncing = false
 let syncTotal = 0
 let syncDone = 0
+let prepareDetail = ''
+let preparePublishedAt = 0
 let lastError = null
 let lastErrorCode = ''
 let turn = Promise.resolve()
@@ -260,6 +262,7 @@ function publicStatus() {
     syncing,
     syncTotal,
     syncDone,
+    prepareDetail,
     lastError,
     lastErrorCode,
     queued: jobs.size,
@@ -275,6 +278,14 @@ function publicStatus() {
 
 function publish() {
   hooks.notifyStatus(publicStatus())
+}
+
+function notePrepare(detail) {
+  prepareDetail = detail
+  const now = Date.now()
+  if (detail && now - preparePublishedAt < 500) return
+  preparePublishedAt = now
+  publish()
 }
 
 function notifyNotes() {
@@ -907,6 +918,7 @@ async function importSharedNotes(client, rows, recent) {
   for (const row of rows || []) {
     const courseMarker = String(row.nodeMarker || '')
     if (courseMarker.startsWith('node:table:')) continue
+    notePrepare('Revisando notas')
     if (!courseMarker.startsWith('node:')) {
       if (row.findingId && !String(row.findingId).startsWith('node:')) {
         changed =
@@ -984,6 +996,7 @@ async function importSharedNotes(client, rows, recent) {
 
 async function queuePending() {
   if (!getNotionConfig().enabled) return
+  notePrepare('Revisando Notion…')
   let remotePages = null
   let recent = { pages: [], complete: false }
   const client = clientFromConfig()
@@ -1001,6 +1014,7 @@ async function queuePending() {
   lastProbe = probe
   try {
     remotePages = await client.listPages()
+    if (remotePages) notePrepare(`Revisando ${remotePages.length} páginas`)
   } catch (error) {
     noteFailure(error)
   }
@@ -1094,6 +1108,9 @@ async function queuePending() {
     noteFailure(error)
   }
   probe.error = lastError !== errorBefore ? lastError : null
+  prepareDetail = ''
+  preparePublishedAt = 0
+  publish()
 }
 
 const PAGE_ICONS = {
@@ -1351,6 +1368,7 @@ async function reconcilePlaylistDelete(client, playlistId) {
 
 async function queuePlaylists(client, remotePages) {
   if (!remotePages) return
+  notePrepare('Revisando listas')
   const sectionId = await ensurePlaylistSection(client)
   const children = await client.listChildPages(sectionId)
   const remoteById = new Map()
@@ -1605,6 +1623,7 @@ async function reconcileProgress(client, coursePath) {
 }
 
 async function queueProgress(client) {
+  notePrepare('Revisando progreso')
   let remoteById = new Map()
   const section = await client.findNode(PROGRESS_MARKER)
   if (section?.pageId) {
@@ -1655,9 +1674,12 @@ let iconsPainted = false
 async function paintIcons(client, rows) {
   if (iconsPainted) return
   const fileIds = new Set(Object.values(readNodes()))
+  let painted = 0
   for (const row of rows) {
     if (!String(row.nodeMarker || '').startsWith('node:')) continue
     if (String(row.nodeMarker || '').startsWith('node:table:')) continue
+    painted += 1
+    notePrepare(`Iconos, página ${painted}`)
     await client.setPageIcon(row.pageId, PAGE_ICONS.course)
     const children = await client.listChildPages(row.pageId)
     for (const child of children) {
@@ -1917,9 +1939,17 @@ export async function saveNotionSettings({ enabled, token, databaseId } = {}) {
 
   clearFailure()
   setRemoteWatch(true)
-  await oneAtATime(() => queuePending())
-  schedule(0)
   publish()
+  void oneAtATime(async () => {
+    try {
+      await queuePending()
+      if (jobs.size) schedule(0)
+    } catch (error) {
+      noteFailure(error)
+      prepareDetail = ''
+      publish()
+    }
+  })
   return publicStatus()
 }
 

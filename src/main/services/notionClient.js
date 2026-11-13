@@ -61,6 +61,8 @@ export function createNotionClient({
   ) {
     if (!version) throw new Error('Falta la versión de la API de Notion')
     let response
+    const timeout = new AbortController()
+    const timeoutId = setTimeout(() => timeout.abort(), 20000)
     try {
       response = await fetchImpl(`https://api.notion.com/v1${pathname}`, {
         method,
@@ -69,12 +71,18 @@ export function createNotionClient({
           'Notion-Version': version,
           'Content-Type': 'application/json'
         },
-        body: body === undefined ? undefined : JSON.stringify(body)
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: timeout.signal
       })
     } catch (error) {
-      const wrapped = new Error(error?.message || 'No se pudo hablar con Notion')
+      const aborted = error?.name === 'AbortError'
+      const wrapped = new Error(
+        aborted ? 'Notion no respondió a tiempo' : error?.message || 'No se pudo hablar con Notion'
+      )
       wrapped.status = 0
       throw wrapped
+    } finally {
+      clearTimeout(timeoutId)
     }
 
     if (response.status === 429 && attempt < 4) {
@@ -246,15 +254,23 @@ export function createNotionClient({
     }
   }
 
+  function advanceCursor(data, seen) {
+    const cursor = data?.has_more ? data.next_cursor || '' : ''
+    if (!cursor || seen.has(cursor)) return ''
+    seen.add(cursor)
+    return cursor
+  }
+
   async function listChildren(blockId) {
     const blocks = []
+    const seen = new Set()
     let cursor = ''
     do {
       const query = new URLSearchParams({ page_size: '100' })
       if (cursor) query.set('start_cursor', cursor)
       const data = await request(`/blocks/${blockId}/children?${query}`)
       blocks.push(...(data.results || []))
-      cursor = data.has_more ? data.next_cursor || '' : ''
+      cursor = advanceCursor(data, seen)
     } while (cursor)
     return blocks
   }
@@ -262,6 +278,7 @@ export function createNotionClient({
   async function listPages() {
     const names = await loadSchema()
     const pages = []
+    const seen = new Set()
     let cursor = ''
     do {
       const data = await request(`/data_sources/${names.dataSourceId}/query`, {
@@ -281,7 +298,7 @@ export function createNotionClient({
           editedAt: page.last_edited_time || null
         })
       }
-      cursor = data.has_more ? data.next_cursor || '' : ''
+      cursor = advanceCursor(data, seen)
     } while (cursor)
     return pages
   }
@@ -521,10 +538,13 @@ export function createNotionClient({
   async function recentPages({ before } = {}) {
     await useCurrentVersion()
     const pages = []
+    const seen = new Set()
     let cursor = ''
     let complete = true
+    let hops = 0
     const cap = 300
     do {
+      hops += 1
       const data = await request('/search', {
         method: 'POST',
         body: {
@@ -550,11 +570,11 @@ export function createNotionClient({
         complete = true
         break
       }
-      if (pages.length >= cap) {
+      if (pages.length >= cap || hops >= 8) {
         complete = false
         break
       }
-      cursor = data.next_cursor || ''
+      cursor = advanceCursor(data, seen)
     } while (cursor)
     return { pages, complete }
   }

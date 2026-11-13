@@ -29,9 +29,20 @@ function useNotionSync() {
   return status
 }
 
+function progressLabel(status) {
+  const total = status?.syncTotal || 0
+  const done = status?.syncDone || 0
+  if (status?.syncing && total) return `${done} de ${total}`
+  if (status?.prepareDetail) return status.prepareDetail
+  const queued = Number(status?.queued) || 0
+  if (queued) return queued === 1 ? '1 cambio en espera' : `${queued} cambios en espera`
+  return 'Preparando…'
+}
+
 function syncLabel(status) {
   if (!status?.enabled) return 'Apagado'
-  if (status.syncing && status.syncTotal) return `${status.syncDone} de ${status.syncTotal}`
+  if (status?.syncing && status?.syncTotal) return `${status.syncDone} de ${status.syncTotal}`
+  if (status?.prepareDetail) return status.prepareDetail
   if (status.syncing || status.queued) return 'Sincronizando…'
   if (status.lastError) return 'Error'
   return 'Activo'
@@ -42,6 +53,7 @@ function SyncProgress({ status, active }) {
   const done = status?.syncDone || 0
   const known = Boolean(status?.syncing && total)
   const percent = known ? Math.min(100, Math.round((done / total) * 100)) : 0
+  const label = progressLabel(status)
   if (!active) return null
   return (
     <div
@@ -52,7 +64,7 @@ function SyncProgress({ status, active }) {
       aria-valuenow={known ? done : undefined}
       aria-label="Sincronización con Notion"
     >
-      <span>{known ? `${done} de ${total}` : 'Preparando…'}</span>
+      <span>{label}</span>
       <div className="notion-sync__progress-track">
         <div className="notion-sync__progress-fill" style={known ? { width: `${percent}%` } : undefined} />
       </div>
