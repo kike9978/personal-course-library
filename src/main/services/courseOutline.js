@@ -94,17 +94,34 @@ function makeLesson(courseRoot, absolutePath, kind, sectionId) {
   }
 }
 
+/** Trailing language tag: `.en`, `.eng`, `.en-US`, `.pt_BR`, `.es-419`, `.zh-Hans`. */
+const LANG_SUFFIX_RE = /\.([a-z]{2,3})(?:[-_][a-z]{4})?(?:[-_](?:[a-z]{2}|\d{3}))?$/
+
+function fileBase(relativePath) {
+  return path.basename(relativePath, path.extname(relativePath)).toLowerCase()
+}
+
+function subtitleLesson(byBase, relativePath) {
+  const base = fileBase(relativePath)
+  const exact = byBase.get(base)
+  if (exact) return exact
+  const stripped = base.replace(LANG_SUFFIX_RE, '')
+  if (stripped !== base) return byBase.get(stripped)
+  return undefined
+}
+
 function attachSidecars(lessons, resourceFiles) {
   const byBase = new Map()
   for (const lesson of lessons) {
-    const base = path.basename(lesson.relativePath, path.extname(lesson.relativePath)).toLowerCase()
-    byBase.set(base, lesson)
+    byBase.set(fileBase(lesson.relativePath), lesson)
   }
 
   const leftovers = []
   for (const res of resourceFiles) {
-    const base = path.basename(res.relativePath, path.extname(res.relativePath)).toLowerCase()
-    const lesson = byBase.get(base)
+    const lesson =
+      res.kind === 'subtitle'
+        ? subtitleLesson(byBase, res.relativePath)
+        : byBase.get(fileBase(res.relativePath))
     if (lesson && (res.kind === 'subtitle' || res.kind === 'doc' || res.kind === 'image')) {
       lesson.resources.push(res)
     } else {

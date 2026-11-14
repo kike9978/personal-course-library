@@ -72,4 +72,38 @@ describe('scanCourseAt', () => {
 
     fs.rmSync(root, { recursive: true, force: true })
   })
+
+  it('attaches subtitles whose basename adds a language suffix', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pcl-outline-'))
+    write(root, '01-Anyone.mp4', 'video')
+    write(root, '01-Anyone.en.srt', '1')
+    write(root, 'Chapter/02-Terms.mp4', 'video')
+    write(root, 'Chapter/Subtitles/02-Terms.es-419.vtt', 'WEBVTT')
+    write(root, 'Chapter/Subtitles/02-Terms.pt-BR.srt', '1')
+    write(root, '03-Exact.mp4', 'video')
+    write(root, '03-Exact.en.mp4', 'video')
+    write(root, '03-Exact.en.srt', '1')
+
+    const tree = await scanCourseAt(root, 'Demo')
+    const byPath = new Map(tree.flatLessons.map((lesson) => [lesson.relativePath, lesson]))
+
+    assert.deepEqual(
+      byPath.get('01-Anyone.mp4').resources.map((res) => res.name),
+      ['01-Anyone.en.srt']
+    )
+    assert.deepEqual(
+      byPath
+        .get('Chapter/02-Terms.mp4')
+        .resources.map((res) => res.name)
+        .sort(),
+      ['02-Terms.es-419.vtt', '02-Terms.pt-BR.srt']
+    )
+    assert.deepEqual(
+      byPath.get('03-Exact.en.mp4').resources.map((res) => res.name),
+      ['03-Exact.en.srt']
+    )
+    assert.equal(byPath.get('03-Exact.mp4').resources.length, 0)
+
+    fs.rmSync(root, { recursive: true, force: true })
+  })
 })
