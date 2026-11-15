@@ -368,14 +368,18 @@ function CourseRoom({
 
   const viewedPath =
     panelMode === 'resource' ? selectedResource?.relativePath : selectedLesson?.relativePath
-  const viewedSection = sectionForPath(tree?.sections || [], viewedPath)
+  const viewedSection = sectionForPath(
+    [...(tree?.sections || []), ...(tree?.courseResourceSections || [])],
+    viewedPath
+  )
 
   const toggleProjectFileLink = async (project) => {
     if (!viewedPath || !project?.id) return
     const placement = placementForFile(
       tree?.sections || [],
       tree?.courseResources || [],
-      viewedPath
+      viewedPath,
+      tree?.courseResourceSections || []
     )
     const linked = project.fileRelativePath === viewedPath
     try {
@@ -1105,6 +1109,7 @@ function CourseRoom({
             <LessonTree
               sections={tree?.sections || []}
               courseResources={tree?.courseResources || []}
+              courseResourceSections={tree?.courseResourceSections || []}
               projects={projects}
               selectedPath={treeHighlightPath}
               selectedProjectId={creatingProject ? null : selectedProjectId}
@@ -1125,6 +1130,7 @@ function CourseRoom({
                 project={creatingProject ? projectDraft : selectedProject}
                 sections={tree?.sections || []}
                 courseResources={tree?.courseResources || []}
+                courseResourceSections={tree?.courseResourceSections || []}
                 onSaved={handleProjectsSaved}
                 onDeleted={handleProjectDeleted}
                 onCancelCreate={() => {

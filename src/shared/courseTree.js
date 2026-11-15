@@ -137,12 +137,16 @@ export function collectFilePaths(sections, courseResources = []) {
 
 export function collectTreeResources(tree) {
   const list = [...(tree?.courseResources || [])]
-  walkSections(tree?.sections, (section) => {
-    list.push(...(section.resources || []))
-    for (const lesson of section.lessons || []) {
-      list.push(...(lesson.resources || []))
-    }
-  })
+  const take = (sections) => {
+    walkSections(sections, (section) => {
+      list.push(...(section.resources || []))
+      for (const lesson of section.lessons || []) {
+        list.push(...(lesson.resources || []))
+      }
+    })
+  }
+  take(tree?.sections)
+  take(tree?.courseResourceSections)
   return list
 }
 

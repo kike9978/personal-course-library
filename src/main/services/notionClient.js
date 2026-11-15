@@ -6,6 +6,7 @@ import {
   playlistIsLegacy,
   chunkRichText,
   findingIdFromBlocks,
+  timeSecFromBlocks,
   playlistIdFromBlocks,
   progressIdFromBlocks,
   fileNameFromCaption,
@@ -332,6 +333,7 @@ export function createNotionClient({
         ...summary,
         body: playlistId ? playlistBodyFromBlocks(blocks) : blocksToBody(blocks),
         findingId: findingIdFromBlocks(blocks) || fromProperty,
+        timeSec: timeSecFromBlocks(blocks),
         playlistId,
         playlistLegacy: playlistId ? playlistIsLegacy(blocks) : false,
         progressId: progressIdFromBlocks(blocks),
@@ -367,12 +369,12 @@ export function createNotionClient({
     }
   }
 
-  function pageChildren(body, findingId, kind, childTitles) {
+  function pageChildren(body, findingId, kind, childTitles, timeSec) {
     if (kind === 'playlist') return playlistBlocks(body, findingId, childTitles)
-    return bodyToBlocks(body, findingId, kind)
+    return bodyToBlocks(body, findingId, kind, timeSec)
   }
 
-  async function writeBody(pageId, body, findingId, kind = 'finding', childTitles = null) {
+  async function writeBody(pageId, body, findingId, kind = 'finding', childTitles = null, timeSec = undefined) {
     const existing = await listChildren(pageId)
     const stamped =
       kind === 'playlist'
@@ -380,9 +382,11 @@ export function createNotionClient({
         : kind === 'progress'
           ? progressIdFromBlocks(existing)
           : findingIdFromBlocks(existing)
+    const time =
+      kind === 'finding' ? (timeSec !== undefined ? timeSec : timeSecFromBlocks(existing)) : undefined
     await replaceContent(
       pageId,
-      pageChildren(body, stamped || findingId || null, kind, childTitles)
+      pageChildren(body, stamped || findingId || null, kind, childTitles, time)
     )
   }
 
@@ -408,10 +412,13 @@ export function createNotionClient({
     emoji = null,
     marker = null,
     kind = 'finding',
-    childTitles = null
+    childTitles = null,
+    timeSec = undefined
   ) {
     const names = await loadSchema()
-    const children = marker ? markerBlocks(marker) : pageChildren(body, findingId, kind, childTitles)
+    const children = marker
+      ? markerBlocks(marker)
+      : pageChildren(body, findingId, kind, childTitles, timeSec)
     const first = children.slice(0, 100)
     const rest = children.slice(100)
     const inDatabase = !parentPageId
@@ -467,7 +474,16 @@ export function createNotionClient({
     return pageSummary(page, names.titleName)
   }
 
-  async function updatePage(pageId, findingId, title, body, emoji = null, kind = 'finding', childTitles = null) {
+  async function updatePage(
+    pageId,
+    findingId,
+    title,
+    body,
+    emoji = null,
+    kind = 'finding',
+    childTitles = null,
+    timeSec = undefined
+  ) {
     const names = await loadSchema()
     const current = await request(`/pages/${pageId}`)
     const inDatabase = current.parent?.type !== 'page_id'
@@ -479,7 +495,7 @@ export function createNotionClient({
       method: 'PATCH',
       body: { properties, ...(icon ? { icon } : {}) }
     })
-    await writeBody(pageId, normalizeBody(body), findingId, kind, childTitles)
+    await writeBody(pageId, normalizeBody(body), findingId, kind, childTitles, timeSec)
     return readPage(pageId)
   }
 

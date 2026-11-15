@@ -142,6 +142,9 @@ function hasPlayable(section) {
 
 function collectResourceFiles(section) {
   const files = [...(section.resources || [])]
+  for (const child of section.resourceSections || []) {
+    files.push(...collectResourceFiles(child))
+  }
   for (const child of section.sections || []) {
     files.push(...collectResourceFiles(child))
   }
@@ -149,15 +152,55 @@ function collectResourceFiles(section) {
 }
 
 /**
+ * A playable folder keeps its media as a section. Resource-only folders inside
+ * it are flattened into that section. Resource-only folders at the course root
+ * stay nested for Recursos del curso.
+ */
+function absorbResourceFolders(section) {
+  const extra = []
+  for (const child of section.resourceSections || []) {
+    extra.push(...collectResourceFiles(child))
+  }
+  delete section.resourceSections
+  if (extra.length) {
+    const leftovers = attachSidecars(section.lessons || [], extra)
+    section.resources = [...(section.resources || []), ...leftovers]
+  }
+  for (const child of section.sections || []) absorbResourceFolders(child)
+}
+
+function pullSidecars(section, lessons) {
+  section.resources = attachSidecars(lessons, section.resources || [])
+  for (const child of section.resourceSections || []) pullSidecars(child, lessons)
+}
+
+/** Public tree: nested folders use `sections`, same shape the lesson tree renders. */
+function toResourceSection(section) {
+  const children = (section.resourceSections || []).map(toResourceSection).filter(Boolean)
+  const resources = section.resources || []
+  if (!resources.length && !children.length) return null
+  return {
+    id: section.id,
+    title: section.title,
+    relativePath: section.relativePath,
+    lessons: [],
+    resources,
+    sections: children
+  }
+}
+
+/**
  * One folder becomes a section when it contains playable media at this level
- * or in a descendant folder. Folders with only documents, images, or archives
- * contribute those files to the nearest playable section.
+ * or in a descendant folder. The folder title is the directory name on disk.
+ * Resource-only child folders are kept on `resourceSections` until the caller
+ * decides whether to nest them or fold them into a playable section.
  */
 async function scanFolder(courseRoot, absDir) {
   const sectionId = toPosixRelative(courseRoot, absDir)
   const lessons = []
   const resources = []
   const sections = []
+  const resourceSections = []
   const entries = await listSortedEntries(absDir)
 
   for (const entry of entries) {
@@ -165,7 +208,7 @@ async function scanFolder(courseRoot, absDir) {
     if (entry.isDirectory()) {
       const child = await scanFolder(courseRoot, abs)
       if (hasPlayable(child)) sections.push(child)
-      else resources.push(...collectResourceFiles(child))
+      else resourceSections.push(child)
       continue
     }
     if (!entry.isFile()) continue
@@ -183,15 +226,16 @@ async function scanFolder(courseRoot, absDir) {
   const name = path.basename(absDir)
   return {
     id: sectionId,
-    title: prettyTitle(name) || name,
+    title: name,
     relativePath: sectionId,
     lessons,
     resources: attachSidecars(lessons, resources),
-    sections
+    sections,
+    resourceSections
   }
 }
 
-function countResources(sections, courseResources) {
+function countResources(sections, courseResources, courseResourceSections) {
   let count = courseResources.length
   const walk = (list) => {
     for (const section of list || []) {
@@ -201,6 +245,7 @@ function countResources(sections, courseResources) {
     }
   }
   walk(sections)
+  walk(courseResourceSections)
   return count
 }
 
@@ -225,10 +270,17 @@ export async function scanCourseAt(courseRoot, courseName = path.basename(course
     })
   }
 
+  for (const section of scanned.sections) absorbResourceFolders(section)
   sections.push(...scanned.sections)
 
   const allLessons = flattenLessons(sections)
   const courseResources = attachSidecars(allLessons, scanned.resources)
+  const courseResourceSections = []
+  for (const section of scanned.resourceSections || []) {
+    pullSidecars(section, allLessons)
+    const nested = toResourceSection(section)
+    if (nested) courseResourceSections.push(nested)
+  }
   const playableCount = allLessons.filter(
     (lesson) => lesson.kind === 'video' || lesson.kind === 'audio'
   ).length
@@ -238,11 +290,12 @@ export async function scanCourseAt(courseRoot, courseName = path.basename(course
     scannedAt: Date.now(),
     sections,
     courseResources,
+    courseResourceSections,
     summary: {
       sectionCount: countSections(sections),
       lessonCount: allLessons.length,
       playableCount,
-      resourceCount: countResources(sections, courseResources)
+      resourceCount: countResources(sections, courseResources, courseResourceSections)
     },
     flatLessons: allLessons
   }

@@ -59,13 +59,15 @@ describe('scanCourseAt', () => {
 
     const part = tree.sections[2]
     assert.equal(part.lessons.length, 0)
-    assert.equal(part.sections[0].title, 'Introduction')
+    assert.equal(part.sections[0].title, '01- Introduction')
     assert.equal(part.sections[0].lessons[0].resources[0].kind, 'subtitle')
-    assert.equal(part.sections[1].title, 'Terminology')
+    assert.equal(part.sections[1].title, '02- Terminology')
 
+    const materials = tree.courseResourceSections.find((section) => section.title === 'Materials')
+    assert.equal(materials.resources[0].relativePath, 'Materials/notes.pdf')
     assert.equal(
       tree.courseResources.some((res) => res.relativePath === 'Materials/notes.pdf'),
-      true
+      false
     )
     assert.equal(tree.flatLessons[0].title, 'opening')
     assert.equal(tree.summary.lessonCount, tree.flatLessons.length)
@@ -103,6 +105,43 @@ describe('scanCourseAt', () => {
       ['03-Exact.en.srt']
     )
     assert.equal(byPath.get('03-Exact.mp4').resources.length, 0)
+
+    fs.rmSync(root, { recursive: true, force: true })
+  })
+
+  it('keeps folder names and nests resource-only folders', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pcl-outline-'))
+    write(root, '1. Expressions Basics/lesson.mp4', 'video')
+    write(root, '1. Expressions Basics/Expr_LS01/notes.pdf', 'pdf')
+    write(root, '11. Scripting. Part 1/clip.mp4', 'video')
+    write(root, '0. Introduction/intro.txt', 'txt')
+    write(root, '0. Introduction/Motion Tools 2/script_instruction.pdf', 'pdf')
+    write(root, 'loose.txt', 'txt')
+
+    const tree = await scanCourseAt(root, 'Demo')
+    const titles = tree.sections.map((section) => section.title)
+    assert.deepEqual(titles, ['1. Expressions Basics', '11. Scripting. Part 1'])
+
+    const basics = tree.sections[0]
+    assert.equal(basics.sections.length, 0)
+    assert.equal(
+      basics.resources.some((res) => res.relativePath === '1. Expressions Basics/Expr_LS01/notes.pdf'),
+      true
+    )
+
+    assert.equal(tree.courseResourceSections.length, 1)
+    const intro = tree.courseResourceSections[0]
+    assert.equal(intro.title, '0. Introduction')
+    assert.deepEqual(
+      intro.resources.map((res) => res.relativePath),
+      ['0. Introduction/intro.txt']
+    )
+    assert.equal(intro.sections[0].title, 'Motion Tools 2')
+    assert.equal(intro.sections[0].resources[0].name, 'script_instruction.pdf')
+    assert.deepEqual(
+      tree.courseResources.map((res) => res.relativePath),
+      ['loose.txt']
+    )
 
     fs.rmSync(root, { recursive: true, force: true })
   })

@@ -160,9 +160,23 @@ function ProjectRow({ project, selectedProjectId, onSelectProject }) {
   )
 }
 
+function resourceNavSection(courseResources, courseResourceSections) {
+  const resources = courseResources || []
+  const nested = courseResourceSections || []
+  if (!resources.length && !nested.length) return null
+  return {
+    id: '__course_resources__',
+    title: 'Recursos del curso',
+    lessons: [],
+    resources,
+    sections: nested
+  }
+}
+
 function LessonTree({
   sections = [],
   courseResources = [],
+  courseResourceSections = [],
   projects = [],
   selectedPath,
   selectedProjectId,
@@ -175,13 +189,14 @@ function LessonTree({
   completedCount = 0,
   playableCount = 0
 }) {
-  const visibleCourseResources = visibleResources(courseResources)
-  const [collapsedIds, setCollapsedIds] = useState(() => new Set(nestedSectionIds(sections)))
-  const sectionKey = nestedSectionIds(sections)
-    .concat(sections.map((section) => section.id))
+  const resourceNav = resourceNavSection(courseResources, courseResourceSections)
+  const navSections = resourceNav ? [...sections, resourceNav] : sections
+  const [collapsedIds, setCollapsedIds] = useState(() => new Set(nestedSectionIds(navSections)))
+  const sectionKey = nestedSectionIds(navSections)
+    .concat(navSections.map((section) => section.id))
     .join('\0')
-  const selectionSource = useRef({ sections, projects, courseResources })
-  selectionSource.current = { sections, projects, courseResources }
+  const selectionSource = useRef({ sections: navSections, projects, courseResources })
+  selectionSource.current = { sections: navSections, projects, courseResources }
   const seenSectionKey = useRef(sectionKey)
 
   useEffect(() => {
@@ -235,11 +250,11 @@ function LessonTree({
   }
 
   const hasLessons = flattenLessons(sections).length > 0
-  const hasCourseResources = visibleCourseResources.length > 0
+  const hasCourseResources = Boolean(resourceNav)
   const hasProjects = projects.length > 0
   const hasContent = hasLessons || hasCourseResources || hasProjects
 
-  const filePaths = collectFilePaths(sections, courseResources)
+  const filePaths = collectFilePaths(navSections, courseResources)
 
   const projectsByFile = new Map()
   const projectsBySection = new Map()
@@ -250,7 +265,7 @@ function LessonTree({
         projectsByFile.set(project.fileRelativePath, [])
       }
       projectsByFile.get(project.fileRelativePath).push(project)
-    } else if (project.sectionId && sectionExists(sections, project.sectionId)) {
+    } else if (project.sectionId && sectionExists(navSections, project.sectionId)) {
       if (!projectsBySection.has(project.sectionId)) projectsBySection.set(project.sectionId, [])
       projectsBySection.get(project.sectionId).push(project)
     } else {
@@ -331,27 +346,22 @@ function LessonTree({
         />
       ))}
 
-      {visibleCourseResources.length > 0 ? (
-        <TreeSection
-          id="__course_resources__"
-          title="Recursos del curso"
-          open={!collapsedIds.has('__course_resources__')}
-          onToggle={() => toggleSection('__course_resources__')}
-        >
-          <ul className="lesson-tree__list lesson-tree__list--resources">
-            {visibleCourseResources.map((res) => (
-              <ResourceRow
-                key={res.relativePath}
-                res={res}
-                selectedPath={selectedPath}
-                onSelectResource={onSelectResource}
-                linkedProjects={projectsFor(res.relativePath)}
-                selectedProjectId={selectedProjectId}
-                onSelectProject={onSelectProject}
-              />
-            ))}
-          </ul>
-        </TreeSection>
+      {resourceNav ? (
+        <SectionView
+          section={resourceNav}
+          depth={0}
+          collapsedIds={collapsedIds}
+          onToggle={toggleSection}
+          projectsBySection={projectsBySection}
+          projectsFor={projectsFor}
+          selectedPath={selectedPath}
+          selectedProjectId={selectedProjectId}
+          onSelectLesson={onSelectLesson}
+          onSelectResource={onSelectResource}
+          onSelectProject={onSelectProject}
+          onToggleLessonComplete={onToggleLessonComplete}
+          progressByLesson={progressByLesson}
+        />
       ) : null}
     </nav>
   )

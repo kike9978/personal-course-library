@@ -7,7 +7,11 @@ import {
   decideDelete,
   decideSync,
   filePageMarker,
+  anchorsWithVideoTime,
+  findingCaption,
   findingIdFromBlocks,
+  noteVideoTime,
+  timeSecFromBlocks,
   mergeCourseProgress,
   playlistBlocks,
   playlistBodyFromBlocks,
@@ -117,8 +121,38 @@ describe('notion wire text', () => {
     const blocks = bodyToBlocks('Hola\n\nmundo', 'note-1')
     assert.equal(blocksToBody(blocks), 'Hola\n\nmundo')
     assert.equal(findingIdFromBlocks(blocks), 'note-1')
+    assert.equal(timeSecFromBlocks(blocks), undefined)
     assert.equal(blocksToBody(bodyToBlocks('', 'note-1')), '')
     assert.equal(blocksToBody(markerBlocks('node:file:course:pack::a.mp4@lesson')), '')
+  })
+
+  it('stores the video moment on the note caption and reads it back', () => {
+    const blocks = bodyToBlocks('Hola', 'note-1', 'finding', 83.2)
+    assert.equal(blocks[0].code.caption[0].text.content, 'finding:note-1@time:83.2')
+    assert.equal(blocksToBody(blocks), 'Hola')
+    assert.equal(findingIdFromBlocks(blocks), 'note-1')
+    assert.equal(timeSecFromBlocks(blocks), 83.2)
+    const cleared = bodyToBlocks('Hola', 'note-1', 'finding', null)
+    assert.equal(cleared[0].code.caption[0].text.content, findingCaption('note-1', null))
+    assert.equal(timeSecFromBlocks(cleared), null)
+    const legacy = bodyToBlocks('Hola', 'note-1')
+    assert.equal(findingIdFromBlocks(legacy), 'note-1')
+    assert.equal(timeSecFromBlocks(legacy), undefined)
+  })
+
+  it('puts the shared moment on the lesson anchor', () => {
+    const finding = {
+      anchors: [
+        { coursePath: 'pack', projectId: 'proj', timeSec: null },
+        { coursePath: 'pack', lessonRelativePath: '01.mp4', lessonTitle: 'Uno', timeSec: 4 }
+      ]
+    }
+    assert.equal(noteVideoTime(finding), 4)
+    const next = anchorsWithVideoTime(finding.anchors, 12.5)
+    assert.equal(next[0].projectId, 'proj')
+    assert.equal(next[1].timeSec, 12.5)
+    assert.equal(next[1].lessonRelativePath, '01.mp4')
+    assert.equal(anchorsWithVideoTime(next, null)[1].timeSec, null)
   })
 
   it('rebuilds an anchor from the shared course and file markers', () => {
@@ -130,6 +164,16 @@ describe('notion wire text', () => {
     assert.equal(lesson.coursePath, 'pack')
     assert.equal(lesson.lessonRelativePath, '01 Orientation.mp4')
     assert.equal(lesson.lessonTitle, 'Orientation')
+    assert.equal(lesson.timeSec, undefined)
+
+    const timed = anchorFromNotion({
+      courseMarker: 'node:course:pack',
+      fileMarker: 'node:file:course:pack::01 Orientation.mp4@lesson',
+      fileTitle: 'Orientation',
+      timeSec: 12.5
+    })
+    assert.equal(timed.timeSec, 12.5)
+    assert.equal(timed.lessonRelativePath, '01 Orientation.mp4')
 
     const project = anchorFromNotion({
       courseMarker: 'node:course:pack',
@@ -139,6 +183,13 @@ describe('notion wire text', () => {
     assert.equal(project.projectId, 'proj-1')
     assert.equal(project.projectTitle, 'Reel')
     assert.equal(project.lessonRelativePath, null)
+    const projectTimed = anchorFromNotion({
+      courseMarker: 'node:course:pack',
+      fileMarker: 'node:file:course:pack::proj-1@project',
+      fileTitle: 'Reel',
+      timeSec: 9
+    })
+    assert.equal(projectTimed.timeSec, undefined)
 
     const journal = anchorFromNotion({
       courseMarker: 'node:course:pack',

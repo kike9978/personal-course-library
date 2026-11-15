@@ -31,7 +31,7 @@ function fileAnchorLabel(title, kind) {
  * Select values are `section:<id>` or `file:<relativePath>`.
  * `fileSection` maps a file path to its section id (including `__root__`).
  */
-function buildAnchorCatalog(sections, courseResources) {
+function buildAnchorCatalog(sections, courseResources, courseResourceSections = []) {
   const groups = []
   const fileSection = new Map()
 
@@ -73,6 +73,7 @@ function buildAnchorCatalog(sections, courseResources) {
   if (courseItems.length) {
     groups.push({ id: '__course_resources__', label: 'Recursos del curso', items: courseItems })
   }
+  visit(courseResourceSections, 'Recursos del curso')
 
   return { groups, fileSection }
 }
@@ -80,24 +81,37 @@ function buildAnchorCatalog(sections, courseResources) {
 /** Real course section that contains a lesson or file. Root files have no section anchor. */
 export function sectionForPath(sections, relativePath) {
   if (!relativePath) return null
-  for (const section of sections || []) {
-    if (!section?.id || section.id === '__root__') continue
-    const inLesson = (section.lessons || []).some(
-      (lesson) =>
-        lesson.relativePath === relativePath ||
-        (lesson.resources || []).some((res) => res.relativePath === relativePath)
-    )
-    const inResources = (section.resources || []).some((res) => res.relativePath === relativePath)
-    if (inLesson || inResources) return { id: section.id, title: section.title || section.id }
+  let found = null
+  const walk = (list) => {
+    for (const section of list || []) {
+      if (section?.id && section.id !== '__root__') {
+        const inLesson = (section.lessons || []).some(
+          (lesson) =>
+            lesson.relativePath === relativePath ||
+            (lesson.resources || []).some((res) => res.relativePath === relativePath)
+        )
+        const inResources = (section.resources || []).some(
+          (res) => res.relativePath === relativePath
+        )
+        if (inLesson || inResources) found = { id: section.id, title: section.title || section.id }
+      }
+      walk(section.sections)
+    }
   }
-  return null
+  walk(sections)
+  return found
 }
 
 /** Section stored alongside a file anchor, including `__root__` when the file lives there. */
-export function placementForFile(sections, courseResources, relativePath) {
+export function placementForFile(
+  sections,
+  courseResources,
+  relativePath,
+  courseResourceSections = []
+) {
   const path = relativePath || null
   if (!path) return { fileRelativePath: null, sectionId: null }
-  const { fileSection } = buildAnchorCatalog(sections, courseResources)
+  const { fileSection } = buildAnchorCatalog(sections, courseResources, courseResourceSections)
   return {
     fileRelativePath: path,
     sectionId: fileSection.get(path) || null
@@ -137,6 +151,7 @@ function ProjectPanel({
   project,
   sections = [],
   courseResources = [],
+  courseResourceSections = [],
   onSaved,
   onDeleted,
   onCancelCreate
@@ -148,7 +163,11 @@ function ProjectPanel({
   const [anchor, setAnchor] = useState(() => anchorFromProject(project))
   const [linkedFolderPath, setLinkedFolderPath] = useState(project?.linkedFolderPath || '')
   const [saving, setSaving] = useState(false)
-  const { groups, fileSection } = buildAnchorCatalog(sections, courseResources)
+  const { groups, fileSection } = buildAnchorCatalog(
+    sections,
+    courseResources,
+    courseResourceSections
+  )
 
   useEffect(() => {
     setTitle(project?.title || '')

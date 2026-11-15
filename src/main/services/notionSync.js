@@ -21,6 +21,7 @@ import {
 import { findingFromLegacyNote } from '../../shared/knowledgeGraph.js'
 import {
   anchorFromNotion,
+  anchorsWithVideoTime,
   decideDelete,
   decideSync,
   fileKeyFromMarker,
@@ -30,6 +31,7 @@ import {
   databaseIdCandidates,
   normalizeTitle,
   notionErrorMessage,
+  noteVideoTime,
   noteAssetNames,
   notionAssetsToUpload,
   notionPlace,
@@ -40,6 +42,7 @@ import {
   progressIsEmpty,
   progressTrackKey,
   progressWire,
+  roundTimeSec,
   wireHash
 } from '../../shared/notionSync.js'
 import { readNoteAttachment, saveNoteAttachmentBytes } from './noteAttachments.js'
@@ -349,16 +352,47 @@ function cursorFrom(page, hash, extra = {}) {
   }
 }
 
-function applyNotion(id, notion, text) {
+/** Cursor for a note. `timeSec === undefined` leaves the last shared moment unrecorded. */
+function noteCursor(page, hash, timeSec, extra = {}) {
+  const cursor = cursorFrom(page, hash, extra)
+  if (timeSec !== undefined) cursor.videoTime = roundTimeSec(timeSec)
+  return cursor
+}
+
+function videoTimeNeedsSync(finding) {
+  const local = noteVideoTime(finding)
+  const synced = finding?.notion?.videoTime
+  if (synced === undefined) return local != null
+  return roundTimeSec(local) !== roundTimeSec(synced)
+}
+
+function videoTimesMatch(localTime, remoteTime) {
+  if (remoteTime === undefined) return localTime == null
+  return roundTimeSec(localTime) === roundTimeSec(remoteTime)
+}
+
+/** Local pin wins when this copy moved and Notion did not, or when this copy is newer. */
+function preferLocalVideoTime(finding, remote) {
+  const remoteMoved = Boolean(remote?.editedAt) && remote.editedAt !== finding?.notion?.remoteEditedAt
+  const localMoved = (finding?.updatedAt || 0) > (finding?.notion?.syncedAt || 0)
+  if (remoteMoved && !localMoved) return false
+  if (localMoved && !remoteMoved) return true
+  const remoteMs = Date.parse(remote?.editedAt || '') || 0
+  return (finding?.updatedAt || 0) >= remoteMs
+}
+
+function applyNotion(id, notion, text, timeSec = undefined) {
   withoutNoteWriteHook(() => {
     mutateFinding(id, (finding) => {
       finding.notion = notion
-      if (!text) return
-      finding.title = normalizeTitle(text.title) || null
-      finding.body = normalizeBody(text.body)
-      finding.bodyHtml = null
-      finding.bodyJson = null
-      finding.updatedAt = Date.now()
+      if (text) {
+        finding.title = normalizeTitle(text.title) || null
+        finding.body = normalizeBody(text.body)
+        finding.bodyHtml = null
+        finding.bodyJson = null
+        finding.updatedAt = Date.now()
+      }
+      if (timeSec !== undefined) finding.anchors = anchorsWithVideoTime(finding.anchors, timeSec)
     })
   })
 }
@@ -374,7 +408,8 @@ function rememberError(id, message) {
         conflict: current.conflict || null,
         error: message,
         pulledAt: current.pulledAt || null,
-        syncedAt: current.syncedAt || null
+        syncedAt: current.syncedAt || null,
+        ...(current.videoTime !== undefined ? { videoTime: current.videoTime } : {})
       }
     })
   })
@@ -471,19 +506,49 @@ async function retireFlatCopies(client, findingId, keepPageId) {
 
 async function saveNotePage(client, finding, remote) {
   const parentId = await ensurePlace(client, finding)
+  const timeSec = noteVideoTime(finding)
   let page = remote
   if (page?.pageId) {
     const parent = await client.pageParent(page.pageId)
     if (parent?.type === 'page_id' && parent.id === parentId) {
-      page = await client.updatePage(page.pageId, finding.id, finding.title, finding.body, PAGE_ICONS.note)
+      page = await client.updatePage(
+        page.pageId,
+        finding.id,
+        finding.title,
+        finding.body,
+        PAGE_ICONS.note,
+        'finding',
+        null,
+        timeSec
+      )
     } else {
       const title = finding.title
       const body = finding.body
-      page = await client.createPage(finding.id, title, body, parentId, PAGE_ICONS.note)
+      page = await client.createPage(
+        finding.id,
+        title,
+        body,
+        parentId,
+        PAGE_ICONS.note,
+        null,
+        'finding',
+        null,
+        timeSec
+      )
       await client.archivePage(remote.pageId)
     }
   } else {
-    page = await client.createPage(finding.id, finding.title, finding.body, parentId, PAGE_ICONS.note)
+    page = await client.createPage(
+      finding.id,
+      finding.title,
+      finding.body,
+      parentId,
+      PAGE_ICONS.note,
+      null,
+      'finding',
+      null,
+      timeSec
+    )
   }
   await retireFlatCopies(client, finding.id, page.pageId)
   await reconcileNoteFiles(client, page?.pageId, finding.body)
@@ -573,7 +638,11 @@ async function placeExisting(client, finding, remote) {
     remote.title,
     remote.body,
     parentId,
-    PAGE_ICONS.note
+    PAGE_ICONS.note,
+    null,
+    'finding',
+    null,
+    remote.timeSec !== undefined ? remote.timeSec : noteVideoTime(finding)
   )
   await client.archivePage(remote.pageId)
   await retireFlatCopies(client, finding.id, created.pageId)
@@ -581,20 +650,21 @@ async function placeExisting(client, finding, remote) {
   return { ...remote, pageId: created.pageId, editedAt: created.editedAt || remote.editedAt }
 }
 
-function finishWrite(id, page, localHash) {
+function finishWrite(id, page, localHash, timeSec) {
   if (!page?.pageId) throw new Error('Notion no devolvió la página')
   const remoteHash = page.body === undefined ? localHash : wireHash(page.title, page.body)
+  const sharedTime = page.timeSec !== undefined ? page.timeSec : timeSec
   if (page?.body !== undefined && remoteHash !== localHash) {
-    applyNotion(id, cursorFrom(page, remoteHash, { pulledAt: Date.now() }), page)
+    applyNotion(id, noteCursor(page, remoteHash, sharedTime, { pulledAt: Date.now() }), page, sharedTime)
     return
   }
-  applyNotion(id, cursorFrom(page, localHash))
+  applyNotion(id, noteCursor(page, localHash, sharedTime))
 }
 
 async function writeLocal(client, finding) {
   const remote = await loadRemote(client, finding)
   const page = await saveNotePage(client, finding, remote)
-  finishWrite(finding.id, page, wireHash(finding.title, finding.body))
+  finishWrite(finding.id, page, wireHash(finding.title, finding.body), noteVideoTime(finding))
 }
 
 async function reconcileUpsert(client, id) {
@@ -612,7 +682,7 @@ async function reconcileUpsert(client, id) {
 
   if (action === 'create' || action === 'push') {
     const page = await saveNotePage(client, finding, remote)
-    finishWrite(id, page, localHash)
+    finishWrite(id, page, localHash, noteVideoTime(finding))
     notifyNotes()
     return
   }
@@ -620,14 +690,27 @@ async function reconcileUpsert(client, id) {
   if (action === 'pull') {
     const placed = await placeExisting(client, finding, remote)
     const hash = wireHash(placed.title, placed.body)
-    applyNotion(id, cursorFrom(placed, hash, { pulledAt: Date.now() }), placed)
+    applyNotion(id, noteCursor(placed, hash, placed.timeSec, { pulledAt: Date.now() }), placed, placed.timeSec)
     notifyNotes()
     return
   }
 
   if (action === 'relink') {
+    const localTime = noteVideoTime(finding)
+    const remoteTime = remote.timeSec
+    if (!videoTimesMatch(localTime, remoteTime)) {
+      if (remoteTime === undefined || preferLocalVideoTime(finding, remote)) {
+        const page = await saveNotePage(client, finding, remote)
+        finishWrite(id, page, localHash, localTime)
+      } else {
+        const placed = await placeExisting(client, finding, remote)
+        applyNotion(id, noteCursor(placed, localHash, remoteTime), null, remoteTime)
+      }
+      notifyNotes()
+      return
+    }
     const placed = await placeExisting(client, finding, remote)
-    applyNotion(id, cursorFrom(placed, localHash))
+    applyNotion(id, noteCursor(placed, localHash, localTime))
     notifyNotes()
     return
   }
@@ -887,11 +970,21 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
   if (recent?.probe) recent.probe.opened += 1
   const page = await client.readPage(pageId)
   if (!page || page.playlistId) return false
+  if (page.timeSec !== undefined && !anchor.projectId) anchor.timeSec = roundTimeSec(page.timeSec)
   await reconcileNoteFiles(client, page.pageId, page.body)
   const existing = linkedFinding(page)
   if (existing) {
     let changed = false
+    const sameText = wireHash(existing.title, existing.body) === wireHash(page.title, page.body)
+    const localTime = noteVideoTime(existing)
+    const remoteTime = page.timeSec
+    const pushLocalTime =
+      sameText && remoteTime !== undefined && !videoTimesMatch(localTime, remoteTime) && preferLocalVideoTime(existing, page)
+    const sharedTime = pushLocalTime ? localTime : remoteTime
     if (shouldRetarget(existing, anchor)) {
+      if (sharedTime === undefined) {
+        if (localTime != null && !anchor.projectId) anchor.timeSec = localTime
+      } else if (!anchor.projectId) anchor.timeSec = roundTimeSec(sharedTime)
       const next = findingFromLegacyNote({ ...existing, anchors: [anchor] }, anchor.coursePath)
       withoutNoteWriteHook(() => {
         mutateFinding(existing.id, (finding) => {
@@ -899,18 +992,29 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
         })
       })
       changed = true
+    } else if (sameText && sharedTime !== undefined && roundTimeSec(sharedTime) !== roundTimeSec(localTime) && !pushLocalTime) {
+      withoutNoteWriteHook(() => {
+        mutateFinding(existing.id, (finding) => {
+          finding.anchors = anchorsWithVideoTime(finding.anchors, sharedTime)
+        })
+      })
+      changed = true
     }
-    if (!page.findingId && wireHash(existing.title, existing.body) === wireHash(page.title, page.body)) {
+    if (!page.findingId && sameText) {
       const stamped = await client.updatePage(
         page.pageId,
         existing.id,
         page.title,
         page.body,
-        page.icon
+        page.icon,
+        'finding',
+        null,
+        sharedTime
       )
       const hash = wireHash(stamped?.title, stamped?.body)
+      const writtenTime = stamped?.timeSec !== undefined ? stamped.timeSec : sharedTime
       if (stamped?.pageId) {
-        withoutNoteWriteHook(() => applyNotion(existing.id, cursorFrom(stamped, hash)))
+        withoutNoteWriteHook(() => applyNotion(existing.id, noteCursor(stamped, hash, writtenTime), null, writtenTime))
         sharedIdsConfirmed.add(page.pageId)
       }
       return changed
@@ -918,10 +1022,14 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
     if (page.findingId) sharedIdsConfirmed.add(page.pageId)
     if (existing.notion?.conflict) return changed
     if (page.editedAt && page.editedAt !== existing.notion?.remoteEditedAt) {
-      const sameText = wireHash(existing.title, existing.body) === wireHash(page.title, page.body)
       if (sameText) {
+        if (pushLocalTime) {
+          jobs.set(existing.id, { op: 'upsert' })
+          noteQueued(recent?.probe, existing.id, 'tiempo')
+          return changed
+        }
         withoutNoteWriteHook(() =>
-          applyNotion(existing.id, cursorFrom(page, wireHash(page.title, page.body)))
+          applyNotion(existing.id, noteCursor(page, wireHash(page.title, page.body), sharedTime), null, sharedTime)
         )
         return changed
       }
@@ -935,7 +1043,8 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
   const id = page.findingId || makeFindingId()
   if (!page.findingId) {
     adopted =
-      (await client.updatePage(page.pageId, id, page.title, page.body, page.icon)) || page
+      (await client.updatePage(page.pageId, id, page.title, page.body, page.icon, 'finding', null, page.timeSec)) ||
+      page
     if (adopted?.pageId) sharedIdsConfirmed.add(adopted.pageId)
   } else {
     sharedIdsConfirmed.add(page.pageId)
@@ -950,7 +1059,8 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
     },
     anchor.coursePath
   )
-  finding.notion = cursorFrom(adopted, hash, { pulledAt: Date.now() })
+  const adoptedTime = adopted.timeSec !== undefined ? adopted.timeSec : page.timeSec
+  finding.notion = noteCursor(adopted, hash, adoptedTime, { pulledAt: Date.now() })
   withoutNoteWriteHook(() => restoreFinding(finding))
   return true
 }
@@ -1103,6 +1213,7 @@ async function queuePending() {
     const remote =
       row || recentById.get(notionPageKey(finding.notion?.pageId)) || remoteByFinding.get(finding.id)
     const localChanged = !finding.notion?.ackedHash || finding.notion.ackedHash !== localHash
+    const timeChanged = videoTimeNeedsSync(finding)
     const remoteChanged = Boolean(
       remote?.editedAt &&
         remote.editedAt !== finding.notion?.remoteEditedAt &&
@@ -1118,7 +1229,7 @@ async function queuePending() {
       !row &&
       !(await pageBelongsToRows(client, finding.notion.pageId, rowIds))
     if (saveConflictParked(finding.id)) continue
-    if (localChanged || remoteChanged || needsPlace || missingHere) {
+    if (localChanged || timeChanged || remoteChanged || needsPlace || missingHere) {
       const pending = jobs.get(finding.id)
       jobs.set(finding.id, { op: 'upsert', attempts: pending?.attempts || 0 })
       noteQueued(
@@ -1126,6 +1237,7 @@ async function queuePending() {
         finding.id,
         [
           localChanged ? 'local' : '',
+          timeChanged ? 'tiempo' : '',
           remoteChanged ? 'notion' : '',
           needsPlace ? 'lugar' : '',
           missingHere ? 'no está en la base' : ''
@@ -2084,7 +2196,12 @@ export async function resolveNotionConflict(findingId, choice) {
       const remote = await loadRemote(client, finding)
       if (!remote) throw new Error('La página de Notion ya no está')
       const hash = wireHash(remote.title, remote.body)
-      applyNotion(findingId, cursorFrom(remote, hash, { pulledAt: Date.now() }), remote)
+      applyNotion(
+        findingId,
+        noteCursor(remote, hash, remote.timeSec, { pulledAt: Date.now() }),
+        remote,
+        remote.timeSec
+      )
     } else if (choice === 'both') {
       const remote = await loadRemote(client, finding)
       if (!remote) throw new Error('La página de Notion ya no está')
@@ -2094,6 +2211,14 @@ export async function resolveNotionConflict(findingId, choice) {
           body: remote.body || ''
         })
       )
+      if (remote.timeSec !== undefined) {
+        withoutNoteWriteHook(() => {
+          mutateFinding(copy.id, (item) => {
+            item.anchors = anchorsWithVideoTime(item.anchors, remote.timeSec)
+            item.notion = { ...(item.notion || {}), videoTime: roundTimeSec(remote.timeSec) }
+          })
+        })
+      }
       try {
         await writeLocal(client, readFinding(findingId) || finding)
       } finally {
@@ -2136,7 +2261,11 @@ export async function resolveNotionDelete(findingId, choice) {
         body: normalizeBody(remote.body),
         bodyHtml: null,
         bodyJson: null,
-        notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
+        anchors:
+          remote.timeSec !== undefined
+            ? anchorsWithVideoTime(tomb.snapshot?.anchors, remote.timeSec)
+            : tomb.snapshot?.anchors,
+        notion: noteCursor(remote, hash, remote.timeSec, { pulledAt: Date.now() })
       }
       withoutNoteWriteHook(() => restoreFinding(snapshot))
       notifyNotes()

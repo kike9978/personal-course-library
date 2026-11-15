@@ -99,13 +99,90 @@ function blockCaption(block) {
   return plainRichText(block?.[type]?.caption).trim()
 }
 
+const FINDING_TIME = /@time:(.+)$/
+
+/** Whole seconds plus milliseconds. Anything else is "no video moment". */
+export function roundTimeSec(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null
+  return Math.round(value * 1000) / 1000
+}
+
+/**
+ * Caption on the note block. `@time:-` is an explicit empty moment.
+ * A caption with no `@time:` is an older page that never recorded one.
+ */
+export function findingCaption(findingId, timeSec) {
+  const id = String(findingId || '').trim()
+  if (!id) return ''
+  const time = roundTimeSec(timeSec)
+  return time == null ? `finding:${id}@time:-` : `finding:${id}@time:${time}`
+}
+
+export function parseFindingCaption(caption) {
+  const text = String(caption || '').trim()
+  if (!text.startsWith('finding:')) return { findingId: '', timeSec: undefined }
+  const raw = text.slice('finding:'.length).trim()
+  const match = raw.match(FINDING_TIME)
+  if (!match || match.index == null) return { findingId: raw, timeSec: undefined }
+  const findingId = raw.slice(0, match.index)
+  if (match[1] === '-') return { findingId, timeSec: null }
+  const time = roundTimeSec(Number(match[1]))
+  if (time == null) return { findingId, timeSec: undefined }
+  return { findingId, timeSec: time }
+}
+
 /** Id carried on the note page itself. Nested pages cannot hold database properties. */
 export function findingIdFromBlocks(blocks) {
   for (const block of blocks || []) {
-    const caption = blockCaption(block)
-    if (caption.startsWith('finding:')) return caption.slice('finding:'.length).trim()
+    const parsed = parseFindingCaption(blockCaption(block))
+    if (parsed.findingId) return parsed.findingId
   }
   return ''
+}
+
+/** Video moment on the note caption. `undefined` means the page never stored one. */
+export function timeSecFromBlocks(blocks) {
+  for (const block of blocks || []) {
+    const parsed = parseFindingCaption(blockCaption(block))
+    if (parsed.findingId) return parsed.timeSec
+  }
+  return undefined
+}
+
+function videoAnchorIndex(anchors) {
+  const list = Array.isArray(anchors) ? anchors : []
+  const lesson = list.findIndex((item) => item && !item.projectId && item.lessonRelativePath)
+  if (lesson >= 0) return lesson
+  return list.findIndex((item) => item && !item.projectId)
+}
+
+/** Moment synced for this note: the lesson anchor, otherwise the first anchor that is not a project. */
+export function noteVideoTime(finding) {
+  const anchors = finding?.anchors || []
+  const index = videoAnchorIndex(anchors)
+  if (index < 0) return null
+  return roundTimeSec(anchors[index].timeSec)
+}
+
+/** Write a shared video moment onto the lesson anchor. `null` clears it. */
+export function anchorsWithVideoTime(anchors, timeSec) {
+  const list = (Array.isArray(anchors) ? anchors : []).map((item) => ({ ...item }))
+  const time = roundTimeSec(timeSec)
+  const index = videoAnchorIndex(list)
+  if (index < 0) {
+    if (time == null) return list
+    list.push({
+      coursePath: null,
+      lessonRelativePath: null,
+      lessonTitle: null,
+      timeSec: time,
+      projectId: null,
+      projectTitle: null
+    })
+    return list
+  }
+  list[index] = { ...list[index], timeSec: time }
+  return list
 }
 
 export function playlistIdFromBlocks(blocks) {
@@ -285,7 +362,7 @@ export function fileKeyFromMarker(marker) {
  * Rebuild the sidebar anchor from the course row and the file page.
  * A file page that was never stamped falls back to its title.
  */
-export function anchorFromNotion({ courseMarker, fileMarker, fileTitle, filePageId } = {}) {
+export function anchorFromNotion({ courseMarker, fileMarker, fileTitle, filePageId, timeSec } = {}) {
   const courseKey = String(courseMarker || '').replace(/^node:/, '')
   const folder = courseKey.startsWith('course:') ? courseKey.slice('course:'.length) : ''
   const coursePath = folder && folder !== '__loose__' ? folder : null
@@ -296,28 +373,32 @@ export function anchorFromNotion({ courseMarker, fileMarker, fileTitle, filePage
     projectId: null,
     projectTitle: null
   }
+  const finish = (next) => {
+    if (!next.projectId && timeSec !== undefined) next.timeSec = roundTimeSec(timeSec)
+    return next
+  }
   const raw = String(fileMarker || '').replace(/^node:/, '')
   const kindMatch = raw.match(/@(lesson|project|course)$/)
   const kind = kindMatch ? kindMatch[1] : ''
   const fileKey = kind ? raw.slice(0, -(kind.length + 1)) : raw
   const prefix = `file:${courseKey}::`
   const rest = fileKey.startsWith(prefix) ? fileKey.slice(prefix.length) : ''
-  if (kind === 'course' || rest === '__course__') return anchor
+  if (kind === 'course' || rest === '__course__') return finish(anchor)
   if (kind === 'project' || (!kind && rest && !/[./\\]/.test(rest))) {
     anchor.projectId = rest
     anchor.projectTitle = fileTitle || null
-    return anchor
+    return finish(anchor)
   }
   if (rest) {
     anchor.lessonRelativePath = rest
     anchor.lessonTitle = fileTitle || null
-    return anchor
+    return finish(anchor)
   }
   if (filePageId) {
     anchor.lessonRelativePath = `notion-page:${filePageId}`
     anchor.lessonTitle = fileTitle || null
   }
-  return anchor
+  return finish(anchor)
 }
 
 function formatNotionId(hex) {
@@ -504,13 +585,19 @@ export function playlistBodyFromBlocks(blocks) {
   return playlistWire({ why, coursePaths, childIds, courseWhys }).body
 }
 
-/** One markdown code block so a note is a single Notion write. The caption keeps the id. */
-export function bodyToBlocks(body, findingId = null, kind = 'finding') {
+/** One markdown code block so a note is a single Notion write. The caption keeps the id and video moment. */
+export function bodyToBlocks(body, findingId = null, kind = 'finding', timeSec = undefined) {
   const text = normalizeBody(body)
   const id = String(findingId || '').trim()
   if (!text && !id) return []
   const prefix = kind === 'playlist' ? 'playlist' : kind === 'progress' ? 'progress' : 'finding'
-  const caption = captionRichText(id ? `${prefix}:${id}` : '')
+  const captionText =
+    id && kind === 'finding' && timeSec !== undefined
+      ? findingCaption(id, timeSec)
+      : id
+        ? `${prefix}:${id}`
+        : ''
+  const caption = captionRichText(captionText)
   return [
     {
       object: 'block',

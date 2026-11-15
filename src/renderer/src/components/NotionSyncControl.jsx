@@ -713,8 +713,8 @@ export function NotionSyncConflict({
         <section className="notion-conflict" aria-label="Conflicto con Notion">
           <h3>Esta nota y Notion se separaron</h3>
           <p>
-            Los dos textos cambiaron desde la última sincronización. Elige cuál se queda. Las anclas
-            del video siguen en esta nota.
+            Los dos textos cambiaron desde la última sincronización. Elige cuál se queda. El momento
+            en el video viaja con esa versión.
           </p>
           {dirty ? (
             <p>El editor tiene cambios sin guardar. Usar esta guarda ese texto y lo envía.</p>
