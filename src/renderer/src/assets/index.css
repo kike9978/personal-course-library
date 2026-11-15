@@ -696,7 +696,6 @@ select {
   flex-wrap: nowrap;
 }
 
-
 .segmented {
   display: inline-flex;
   padding: 0.25rem;
@@ -5830,11 +5829,17 @@ kbd {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(280px, 1fr) minmax(280px, min(var(--annotations-graph-w, 34%), 70%));
+  grid-template-columns: 220px minmax(280px, 1fr) minmax(
+      280px,
+      min(var(--annotations-graph-w, 34%), 70%)
+    );
 }
 
 .annotations-page.is-list-collapsed .annotations-page__body {
-  grid-template-columns: 3rem minmax(280px, 1fr) minmax(280px, min(var(--annotations-graph-w, 34%), 70%));
+  grid-template-columns: 3rem minmax(280px, 1fr) minmax(
+      280px,
+      min(var(--annotations-graph-w, 34%), 70%)
+    );
 }
 
 .annotations-page.is-graph-resizing {
@@ -7804,6 +7809,56 @@ button.annotations-doc__save-status {
 
 .notion-sync-dialog {
   max-width: 40rem;
+  max-height: min(90vh, 48rem);
+  overflow: auto;
+}
+
+.notion-sync__label {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--clr-ink-soft);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.notion-sync__saved {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0.55rem 0.45rem 0.75rem;
+  border: var(--border-thick);
+  border-radius: var(--radius-md);
+  background: var(--clr-surface);
+}
+
+.notion-sync__saved > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notion-sync__cancel {
+  margin-top: 0.45rem;
+}
+
+.notion-sync__fold {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: var(--border-thick);
+  border-radius: var(--radius-md);
+  background: var(--clr-surface);
+}
+
+.notion-sync__fold summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 650;
 }
 
 .notion-sync-dialog .notion-conflict__cols {
@@ -7940,6 +7995,12 @@ button.annotations-doc__save-status {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
+}
+
+.notion-conflict__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
 }
 
 .notion-conflict pre,

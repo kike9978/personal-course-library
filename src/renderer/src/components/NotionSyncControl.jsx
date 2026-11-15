@@ -32,6 +32,10 @@ function useNotionSync() {
 function progressLabel(status) {
   const total = status?.syncTotal || 0
   const done = status?.syncDone || 0
+  if (status?.migrating && status?.prepareTotal) {
+    const detail = status.prepareDetail || 'Pasando a filas'
+    return `${status.prepareDone} de ${status.prepareTotal} · ${detail}`
+  }
   if (status?.syncing && total) return `${done} de ${total}`
   if (status?.prepareDetail) return status.prepareDetail
   const queued = Number(status?.queued) || 0
@@ -41,20 +45,102 @@ function progressLabel(status) {
 
 function syncLabel(status) {
   if (!status?.enabled) return 'Apagado'
-  if (status?.syncing && status?.syncTotal) return `${status.syncDone} de ${status.syncTotal}`
-  if (status?.prepareDetail) return status.prepareDetail
-  if (status.syncing || status.queued) return 'Sincronizando…'
+  if (status?.migrating) return 'Migrando'
+  if (status?.syncing || status?.queued || status?.prepareDetail) return 'Sincronizando…'
   if (status.lastError) return 'Error'
   return 'Activo'
+}
+
+function formatTime(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+  const total = Math.max(0, Math.round(value))
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+function sameList(left, right) {
+  return (left || []).join('\n') === (right || []).join('\n')
+}
+
+function anchorPlace(anchor) {
+  const course = String(anchor?.coursePath || '')
+    .split(/[/\\]/)
+    .filter(Boolean)
+    .pop()
+  const place =
+    anchor?.lessonTitle ||
+    anchor?.projectTitle ||
+    anchor?.lessonRelativePath ||
+    anchor?.projectId ||
+    ''
+  return [course, place].filter(Boolean).join(' / ')
+}
+
+function conflictMetaFromNote(note) {
+  const conflict = note?.notion?.conflict || {}
+  const topics = Array.isArray(note?.topics) ? note.topics : []
+  const name = (id) => topics.find((topic) => topic.id === id)?.title || id
+  const localTopics = topics.map((topic) => topic.title).filter(Boolean)
+  return noteMeta({
+    hasMeta: Array.isArray(conflict.remoteAnchors),
+    localColor: note?.color || '',
+    remoteColor: conflict.remoteColor || '',
+    localTime: typeof note?.timeSec === 'number' ? note.timeSec : null,
+    remoteTime: conflict.remoteTimeSec === undefined ? null : conflict.remoteTimeSec,
+    localPlaces: (note?.anchors || []).map(anchorPlace).filter(Boolean),
+    remotePlaces: (conflict.remoteAnchors || []).map(anchorPlace).filter(Boolean),
+    localTopics: localTopics.length ? localTopics : (note?.topicIds || []).map(name),
+    remoteTopics: (conflict.remoteTopicIds || []).map(name)
+  })
+}
+
+function noteMeta(side) {
+  if (!side?.hasMeta) return []
+  const rows = []
+  if ((side.localColor || '') !== (side.remoteColor || '')) {
+    rows.push(['Color', side.localColor || 'Sin color', side.remoteColor || 'Sin color'])
+  }
+  if (side.localTime !== side.remoteTime) {
+    rows.push([
+      'Momento',
+      formatTime(side.localTime) || 'Sin momento',
+      formatTime(side.remoteTime) || 'Sin momento'
+    ])
+  }
+  if (!sameList(side.localPlaces, side.remotePlaces)) {
+    rows.push([
+      'Lugares',
+      (side.localPlaces || []).join('\n') || 'Sin lugar',
+      (side.remotePlaces || []).join('\n') || 'Sin lugar'
+    ])
+  }
+  if (!sameList(side.localTopics, side.remoteTopics)) {
+    rows.push([
+      'Temas',
+      (side.localTopics || []).join(', ') || 'Sin temas',
+      (side.remoteTopics || []).join(', ') || 'Sin temas'
+    ])
+  }
+  return rows
 }
 
 function SyncProgress({ status, active }) {
   const total = status?.syncTotal || 0
   const done = status?.syncDone || 0
+  const migrating = Boolean(status?.migrating && status?.prepareTotal)
   const scanning = Boolean(status?.prepareDetail && status?.prepareTotal)
-  const known = Boolean((status?.syncing && total) || scanning)
-  const shownTotal = status?.syncing && total ? total : status?.prepareTotal || 0
-  const shownDone = status?.syncing && total ? done : status?.prepareDone || 0
+  const known = Boolean(migrating || (status?.syncing && total) || scanning)
+  const shownTotal = migrating
+    ? status.prepareTotal
+    : status?.syncing && total
+      ? total
+      : status?.prepareTotal || 0
+  const shownDone = migrating
+    ? status.prepareDone
+    : status?.syncing && total
+      ? done
+      : status?.prepareDone || 0
   const percent = known ? Math.min(100, Math.round((shownDone / shownTotal) * 100)) : 0
   const label = progressLabel(status)
   if (!active) return null
@@ -69,7 +155,10 @@ function SyncProgress({ status, active }) {
     >
       <span>{label}</span>
       <div className="notion-sync__progress-track">
-        <div className="notion-sync__progress-fill" style={known ? { width: `${percent}%` } : undefined} />
+        <div
+          className="notion-sync__progress-fill"
+          style={known ? { width: `${percent}%` } : undefined}
+        />
       </div>
     </div>
   )
@@ -107,10 +196,20 @@ function NotionDebug() {
         Muestra si esta biblioteca vio los cambios de Notion. Copia el texto y pégalo en el chat.
       </p>
       <div className="dialog__actions-btns">
-        <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => void load()}>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          disabled={busy}
+          onClick={() => void load()}
+        >
           Ver
         </button>
-        <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void copy()}>
+        <button
+          type="button"
+          className="btn btn--primary"
+          disabled={busy}
+          onClick={() => void copy()}
+        >
           {busy ? 'Copiando…' : 'Copiar diagnóstico'}
         </button>
       </div>
@@ -152,7 +251,27 @@ const DRAWING_CHOICES = [
   ]
 ]
 
-function VersionChoice({ title, localText, remoteText, busy, onChoose, allowBoth = false }) {
+function MetaDiff({ rows }) {
+  if (!rows?.length) return null
+  return (
+    <div className="notion-conflict__meta">
+      {rows.map(([label, localValue, remoteValue]) => (
+        <div key={label} className="notion-conflict__cols">
+          <div>
+            <h4>{label} aquí</h4>
+            <pre>{localValue}</pre>
+          </div>
+          <div>
+            <h4>{label} en Notion</h4>
+            <pre>{remoteValue}</pre>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function VersionChoice({ title, localText, remoteText, meta, busy, onChoose, allowBoth = false }) {
   return (
     <article>
       <strong>{title}</strong>
@@ -166,6 +285,7 @@ function VersionChoice({ title, localText, remoteText, busy, onChoose, allowBoth
           <pre>{remoteText || 'Sin texto'}</pre>
         </div>
       </div>
+      <MetaDiff rows={meta} />
       <div className="dialog__actions-btns">
         <button
           type="button"
@@ -198,12 +318,418 @@ function VersionChoice({ title, localText, remoteText, busy, onChoose, allowBoth
   )
 }
 
+function ShareScope({ expanded }) {
+  const body = (
+    <>
+      <ul className="notion-sync__scope">
+        <li>
+          <strong>Notas</strong>
+          <span>
+            Título, texto, imágenes, color, momento del video, todos los lugares y los temas.
+          </span>
+        </li>
+        <li>
+          <strong>Temas</strong>
+          <span>Nombre, resumen y alias.</span>
+        </li>
+        <li>
+          <strong>Proyectos</strong>
+          <span>Título, estado y breve. La carpeta vinculada se queda en este equipo.</span>
+        </li>
+        <li>
+          <strong>Intención de las listas</strong>
+          <span>La meta y los intereses. El lugar en el tablero se queda en este equipo.</span>
+        </li>
+        <li>
+          <strong>Listas</strong>
+          <span>
+            Título, motivo, cursos y listas anidadas. El lugar en el tablero se queda aquí.
+          </span>
+        </li>
+        <li>
+          <strong>Progreso</strong>
+          <span>
+            En curso, lecciones completadas y la última lección. El punto de reproducción se queda
+            en este equipo. Si en curso cambió en los dos lados, eliges cuál se queda. Las lecciones
+            completadas se unen.
+          </span>
+        </li>
+      </ul>
+      <p className="dialog__lead">
+        El título, la academia, el instructor, la descripción y la portada de cada curso siguen en
+        su carpeta, igual que los archivos del curso. Si una nota cambió aquí y en Notion, espera a
+        que elijas una versión.
+      </p>
+    </>
+  )
+  if (expanded) return body
+  return (
+    <details className="notion-sync__fold">
+      <summary>Qué se comparte</summary>
+      {body}
+    </details>
+  )
+}
+
+function SavedCredential({ label, value, action }) {
+  return (
+    <div className="field">
+      <span className="notion-sync__label">{label}</span>
+      <div className="notion-sync__saved">
+        <span>{value}</span>
+        <button type="button" className="btn btn--ghost" onClick={action}>
+          Cambiar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function NotionCredentials({
+  status,
+  connected,
+  token,
+  setToken,
+  editingToken,
+  setEditingToken,
+  databaseId,
+  setDatabaseId,
+  editingDatabase,
+  setEditingDatabase
+}) {
+  const showTokenInput = !connected || !status?.hasToken || editingToken
+  const showDatabaseInput = !connected || !status?.databaseId || editingDatabase
+  return (
+    <>
+      {showTokenInput ? (
+        <div className="field">
+          <label htmlFor="notion-token">Token de integración</label>
+          <input
+            id="notion-token"
+            type="password"
+            value={token}
+            autoComplete="off"
+            placeholder={status?.hasToken ? 'Token guardado' : 'secret_…'}
+            onChange={(event) => setToken(event.target.value)}
+          />
+          {connected && status?.hasToken ? (
+            <button
+              type="button"
+              className="btn btn--ghost notion-sync__cancel"
+              onClick={() => {
+                setToken('')
+                setEditingToken(false)
+              }}
+            >
+              Cancelar
+            </button>
+          ) : null}
+        </div>
+      ) : (
+        <SavedCredential
+          label="Token de integración"
+          value="Token guardado"
+          action={() => setEditingToken(true)}
+        />
+      )}
+      {showDatabaseInput ? (
+        <div className="field">
+          <label htmlFor="notion-database">Base de datos</label>
+          <input
+            id="notion-database"
+            value={databaseId}
+            placeholder="Enlace o id de la base"
+            onChange={(event) => setDatabaseId(event.target.value)}
+          />
+          {connected && status?.databaseId ? (
+            <button
+              type="button"
+              className="btn btn--ghost notion-sync__cancel"
+              onClick={() => {
+                setDatabaseId(status.databaseId || '')
+                setEditingDatabase(false)
+              }}
+            >
+              Cancelar
+            </button>
+          ) : null}
+        </div>
+      ) : (
+        <SavedCredential
+          label="Base de datos"
+          value={status.databaseId}
+          action={() => setEditingDatabase(true)}
+        />
+      )}
+    </>
+  )
+}
+
+function DrawingShare({ status, resolvingId, resolveWith }) {
+  if (!status?.drawings?.length) return null
+  const selected = status.drawingShare || 'image'
+  return (
+    <div className="notion-sync__deletes">
+      <h4>Dibujos</h4>
+      <p>
+        Notion no acepta la extensión .excalidraw, así que el dibujo editable no se puede subir con
+        ese nombre.
+        {status.drawings.length === 1
+          ? ` Hay uno en «${status.drawings[0].noteTitle}».`
+          : ` Hay ${status.drawings.length} en las notas.`}
+      </p>
+      <div className="dialog__actions-btns notion-sync__choices">
+        {DRAWING_CHOICES.map(([choice, label]) => (
+          <button
+            key={choice}
+            type="button"
+            className={`btn ${selected === choice ? 'btn--primary' : 'btn--ghost'}`}
+            aria-pressed={selected === choice}
+            disabled={resolvingId === 'drawing-share'}
+            onClick={() => {
+              if ((status.drawingShare || 'image') === choice) return
+              void resolveWith(
+                'drawing-share',
+                choice,
+                () => window.api.setNotionDrawingShare(choice),
+                'No se pudo guardar la elección',
+                'dibujo'
+              )
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p>{DRAWING_CHOICES.find(([choice]) => choice === selected)?.[2]}</p>
+    </div>
+  )
+}
+
+function NotionSyncAttention({ status, resolvingId, resolveWith, retryingSave }) {
+  return (
+    <>
+      {status?.lastError ? (
+        <p className="notion-sync-error">
+          {status.lastError}
+          {retryingSave ? ' Se vuelve a intentar.' : ''}
+          {status.lastErrorCode === 'conflict_error' && !retryingSave
+            ? ' Sincronizar ahora lo vuelve a intentar.'
+            : ''}
+        </p>
+      ) : null}
+      {status?.progressConflicts?.length ? (
+        <div className="notion-sync__deletes">
+          <h4>En curso por elegir</h4>
+          <p>
+            El interruptor cambió aquí y en Notion. Las lecciones completadas de los dos lados ya se
+            unieron. El punto de reproducción se queda en este equipo.
+          </p>
+          {status.progressConflicts.map((item) => (
+            <article key={item.coursePath}>
+              <strong>{item.title || item.coursePath}</strong>
+              <div className="notion-conflict__cols">
+                <div>
+                  <h4>Esta biblioteca</h4>
+                  <pre>{item.localInProcess ? 'En curso' : 'Sin marcar'}</pre>
+                </div>
+                <div>
+                  <h4>Notion</h4>
+                  <pre>{item.remoteInProcess ? 'En curso' : 'Sin marcar'}</pre>
+                </div>
+              </div>
+              <div className="dialog__actions-btns">
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={resolvingId === item.coursePath}
+                  onClick={() =>
+                    void resolveWith(
+                      item.coursePath,
+                      'local',
+                      () => window.api.resolveNotionProgress(item.coursePath, 'local'),
+                      'No se pudo resolver el progreso',
+                      'progress'
+                    )
+                  }
+                >
+                  Usar esta
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  disabled={resolvingId === item.coursePath}
+                  onClick={() =>
+                    void resolveWith(
+                      item.coursePath,
+                      'remote',
+                      () => window.api.resolveNotionProgress(item.coursePath, 'remote'),
+                      'No se pudo resolver el progreso',
+                      'progress'
+                    )
+                  }
+                >
+                  Usar la de Notion
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {status?.conflicts?.length ? (
+        <div className="notion-sync__deletes">
+          <h4>Notas por elegir</h4>
+          <p>
+            Cambiaron aquí y en Notion. El texto, el color, los lugares y los temas viajan con la
+            versión que elijas.
+          </p>
+          {status.conflicts.map((item) => (
+            <VersionChoice
+              key={item.findingId}
+              title={item.title || 'Sin título'}
+              localText={[item.title, item.body].filter(Boolean).join('\n\n')}
+              remoteText={[item.remoteTitle, item.remoteBody].filter(Boolean).join('\n\n')}
+              meta={noteMeta(item)}
+              busy={resolvingId === item.findingId}
+              allowBoth
+              onChoose={(choice) =>
+                void resolveWith(
+                  item.findingId,
+                  choice,
+                  () => window.api.resolveNotionConflict(item.findingId, choice),
+                  'No se pudo resolver el conflicto'
+                )
+              }
+            />
+          ))}
+        </div>
+      ) : null}
+      {status?.playlistConflicts?.length ? (
+        <div className="notion-sync__deletes">
+          <h4>Listas por elegir</h4>
+          <p>Cambiaron aquí y en Notion. El lugar en el tablero se queda en este equipo.</p>
+          {status.playlistConflicts.map((item) => (
+            <VersionChoice
+              key={item.playlistId}
+              title={item.title || 'Sin título'}
+              localText={item.localBody}
+              remoteText={[item.remoteTitle, item.remoteBody].filter(Boolean).join('\n\n')}
+              busy={resolvingId === item.playlistId}
+              onChoose={(choice) =>
+                void resolveWith(
+                  item.playlistId,
+                  choice,
+                  () => window.api.resolveNotionPlaylistConflict(item.playlistId, choice),
+                  'No se pudo resolver el conflicto',
+                  'lista'
+                )
+              }
+            />
+          ))}
+        </div>
+      ) : null}
+      {status?.deleteConflicts?.length ? (
+        <div className="notion-sync__deletes">
+          <h4>Borrados a medias</h4>
+          <p>La nota se borró aquí y Notion cambió después de la última sincronización.</p>
+          {status.deleteConflicts.map((item) => (
+            <article key={item.findingId}>
+              <strong>{item.title || 'Sin título'}</strong>
+              <pre>{item.remoteBody || item.remoteTitle || 'Sin texto'}</pre>
+              <div className="dialog__actions-btns">
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  disabled={resolvingId === item.findingId}
+                  onClick={() =>
+                    void resolveWith(
+                      item.findingId,
+                      'discard',
+                      () => window.api.resolveNotionDelete(item.findingId, 'discard'),
+                      'No se pudo resolver el borrado'
+                    )
+                  }
+                >
+                  Borrar en Notion
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={resolvingId === item.findingId}
+                  onClick={() =>
+                    void resolveWith(
+                      item.findingId,
+                      'keep',
+                      () => window.api.resolveNotionDelete(item.findingId, 'keep'),
+                      'No se pudo resolver el borrado'
+                    )
+                  }
+                >
+                  Recuperar la de Notion
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {status?.playlistDeleteConflicts?.length ? (
+        <div className="notion-sync__deletes">
+          <h4>Listas borradas a medias</h4>
+          <p>La lista se borró aquí y Notion cambió después de la última sincronización.</p>
+          {status.playlistDeleteConflicts.map((item) => (
+            <article key={item.playlistId}>
+              <strong>{item.title || 'Sin título'}</strong>
+              <pre>{item.remoteBody || item.remoteTitle || 'Sin texto'}</pre>
+              <div className="dialog__actions-btns">
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  disabled={resolvingId === item.playlistId}
+                  onClick={() =>
+                    void resolveWith(
+                      item.playlistId,
+                      'discard',
+                      () => window.api.resolveNotionPlaylistDelete(item.playlistId, 'discard'),
+                      'No se pudo resolver el borrado',
+                      'lista'
+                    )
+                  }
+                >
+                  Borrar en Notion
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={resolvingId === item.playlistId}
+                  onClick={() =>
+                    void resolveWith(
+                      item.playlistId,
+                      'keep',
+                      () => window.api.resolveNotionPlaylistDelete(item.playlistId, 'keep'),
+                      'No se pudo resolver el borrado',
+                      'lista'
+                    )
+                  }
+                >
+                  Recuperar la de Notion
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </>
+  )
+}
+
 export function NotionSyncButton() {
   const status = useNotionSync()
   const dialogRef = useRef(null)
   const [open, setOpen] = useState(false)
   const [token, setToken] = useState('')
   const [databaseId, setDatabaseId] = useState('')
+  const [editingToken, setEditingToken] = useState(false)
+  const [editingDatabase, setEditingDatabase] = useState(false)
   const [saving, setSaving] = useState(false)
   const [syncingNow, setSyncingNow] = useState(false)
   const [resolvingId, setResolvingId] = useState('')
@@ -215,6 +741,8 @@ export function NotionSyncButton() {
     const current = statusRef.current
     setDatabaseId(current?.databaseId || '')
     setToken('')
+    setEditingToken(false)
+    setEditingDatabase(false)
     const dialog = dialogRef.current
     const frame = requestAnimationFrame(() => {
       if (dialog && !dialog.open) {
@@ -242,6 +770,8 @@ export function NotionSyncButton() {
         databaseId
       })
       setToken('')
+      setEditingToken(false)
+      setEditingDatabase(false)
       if (next) setDatabaseId(next.databaseId || '')
       toast.success(
         turningOn
@@ -285,7 +815,18 @@ export function NotionSyncButton() {
     (status?.playlistConflicts?.length || 0) +
     (status?.playlistDeleteConflicts?.length || 0) +
     (status?.progressConflicts?.length || 0)
-  const retryingSave = status?.lastErrorCode === 'conflict_error' && (status.syncing || status.queued)
+  const retryingSave =
+    status?.lastErrorCode === 'conflict_error' && (status.syncing || status.queued)
+  const connected = Boolean(status?.enabled)
+  const settingsDirty =
+    Boolean(token.trim()) || databaseId.trim() !== String(status?.databaseId || '').trim()
+  const syncBusy = Boolean(syncingNow || status?.syncing || status?.queued || status?.migrating)
+
+  const turnOff = () => {
+    if (syncBusy && !window.confirm('¿Apagar Notion? La sincronización en curso se detiene.'))
+      return
+    void save(false)
+  }
 
   return (
     <>
@@ -320,349 +861,98 @@ export function NotionSyncButton() {
             className="dialog__form"
             onSubmit={(event) => {
               event.preventDefault()
+              if (connected && !settingsDirty) return
               void save(true)
             }}
           >
             <h3>Notion</h3>
-            <p className="dialog__lead">
-              Conecta esta biblioteca con una base de Notion. Otra copia de la app que use la misma
-              base comparte lo que se guarda aquí.
-            </p>
-            <ul className="notion-sync__scope">
-              <li>
-                <strong>Notas</strong>
-                <span>
-                  Título, texto e imágenes. Cada curso es una página, cada archivo queda dentro y la
-                  nota dentro de ese archivo.
-                </span>
-              </li>
-              <li>
-                <strong>Progreso</strong>
-                <span>
-                  En curso, lecciones completadas y la última lección, bajo una página Progreso. Si
-                  en curso cambió aquí y en Notion, eliges cuál se queda. Las lecciones completadas
-                  se unen.
-                </span>
-              </li>
-              <li>
-                <strong>Listas</strong>
-                <span>
-                  Título, motivo, cursos y listas anidadas, bajo una página Listas. El lugar en el
-                  tablero se queda en este equipo.
-                </span>
-              </li>
-            </ul>
-            <p className="dialog__lead">
-              El título, la academia, el instructor, la descripción y la portada de cada curso siguen
-              en su carpeta, igual que los archivos del curso. Si una nota cambió aquí y en Notion,
-              espera a que elijas una versión.
-            </p>
+            {connected ? null : (
+              <>
+                <p className="dialog__lead">
+                  Conecta esta biblioteca con una base de Notion. Otra copia de la app que use la
+                  misma base comparte lo que se guarda aquí.
+                </p>
+                <ShareScope expanded />
+              </>
+            )}
             <p className="notion-sync__enable">
-              {status?.enabled
-                ? 'Esta biblioteca está conectada.'
-                : 'Esta biblioteca está desconectada.'}
+              {connected ? 'Esta biblioteca está conectada.' : 'Esta biblioteca está desconectada.'}
             </p>
-            <div className="field">
-              <label htmlFor="notion-token">Token de integración</label>
-              <input
-                id="notion-token"
-                type="password"
-                value={token}
-                autoComplete="off"
-                placeholder={status?.hasToken ? 'Token guardado' : 'secret_…'}
-                onChange={(event) => setToken(event.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="notion-database">Base de datos</label>
-              <input
-                id="notion-database"
-                value={databaseId}
-                placeholder="Enlace o id de la base"
-                onChange={(event) => setDatabaseId(event.target.value)}
-              />
-            </div>
-            {status?.drawings?.length ? (
-              <div className="notion-sync__deletes">
-                <h4>Dibujos</h4>
-                <p>
-                  Notion no acepta la extensión .excalidraw, así que el dibujo editable no se puede
-                  subir con ese nombre.
-                  {status.drawings.length === 1
-                    ? ` Hay uno en «${status.drawings[0].noteTitle}».`
-                    : ` Hay ${status.drawings.length} en las notas.`}
-                </p>
-                {!status.drawingShare ? (
-                  <p>
-                    Mientras no elijas, se comparte la imagen y el dibujo editable se queda en este
-                    equipo.
-                  </p>
-                ) : null}
-                <div className="dialog__actions-btns notion-sync__choices">
-                  {DRAWING_CHOICES.map(([choice, label]) => (
-                    <button
-                      key={choice}
-                      type="button"
-                      className={`btn ${status.drawingShare === choice ? 'btn--primary' : 'btn--ghost'}`}
-                      aria-pressed={status.drawingShare === choice}
-                      disabled={resolvingId === 'drawing-share'}
-                      onClick={() => {
-                        if (status.drawingShare === choice) return
-                        void resolveWith(
-                          'drawing-share',
-                          choice,
-                          () => window.api.setNotionDrawingShare(choice),
-                          'No se pudo guardar la elección',
-                          'dibujo'
-                        )
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <p>
-                  {DRAWING_CHOICES.find(([choice]) => choice === status.drawingShare)?.[2] ||
-                    'Elige una opción. Puedes cambiarla después.'}
-                </p>
-              </div>
-            ) : null}
-            {status?.lastError ? (
-              <p className="notion-sync-error">
-                {status.lastError}
-                {retryingSave ? ' Se vuelve a intentar.' : ''}
-                {status.lastErrorCode === 'conflict_error' && !retryingSave
-                  ? ' Sincronizar ahora lo vuelve a intentar.'
-                  : ''}
+            {status?.migrating ? (
+              <p className="dialog__lead">
+                La base se está pasando a filas. Las notas siguen en esta biblioteca.
               </p>
             ) : null}
-            {status?.progressConflicts?.length ? (
-              <div className="notion-sync__deletes">
-                <h4>En curso por elegir</h4>
-                <p>
-                  El interruptor cambió aquí y en Notion. Las lecciones completadas de los dos lados
-                  ya se unieron.
-                </p>
-                {status.progressConflicts.map((item) => (
-                  <article key={item.coursePath}>
-                    <strong>{item.title || item.coursePath}</strong>
-                    <div className="notion-conflict__cols">
-                      <div>
-                        <h4>Esta biblioteca</h4>
-                        <pre>{item.localInProcess ? 'En curso' : 'Sin marcar'}</pre>
-                      </div>
-                      <div>
-                        <h4>Notion</h4>
-                        <pre>{item.remoteInProcess ? 'En curso' : 'Sin marcar'}</pre>
-                      </div>
-                    </div>
-                    <div className="dialog__actions-btns">
-                      <button
-                        type="button"
-                        className="btn btn--primary"
-                        disabled={resolvingId === item.coursePath}
-                        onClick={() =>
-                          void resolveWith(
-                            item.coursePath,
-                            'local',
-                            () => window.api.resolveNotionProgress(item.coursePath, 'local'),
-                            'No se pudo resolver el progreso',
-                            'progress'
-                          )
-                        }
-                      >
-                        Usar esta
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--ghost"
-                        disabled={resolvingId === item.coursePath}
-                        onClick={() =>
-                          void resolveWith(
-                            item.coursePath,
-                            'remote',
-                            () => window.api.resolveNotionProgress(item.coursePath, 'remote'),
-                            'No se pudo resolver el progreso',
-                            'progress'
-                          )
-                        }
-                      >
-                        Usar la de Notion
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
+            {connected ? <SyncProgress status={status} active={syncBusy} /> : null}
+            {connected ? (
+              <NotionSyncAttention
+                status={status}
+                resolvingId={resolvingId}
+                resolveWith={resolveWith}
+                retryingSave={retryingSave}
+              />
             ) : null}
-            {status?.conflicts?.length ? (
-              <div className="notion-sync__deletes">
-                <h4>Notas por elegir</h4>
-                <p>Cambiaron aquí y en Notion. Elige cuál se queda.</p>
-                {status.conflicts.map((item) => (
-                  <VersionChoice
-                    key={item.findingId}
-                    title={item.title || 'Sin título'}
-                    localText={[item.title, item.body].filter(Boolean).join('\n\n')}
-                    remoteText={[item.remoteTitle, item.remoteBody].filter(Boolean).join('\n\n')}
-                    busy={resolvingId === item.findingId}
-                    allowBoth
-                    onChoose={(choice) =>
-                      void resolveWith(
-                        item.findingId,
-                        choice,
-                        () => window.api.resolveNotionConflict(item.findingId, choice),
-                        'No se pudo resolver el conflicto'
-                      )
-                    }
-                  />
-                ))}
-              </div>
+            {connected ? (
+              <DrawingShare status={status} resolvingId={resolvingId} resolveWith={resolveWith} />
             ) : null}
-            {status?.playlistConflicts?.length ? (
-              <div className="notion-sync__deletes">
-                <h4>Listas por elegir</h4>
-                <p>Cambiaron aquí y en Notion. El lugar en el tablero se queda en este equipo.</p>
-                {status.playlistConflicts.map((item) => (
-                  <VersionChoice
-                    key={item.playlistId}
-                    title={item.title || 'Sin título'}
-                    localText={item.localBody}
-                    remoteText={[item.remoteTitle, item.remoteBody].filter(Boolean).join('\n\n')}
-                    busy={resolvingId === item.playlistId}
-                    onChoose={(choice) =>
-                      void resolveWith(
-                        item.playlistId,
-                        choice,
-                        () => window.api.resolveNotionPlaylistConflict(item.playlistId, choice),
-                        'No se pudo resolver el conflicto',
-                        'lista'
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            ) : null}
-            {status?.deleteConflicts?.length ? (
-              <div className="notion-sync__deletes">
-                <h4>Borrados a medias</h4>
-                <p>La nota se borró aquí y Notion cambió después de la última sincronización.</p>
-                {status.deleteConflicts.map((item) => (
-                  <article key={item.findingId}>
-                    <strong>{item.title || 'Sin título'}</strong>
-                    <pre>{item.remoteBody || item.remoteTitle || 'Sin texto'}</pre>
-                    <div className="dialog__actions-btns">
-                      <button
-                        type="button"
-                        className="btn btn--ghost"
-                        disabled={resolvingId === item.findingId}
-                        onClick={() =>
-                          void resolveWith(
-                            item.findingId,
-                            'discard',
-                            () => window.api.resolveNotionDelete(item.findingId, 'discard'),
-                            'No se pudo resolver el borrado'
-                          )
-                        }
-                      >
-                        Borrar en Notion
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--primary"
-                        disabled={resolvingId === item.findingId}
-                        onClick={() =>
-                          void resolveWith(
-                            item.findingId,
-                            'keep',
-                            () => window.api.resolveNotionDelete(item.findingId, 'keep'),
-                            'No se pudo resolver el borrado'
-                          )
-                        }
-                      >
-                        Recuperar la de Notion
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : null}
-            {status?.playlistDeleteConflicts?.length ? (
-              <div className="notion-sync__deletes">
-                <h4>Listas borradas a medias</h4>
-                <p>La lista se borró aquí y Notion cambió después de la última sincronización.</p>
-                {status.playlistDeleteConflicts.map((item) => (
-                  <article key={item.playlistId}>
-                    <strong>{item.title || 'Sin título'}</strong>
-                    <pre>{item.remoteBody || item.remoteTitle || 'Sin texto'}</pre>
-                    <div className="dialog__actions-btns">
-                      <button
-                        type="button"
-                        className="btn btn--ghost"
-                        disabled={resolvingId === item.playlistId}
-                        onClick={() =>
-                          void resolveWith(
-                            item.playlistId,
-                            'discard',
-                            () => window.api.resolveNotionPlaylistDelete(item.playlistId, 'discard'),
-                            'No se pudo resolver el borrado',
-                            'lista'
-                          )
-                        }
-                      >
-                        Borrar en Notion
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--primary"
-                        disabled={resolvingId === item.playlistId}
-                        onClick={() =>
-                          void resolveWith(
-                            item.playlistId,
-                            'keep',
-                            () => window.api.resolveNotionPlaylistDelete(item.playlistId, 'keep'),
-                            'No se pudo resolver el borrado',
-                            'lista'
-                          )
-                        }
-                      >
-                        Recuperar la de Notion
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : null}
-            <NotionDebug />
-            <SyncProgress
+            {connected ? <ShareScope expanded={false} /> : null}
+            <NotionCredentials
               status={status}
-              active={Boolean(syncingNow || status?.syncing || status?.queued)}
+              connected={connected}
+              token={token}
+              setToken={setToken}
+              editingToken={editingToken}
+              setEditingToken={setEditingToken}
+              databaseId={databaseId}
+              setDatabaseId={setDatabaseId}
+              editingDatabase={editingDatabase}
+              setEditingDatabase={setEditingDatabase}
             />
+            {connected ? null : (
+              <DrawingShare status={status} resolvingId={resolvingId} resolveWith={resolveWith} />
+            )}
+            {connected ? null : (
+              <NotionSyncAttention
+                status={status}
+                resolvingId={resolvingId}
+                resolveWith={resolveWith}
+                retryingSave={retryingSave}
+              />
+            )}
+            <NotionDebug />
+            {connected ? null : <SyncProgress status={status} active={syncBusy} />}
             <div className="dialog__actions dialog__actions--spread">
               <button type="button" className="btn btn--ghost" onClick={close}>
                 Cerrar
               </button>
               <div className="dialog__actions-btns">
-                {status?.enabled ? (
+                {connected ? (
+                  <button
+                    type="button"
+                    className={settingsDirty ? 'btn btn--ghost' : 'btn btn--primary'}
+                    disabled={syncingNow || status.syncing || status.migrating}
+                    onClick={() => void syncAll()}
+                  >
+                    {syncingNow || status.syncing || status.migrating
+                      ? 'Sincronizando…'
+                      : 'Sincronizar ahora'}
+                  </button>
+                ) : null}
+                {connected ? (
                   <button
                     type="button"
                     className="btn btn--ghost"
-                    disabled={syncingNow || status.syncing}
-                    onClick={() => void syncAll()}
+                    disabled={saving}
+                    onClick={turnOff}
                   >
-                    {syncingNow || status.syncing ? 'Sincronizando…' : 'Sincronizar ahora'}
+                    Apagar
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  disabled={saving}
-                  onClick={() => void save(false)}
-                >
-                  Apagar
-                </button>
-                <button type="submit" className="btn btn--primary" disabled={saving}>
-                  {saving ? 'Guardando…' : 'Activar'}
-                </button>
+                {!connected || settingsDirty ? (
+                  <button type="submit" className="btn btn--primary" disabled={saving}>
+                    {saving ? 'Guardando…' : connected ? 'Guardar' : 'Activar'}
+                  </button>
+                ) : null}
               </div>
             </div>
           </form>
@@ -713,8 +1003,8 @@ export function NotionSyncConflict({
         <section className="notion-conflict" aria-label="Conflicto con Notion">
           <h3>Esta nota y Notion se separaron</h3>
           <p>
-            Los dos textos cambiaron desde la última sincronización. Elige cuál se queda. El momento
-            en el video viaja con esa versión.
+            Los dos lados cambiaron desde la última sincronización. Elige cuál se queda. El texto,
+            el color, los lugares, los temas y el momento del video viajan con esa versión.
           </p>
           {dirty ? (
             <p>El editor tiene cambios sin guardar. Usar esta guarda ese texto y lo envía.</p>
@@ -732,6 +1022,7 @@ export function NotionSyncConflict({
               </pre>
             </article>
           </div>
+          <MetaDiff rows={conflictMetaFromNote(note)} />
           <div className="dialog__actions-btns">
             <button
               type="button"

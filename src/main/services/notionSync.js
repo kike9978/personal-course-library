@@ -9,11 +9,19 @@ import {
   listFindingRecords,
   listCourseProgressRecords,
   listPlaylistRecords,
+  listStoredProjects,
+  listTopics,
   mutateFinding,
   readCourseProgressRecord,
   readFinding,
   readPlaylist,
+  readPlaylistIntentRecord,
+  readStoredProject,
+  readTopic,
   restoreFinding,
+  upsertTopic,
+  upsertProject,
+  savePlaylistIntent,
   withoutNoteWriteHook,
   writeCourseProgress,
   writePlaylistRecord
@@ -36,13 +44,24 @@ import {
   notionAssetsToUpload,
   notionPlace,
   mergeCourseProgress,
+  anchorsToText,
+  intentFromBody,
+  intentWire,
+  noteWire,
+  noteWireHash,
+  PLAYLIST_INTENT_ID,
   playlistFromBody,
   playlistWire,
   progressFromBody,
   progressIsEmpty,
   progressTrackKey,
   progressWire,
+  projectFromBody,
+  projectWire,
   roundTimeSec,
+  topicFromBody,
+  topicIdsToText,
+  topicWire,
   wireHash
 } from '../../shared/notionSync.js'
 import { readNoteAttachment, saveNoteAttachmentBytes } from './noteAttachments.js'
@@ -100,10 +119,23 @@ function readState() {
       tombstones: Array.isArray(data.tombstones) ? data.tombstones : [],
       nodes: data.nodes && typeof data.nodes === 'object' ? data.nodes : {},
       playlistTombstones: Array.isArray(data.playlistTombstones) ? data.playlistTombstones : [],
-      drawingShare: ['json', 'image', 'local'].includes(data.drawingShare) ? data.drawingShare : ''
+      topicTombstones: Array.isArray(data.topicTombstones) ? data.topicTombstones : [],
+      projectTombstones: Array.isArray(data.projectTombstones) ? data.projectTombstones : [],
+      drawingShare: ['json', 'image', 'local'].includes(data.drawingShare) ? data.drawingShare : '',
+      rowSchema: data.rowSchema === true,
+      pollWatermark: typeof data.pollWatermark === 'string' ? data.pollWatermark : ''
     }
   } catch {
-    return { tombstones: [], nodes: {}, playlistTombstones: [], drawingShare: '' }
+    return {
+      tombstones: [],
+      nodes: {},
+      playlistTombstones: [],
+      topicTombstones: [],
+      projectTombstones: [],
+      drawingShare: '',
+      rowSchema: false,
+      pollWatermark: ''
+    }
   }
 }
 
@@ -117,7 +149,11 @@ function writeState(state) {
         tombstones: state.tombstones || [],
         nodes: state.nodes || {},
         playlistTombstones: state.playlistTombstones || [],
-        drawingShare: state.drawingShare || ''
+        topicTombstones: state.topicTombstones || [],
+        projectTombstones: state.projectTombstones || [],
+        drawingShare: state.drawingShare || '',
+        rowSchema: state.rowSchema === true,
+        pollWatermark: state.pollWatermark || ''
       },
       null,
       2
@@ -225,19 +261,55 @@ function clientFromConfig() {
   return createNotionClient({ token: config.token, databaseId: config.databaseId })
 }
 
+function placeLabel(anchor) {
+  const course = String(anchor?.coursePath || '')
+    .split(/[/\\]/)
+    .filter(Boolean)
+    .pop()
+  const place =
+    anchor?.lessonTitle ||
+    anchor?.projectTitle ||
+    anchor?.lessonRelativePath ||
+    anchor?.projectId ||
+    ''
+  return [course, place].filter(Boolean).join(' / ')
+}
+
+function topicLabels(ids) {
+  const topics = listTopics()
+  return (Array.isArray(ids) ? ids : [])
+    .map((id) => topics.find((topic) => topic.id === id)?.title || id)
+    .filter(Boolean)
+}
+
+function noteConflictView(finding) {
+  const conflict = finding.notion?.conflict || {}
+  const hasMeta = Array.isArray(conflict.remoteAnchors)
+  return {
+    findingId: finding.id,
+    title: finding.title || 'Sin título',
+    body: finding.body || '',
+    remoteTitle: conflict.remoteTitle || '',
+    remoteBody: conflict.remoteBody || '',
+    coursePath: finding.anchors?.[0]?.coursePath || null,
+    hasMeta,
+    localColor: finding.color || '',
+    remoteColor: conflict.remoteColor || '',
+    localPlaces: (finding.anchors || []).map(placeLabel).filter(Boolean),
+    remotePlaces: (conflict.remoteAnchors || []).map(placeLabel).filter(Boolean),
+    localTopics: topicLabels(finding.topicIds),
+    remoteTopics: topicLabels(conflict.remoteTopicIds),
+    localTime: noteVideoTime(finding),
+    remoteTime: conflict.remoteTimeSec === undefined ? null : conflict.remoteTimeSec
+  }
+}
+
 function publicStatus() {
   const config = getNotionConfig()
   const conflicts = config.enabled
     ? listFindingRecords()
         .filter((finding) => finding.notion?.conflict)
-        .map((finding) => ({
-          findingId: finding.id,
-          title: finding.title || 'Sin título',
-          body: finding.body || '',
-          remoteTitle: finding.notion.conflict.remoteTitle || '',
-          remoteBody: finding.notion.conflict.remoteBody || '',
-          coursePath: finding.anchors?.[0]?.coursePath || null
-        }))
+        .map(noteConflictView)
     : []
   const playlistConflicts = config.enabled
     ? listPlaylistRecords()
@@ -280,7 +352,8 @@ function publicStatus() {
     playlistDeleteConflicts,
     drawingShare: readState().drawingShare || '',
     drawings: listDrawingFiles(),
-    progressConflicts: listProgressConflicts()
+    progressConflicts: listProgressConflicts(),
+    migrating: Boolean(migrating) || (rowWrites && !readState().rowSchema)
   }
 }
 
@@ -355,8 +428,46 @@ function cursorFrom(page, hash, extra = {}) {
 /** Cursor for a note. `timeSec === undefined` leaves the last shared moment unrecorded. */
 function noteCursor(page, hash, timeSec, extra = {}) {
   const cursor = cursorFrom(page, hash, extra)
+  cursor.wire = 2
   if (timeSec !== undefined) cursor.videoTime = roundTimeSec(timeSec)
   return cursor
+}
+
+let rowWrites = false
+
+function rowsReady() {
+  return rowWrites || readState().rowSchema === true
+}
+
+function noteShapeFromPage(page, finding) {
+  const upgraded = (finding?.notion?.wire || 0) >= 2
+  let anchors = upgraded
+    ? page?.anchors || []
+    : page?.anchors?.length
+      ? page.anchors
+      : finding?.anchors || []
+  if (!upgraded && page?.timeSec !== undefined)
+    anchors = anchorsWithVideoTime(anchors, page.timeSec)
+  else if (upgraded && page?.timeSec != null) anchors = anchorsWithVideoTime(anchors, page.timeSec)
+  return {
+    title: page?.title,
+    body: page?.body,
+    color: upgraded ? page?.color || '' : page?.color || finding?.color || '',
+    anchors,
+    topicIds: upgraded
+      ? page?.topicIds || []
+      : page?.topicIds?.length
+        ? page.topicIds
+        : finding?.topicIds || []
+  }
+}
+
+function remoteNoteHash(page, finding) {
+  return noteWireHash(noteShapeFromPage(page, finding))
+}
+
+function localNoteHash(finding) {
+  return noteWireHash(finding)
 }
 
 function videoTimeNeedsSync(finding) {
@@ -373,7 +484,8 @@ function videoTimesMatch(localTime, remoteTime) {
 
 /** Local pin wins when this copy moved and Notion did not, or when this copy is newer. */
 function preferLocalVideoTime(finding, remote) {
-  const remoteMoved = Boolean(remote?.editedAt) && remote.editedAt !== finding?.notion?.remoteEditedAt
+  const remoteMoved =
+    Boolean(remote?.editedAt) && remote.editedAt !== finding?.notion?.remoteEditedAt
   const localMoved = (finding?.updatedAt || 0) > (finding?.notion?.syncedAt || 0)
   if (remoteMoved && !localMoved) return false
   if (localMoved && !remoteMoved) return true
@@ -390,9 +502,14 @@ function applyNotion(id, notion, text, timeSec = undefined) {
         finding.body = normalizeBody(text.body)
         finding.bodyHtml = null
         finding.bodyJson = null
+        if ('color' in text) finding.color = text.color || null
+        if (Array.isArray(text.topicIds)) finding.topicIds = text.topicIds
+        if (Array.isArray(text.anchors)) finding.anchors = text.anchors
         finding.updatedAt = Date.now()
       }
-      if (timeSec !== undefined) finding.anchors = anchorsWithVideoTime(finding.anchors, timeSec)
+      if (timeSec !== undefined && !Array.isArray(text?.anchors)) {
+        finding.anchors = anchorsWithVideoTime(finding.anchors, timeSec)
+      }
     })
   })
 }
@@ -441,7 +558,8 @@ async function loadRemote(client, finding) {
 async function ensureCoursePage(client, place) {
   const marker = `node:${place.courseKey}`
   let page = await client.findNode(marker)
-  if (!page?.pageId) page = await client.createNodePage(marker, place.courseTitle, PAGE_ICONS.course)
+  if (!page?.pageId)
+    page = await client.createNodePage(marker, place.courseTitle, PAGE_ICONS.course)
   else if (page.title !== place.courseTitle) await client.renamePage(page.pageId, place.courseTitle)
   return page.pageId
 }
@@ -460,7 +578,8 @@ async function ensureFilePage(client, place, coursePageId) {
     const parent = await client.pageParent(cached)
     if (parent?.type === 'page_id' && parent.id === coursePageId) {
       const current = await client.readPage(cached)
-      if (current && current.title !== place.fileTitle) await client.renamePage(cached, place.fileTitle)
+      if (current && current.title !== place.fileTitle)
+        await client.renamePage(cached, place.fileTitle)
       if (current && current.marker !== marker) await client.writeMarker(cached, marker)
       if (current) return cached
     }
@@ -497,6 +616,7 @@ async function ensurePlace(client, finding) {
 }
 
 async function retireFlatCopies(client, findingId, keepPageId) {
+  if (rowsReady()) return
   const rows = await client.listPages()
   for (const row of rows) {
     if (row.findingId !== findingId || row.pageId === keepPageId) continue
@@ -504,7 +624,39 @@ async function retireFlatCopies(client, findingId, keepPageId) {
   }
 }
 
+function buildNoteRow(finding) {
+  const place = notionPlace(finding, readCourseTitleMap())
+  const wire = noteWire(finding)
+  const loose = place.courseKey === 'course:__loose__'
+  return {
+    kind: 'note',
+    externalId: finding.id,
+    parentExternalId: place.fileKey || (loose ? '' : place.courseKey),
+    courseKey: loose ? '' : place.courseKey,
+    title: wire.title || 'Sin título',
+    body: wire.body,
+    seconds: noteVideoTime(finding),
+    color: wire.color,
+    anchors: wire.anchors,
+    anchorsText: anchorsToText(wire.anchors),
+    topicIds: wire.topicIds,
+    topicIdsText: topicIdsToText(wire.topicIds),
+    emoji: PAGE_ICONS.note
+  }
+}
+
+async function saveNoteRow(client, finding, remote) {
+  const row = buildNoteRow(finding)
+  if (remote?.pageId && (remote.kind === 'note' || remote.parentType === 'data_source_id')) {
+    row.pageId = remote.pageId
+  }
+  const page = await client.saveRow(row)
+  await reconcileNoteFiles(client, page?.pageId, finding.body)
+  return page
+}
+
 async function saveNotePage(client, finding, remote) {
+  if (rowsReady()) return saveNoteRow(client, finding, remote)
   const parentId = await ensurePlace(client, finding)
   const timeSec = noteVideoTime(finding)
   let page = remote
@@ -626,6 +778,10 @@ async function reconcileNoteFiles(client, pageId, body) {
 }
 
 async function placeExisting(client, finding, remote) {
+  if (rowsReady()) {
+    await reconcileNoteFiles(client, remote.pageId, remote.body)
+    return remote
+  }
   const parentId = await ensurePlace(client, finding)
   const parent = await client.pageParent(remote.pageId)
   if (parent?.type === 'page_id' && parent.id === parentId) {
@@ -652,33 +808,91 @@ async function placeExisting(client, finding, remote) {
 
 function finishWrite(id, page, localHash, timeSec) {
   if (!page?.pageId) throw new Error('Notion no devolvió la página')
-  const remoteHash = page.body === undefined ? localHash : wireHash(page.title, page.body)
+  const remoteHash =
+    page.body === undefined
+      ? localHash
+      : rowsReady()
+        ? remoteNoteHash(page, {
+            notion: { wire: 2 },
+            anchors: page.anchors,
+            color: page.color,
+            topicIds: page.topicIds
+          })
+        : wireHash(page.title, page.body)
   const sharedTime = page.timeSec !== undefined ? page.timeSec : timeSec
   if (page?.body !== undefined && remoteHash !== localHash) {
-    applyNotion(id, noteCursor(page, remoteHash, sharedTime, { pulledAt: Date.now() }), page, sharedTime)
+    applyNotion(
+      id,
+      noteCursor(page, remoteHash, sharedTime, { pulledAt: Date.now() }),
+      page,
+      sharedTime
+    )
     return
   }
   applyNotion(id, noteCursor(page, localHash, sharedTime))
 }
 
+function noteSyncAction(finding, remote) {
+  if (rowsReady() && (finding.notion?.wire || 0) < 2) {
+    const bodyAction = decideSync({
+      hasRemote: Boolean(remote),
+      localHash: wireHash(finding.title, finding.body),
+      remoteHash: remote ? wireHash(remote.title, remote.body) : null,
+      ackedHash: finding.notion?.ackedHash || null
+    })
+    if (bodyAction === 'conflict') return 'conflict'
+    if (bodyAction === 'pull') return 'pull'
+    return remote ? 'push' : 'create'
+  }
+  const localHash = rowsReady() ? localNoteHash(finding) : wireHash(finding.title, finding.body)
+  return decideSync({
+    hasRemote: Boolean(remote),
+    localHash,
+    remoteHash: remote
+      ? rowsReady()
+        ? remoteNoteHash(remote, finding)
+        : wireHash(remote.title, remote.body)
+      : null,
+    ackedHash: finding.notion?.ackedHash || null
+  })
+}
+
 async function writeLocal(client, finding) {
   const remote = await loadRemote(client, finding)
   const page = await saveNotePage(client, finding, remote)
-  finishWrite(finding.id, page, wireHash(finding.title, finding.body), noteVideoTime(finding))
+  const localHash = rowsReady() ? localNoteHash(finding) : wireHash(finding.title, finding.body)
+  finishWrite(finding.id, page, localHash, noteVideoTime(finding))
 }
 
 async function reconcileUpsert(client, id) {
-  const finding = readFinding(id)
+  let finding = readFinding(id)
+  if (!finding && rowsReady()) {
+    const remote = await loadKindPage(client, 'note', id, null)
+    if (!remote) return
+    const shape = noteShapeFromPage(remote, { notion: { wire: 2 } })
+    const created = findingFromLegacyNote(
+      {
+        id,
+        title: shape.title,
+        body: shape.body,
+        color: shape.color,
+        topicIds: shape.topicIds,
+        anchors: shape.anchors
+      },
+      shape.anchors?.[0]?.coursePath || null
+    )
+    created.notion = noteCursor(remote, noteWireHash(shape), remote.timeSec, {
+      pulledAt: Date.now()
+    })
+    withoutNoteWriteHook(() => restoreFinding(created))
+    notifyNotes()
+    return
+  }
   if (!finding || finding.notion?.conflict) return
 
-  const localHash = wireHash(finding.title, finding.body)
+  const localHash = rowsReady() ? localNoteHash(finding) : wireHash(finding.title, finding.body)
   const remote = await loadRemote(client, finding)
-  const action = decideSync({
-    hasRemote: Boolean(remote),
-    localHash,
-    remoteHash: remote ? wireHash(remote.title, remote.body) : null,
-    ackedHash: finding.notion?.ackedHash || null
-  })
+  const action = noteSyncAction(finding, remote)
 
   if (action === 'create' || action === 'push') {
     const page = await saveNotePage(client, finding, remote)
@@ -689,8 +903,14 @@ async function reconcileUpsert(client, id) {
 
   if (action === 'pull') {
     const placed = await placeExisting(client, finding, remote)
-    const hash = wireHash(placed.title, placed.body)
-    applyNotion(id, noteCursor(placed, hash, placed.timeSec, { pulledAt: Date.now() }), placed, placed.timeSec)
+    const shape = rowsReady() ? noteShapeFromPage(placed, finding) : placed
+    const hash = rowsReady() ? noteWireHash(shape) : wireHash(placed.title, placed.body)
+    applyNotion(
+      id,
+      noteCursor(placed, hash, placed.timeSec, { pulledAt: Date.now() }),
+      shape,
+      Array.isArray(shape.anchors) ? undefined : placed.timeSec
+    )
     notifyNotes()
     return
   }
@@ -716,6 +936,7 @@ async function reconcileUpsert(client, id) {
   }
 
   const placed = await placeExisting(client, finding, remote)
+  const remoteShape = rowsReady() ? noteShapeFromPage(placed, finding) : null
   applyNotion(id, {
     pageId: placed.pageId,
     ackedHash: finding.notion?.ackedHash || null,
@@ -723,7 +944,15 @@ async function reconcileUpsert(client, id) {
     conflict: {
       remoteTitle: placed.title || '',
       remoteBody: placed.body || '',
-      remoteEditedAt: placed.editedAt || null
+      remoteEditedAt: placed.editedAt || null,
+      ...(remoteShape
+        ? {
+            remoteColor: remoteShape.color || '',
+            remoteAnchors: remoteShape.anchors || [],
+            remoteTopicIds: remoteShape.topicIds || [],
+            remoteTimeSec: placed.timeSec === undefined ? null : placed.timeSec
+          }
+        : {})
     },
     error: null,
     pulledAt: finding.notion?.pulledAt || null,
@@ -820,6 +1049,7 @@ async function drain() {
   try {
     const client = clientFromConfig()
     await client.loadSchema()
+    await ensureRowSchema(client)
     for (const [id, job] of batch) {
       if (!getNotionConfig().enabled) {
         jobs.set(id, job)
@@ -828,9 +1058,15 @@ async function drain() {
       try {
         if (job.op === 'playlist-upsert') {
           await reconcilePlaylist(client, job.playlistId, { refresh: job.refresh })
-        }
-        else if (job.op === 'playlist-delete') await reconcilePlaylistDelete(client, job.playlistId)
+        } else if (job.op === 'playlist-delete')
+          await reconcilePlaylistDelete(client, job.playlistId)
         else if (job.op === 'progress-upsert') await reconcileProgress(client, job.coursePath)
+        else if (job.op === 'topic-upsert') await reconcileTopic(client, job.topicId)
+        else if (job.op === 'topic-delete') await reconcileTopicDelete(client, job.topicId)
+        else if (job.op === 'project-upsert')
+          await reconcileProject(client, job.projectId, job.coursePath)
+        else if (job.op === 'project-delete') await reconcileProjectDelete(client, job.projectId)
+        else if (job.op === 'intent-upsert') await reconcileIntent(client)
         else if (job.op === 'delete') await reconcileDelete(client, id)
         else await reconcileUpsert(client, id)
         clearFailure()
@@ -840,7 +1076,18 @@ async function drain() {
         noteFailure(error)
         if (job.op === 'playlist-upsert') rememberPlaylistError(job.playlistId, lastError)
         else if (job.op === 'progress-upsert') rememberProgressError(job.coursePath, lastError)
-        else if (job.op !== 'delete' && job.op !== 'playlist-delete') rememberError(id, lastError)
+        else if (job.op === 'topic-upsert') rememberTopicError(job.topicId, lastError)
+        else if (job.op === 'project-upsert')
+          rememberProjectError(job.projectId, job.coursePath, lastError)
+        else if (
+          job.op !== 'delete' &&
+          job.op !== 'playlist-delete' &&
+          job.op !== 'topic-delete' &&
+          job.op !== 'project-delete' &&
+          job.op !== 'intent-upsert'
+        ) {
+          rememberError(id, lastError)
+        }
         if (requeueJob(id, job, error)) {
           const wait = error.status === 429 ? 5000 : isSaveConflict(error) ? 1500 : 15000
           retryDelay = Math.max(retryDelay, wait)
@@ -979,7 +1226,10 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
     const localTime = noteVideoTime(existing)
     const remoteTime = page.timeSec
     const pushLocalTime =
-      sameText && remoteTime !== undefined && !videoTimesMatch(localTime, remoteTime) && preferLocalVideoTime(existing, page)
+      sameText &&
+      remoteTime !== undefined &&
+      !videoTimesMatch(localTime, remoteTime) &&
+      preferLocalVideoTime(existing, page)
     const sharedTime = pushLocalTime ? localTime : remoteTime
     if (shouldRetarget(existing, anchor)) {
       if (sharedTime === undefined) {
@@ -992,7 +1242,12 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
         })
       })
       changed = true
-    } else if (sameText && sharedTime !== undefined && roundTimeSec(sharedTime) !== roundTimeSec(localTime) && !pushLocalTime) {
+    } else if (
+      sameText &&
+      sharedTime !== undefined &&
+      roundTimeSec(sharedTime) !== roundTimeSec(localTime) &&
+      !pushLocalTime
+    ) {
       withoutNoteWriteHook(() => {
         mutateFinding(existing.id, (finding) => {
           finding.anchors = anchorsWithVideoTime(finding.anchors, sharedTime)
@@ -1014,7 +1269,9 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
       const hash = wireHash(stamped?.title, stamped?.body)
       const writtenTime = stamped?.timeSec !== undefined ? stamped.timeSec : sharedTime
       if (stamped?.pageId) {
-        withoutNoteWriteHook(() => applyNotion(existing.id, noteCursor(stamped, hash, writtenTime), null, writtenTime))
+        withoutNoteWriteHook(() =>
+          applyNotion(existing.id, noteCursor(stamped, hash, writtenTime), null, writtenTime)
+        )
         sharedIdsConfirmed.add(page.pageId)
       }
       return changed
@@ -1029,7 +1286,12 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
           return changed
         }
         withoutNoteWriteHook(() =>
-          applyNotion(existing.id, noteCursor(page, wireHash(page.title, page.body), sharedTime), null, sharedTime)
+          applyNotion(
+            existing.id,
+            noteCursor(page, wireHash(page.title, page.body), sharedTime),
+            null,
+            sharedTime
+          )
         )
         return changed
       }
@@ -1043,8 +1305,16 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
   const id = page.findingId || makeFindingId()
   if (!page.findingId) {
     adopted =
-      (await client.updatePage(page.pageId, id, page.title, page.body, page.icon, 'finding', null, page.timeSec)) ||
-      page
+      (await client.updatePage(
+        page.pageId,
+        id,
+        page.title,
+        page.body,
+        page.icon,
+        'finding',
+        null,
+        page.timeSec
+      )) || page
     if (adopted?.pageId) sharedIdsConfirmed.add(adopted.pageId)
   } else {
     sharedIdsConfirmed.add(page.pageId)
@@ -1074,7 +1344,7 @@ async function importSharedNotes(client, rows, recent) {
   for (let index = 0; index < courseRows.length; index += 1) {
     const row = courseRows[index]
     const courseMarker = String(row.nodeMarker || '')
-    notePrepare(`Notas, ${index + 1} de ${courseRows.length}`, index + 1, courseRows.length)
+    notePrepare('Notas', index + 1, courseRows.length)
     if (!courseMarker.startsWith('node:')) {
       if (row.findingId && !String(row.findingId).startsWith('node:')) {
         changed =
@@ -1107,8 +1377,8 @@ async function importSharedNotes(client, rows, recent) {
         const nested = await client.listChildPages(child.pageId)
         const isFile = Boolean(
           (page.marker && page.marker.startsWith('node:')) ||
-            page.icon === PAGE_ICONS.file ||
-            nested.length
+          page.icon === PAGE_ICONS.file ||
+          nested.length
         )
         if (!isFile) {
           changed =
@@ -1150,12 +1420,821 @@ async function importSharedNotes(client, rows, recent) {
   if (changed) notifyNotes()
 }
 
+let migrating = null
+
+async function archiveLegacyPage(client, legacyId, keptId) {
+  if (!legacyId || legacyId === keptId) return
+  try {
+    const parent = await client.pageParent(legacyId)
+    if (parent?.type === 'page_id') await client.archivePage(legacyId)
+  } catch {
+    // The nested page is already gone.
+  }
+}
+
+async function migrateToRows(client) {
+  notePrepare('Pasando Notion a filas…')
+  await client.loadSchema()
+  const remotePages = await client.listPages()
+  const recent = { byId: new Map(), complete: false, probe: null }
+  try {
+    await importSharedNotes(client, remotePages, recent)
+  } catch (error) {
+    noteFailure(error)
+  }
+  try {
+    await queuePlaylists(client, remotePages)
+  } catch (error) {
+    noteFailure(error)
+  }
+  try {
+    await queueProgress(client)
+  } catch (error) {
+    noteFailure(error)
+  }
+
+  rowWrites = true
+  try {
+    const titles = readCourseTitleMap()
+    const notes = listFindingRecords().filter((finding) => !finding.notion?.conflict)
+    const playlists = listPlaylistRecords().filter((playlist) => !playlist.notion?.conflict)
+    const progressRows = listCourseProgressRecords().filter((course) => {
+      if (course.notion?.conflict) return false
+      const local = localProgress(course.id)
+      return !progressIsEmpty(local) || Boolean(course.notion?.pageId)
+    })
+    const files = new Map()
+    const courses = new Map()
+    for (const finding of listFindingRecords()) {
+      const place = notionPlace(finding, titles)
+      if (place.fileKey) files.set(place.fileKey, place)
+      if (place.courseKey && place.courseKey !== 'course:__loose__')
+        courses.set(place.courseKey, place)
+    }
+    const topics = listTopics().filter((topic) => !topic?.notion?.conflict)
+    const projects = listStoredProjects().filter((project) => !project?.notion?.conflict)
+    const migrationTotal =
+      notes.length +
+      playlists.length +
+      progressRows.length +
+      files.size +
+      courses.size +
+      topics.length +
+      projects.length +
+      2
+    let migrationDone = 0
+    const migrationStep = (label) => {
+      migrationDone += 1
+      notePrepare(label, migrationDone, migrationTotal)
+    }
+    for (const finding of notes) {
+      migrationStep(`Nota · ${finding.title || finding.id}`)
+      const legacyId = finding.notion?.pageId || null
+      const page = await client.saveRow(buildNoteRow(finding))
+      await archiveLegacyPage(client, legacyId, page.pageId)
+      finishWrite(
+        finding.id,
+        page,
+        localNoteHash(readFinding(finding.id) || finding),
+        noteVideoTime(finding)
+      )
+    }
+    for (const playlist of playlists) {
+      migrationStep(`Lista · ${playlist.title || playlist.id}`)
+      const legacyId = playlist.notion?.pageId || null
+      const page = await savePlaylistPage(client, playlist, null)
+      await archiveLegacyPage(client, legacyId, page?.pageId)
+      if (page?.pageId) {
+        const wire = playlistWire(playlist)
+        const localHash = wireHash(wire.title, wire.body)
+        const remoteHash = page.body === undefined ? localHash : wireHash(page.title, page.body)
+        withoutNoteWriteHook(() => {
+          writePlaylistRecord({
+            ...playlist,
+            notion: cursorFrom(
+              page,
+              remoteHash === localHash ? localHash : remoteHash,
+              listShapeExtra(page)
+            )
+          })
+        })
+      }
+    }
+    for (const course of progressRows) {
+      migrationStep(`Progreso · ${courseTitle(course.id)}`)
+      const local = localProgress(course.id)
+      const legacyId = course.notion?.pageId || null
+      const page = await saveProgressPage(client, course.id, local, null)
+      await archiveLegacyPage(client, legacyId, page?.pageId)
+      if (page?.pageId) {
+        const hash = wireHash(course.id, progressWire(local).body)
+        writeCourseProgress(course.id, { notion: cursorFrom(page, hash) })
+      }
+    }
+    for (const place of files.values()) {
+      migrationStep(`Archivo · ${place.fileTitle || 'Archivo'}`)
+      const legacyId = readNodes()[place.fileKey] || null
+      const page = await client.saveRow({
+        kind: 'file',
+        externalId: place.fileKey,
+        parentExternalId: place.courseKey,
+        courseKey: place.courseKey,
+        title: place.fileTitle || 'Archivo',
+        emoji: PAGE_ICONS.file
+      })
+      await archiveLegacyPage(client, legacyId, page.pageId)
+      if (page?.pageId) writeNode(place.fileKey, page.pageId)
+    }
+    for (const [courseKey, place] of courses) {
+      migrationStep(`Curso · ${place.courseTitle || courseKey}`)
+      const folder = courseKey.slice('course:'.length)
+      const existing = await client.findNode(`node:${courseKey}`)
+      await client.saveRow({
+        kind: 'course',
+        externalId: courseKey,
+        courseKey,
+        title: place.courseTitle || courseTitle(folder),
+        nodeMarker: `node:${courseKey}`,
+        pageId: existing?.pageId || null,
+        emoji: PAGE_ICONS.course
+      })
+    }
+    migrationStep('Cerrando páginas anteriores')
+    await archiveSection(client, PLAYLIST_MARKER, 'playlist')
+    await archiveSection(client, PROGRESS_MARKER, 'progress')
+    for (const topic of topics) {
+      migrationStep(`Tema · ${topic.title || topic.id}`)
+      await reconcileTopic(client, topic.id)
+    }
+    for (const project of projects) {
+      migrationStep(`Proyecto · ${project.title || project.id}`)
+      await reconcileProject(client, project.id, project.coursePath)
+    }
+    migrationStep('Intención')
+    await reconcileIntent(client)
+    const state = readState()
+    state.rowSchema = true
+    state.pollWatermark = new Date().toISOString()
+    writeState(state)
+  } finally {
+    rowWrites = readState().rowSchema === true
+  }
+}
+
+async function archiveSection(client, marker, kind) {
+  const section = await client.findNode(marker)
+  if (!section?.pageId) return
+  const children = await client.listChildPages(section.pageId)
+  for (const child of children) {
+    const page = await client.readPage(child.pageId)
+    const matches =
+      (kind === 'playlist' && page?.playlistId) || (kind === 'progress' && page?.progressId)
+    if (matches) await client.archivePage(child.pageId)
+  }
+  const left = await client.listChildPages(section.pageId)
+  if (!left.length) await client.archivePage(section.pageId)
+}
+
+async function ensureRowSchema(client) {
+  if (readState().rowSchema) return
+  if (!migrating) {
+    migrating = migrateToRows(client).finally(() => {
+      migrating = null
+    })
+  }
+  await migrating
+}
+
+function topicKey(id) {
+  return `topic:${id}`
+}
+
+function projectJobKey(id) {
+  return `project:${id}`
+}
+
+function rememberTopicError(id, message) {
+  const topic = readTopic(id)
+  if (!topic) return
+  withoutNoteWriteHook(() => {
+    upsertTopic({
+      id,
+      title: topic.title,
+      summary: topic.summary,
+      aliases: topic.aliases,
+      notion: { ...(topic.notion || {}), error: message }
+    })
+  })
+}
+
+function rememberProjectError(id, coursePath, message) {
+  const project = readStoredProject(coursePath, id)
+  if (!project) return
+  withoutNoteWriteHook(() => {
+    upsertProject(project.coursePath || coursePath, {
+      id,
+      title: project.title,
+      notes: project.notes,
+      status: project.status,
+      sectionId: project.sectionId,
+      fileRelativePath: project.fileRelativePath,
+      notion: { ...(project.notion || {}), error: message }
+    })
+  })
+}
+
+async function loadKindPage(client, kind, id, pageId) {
+  if (pageId) {
+    const direct = await client.readPage(pageId)
+    if (direct && (direct.kind === kind || direct.externalId === id)) return direct
+  }
+  const found = await client.findRow(kind, id)
+  if (!found?.pageId) return null
+  return client.readPage(found.pageId)
+}
+
+async function reconcileTopic(client, id) {
+  let topic = readTopic(id)
+  if (!topic) {
+    const remote = await loadKindPage(client, 'topic', id, null)
+    const parsed = remote ? topicFromBody(remote.body) : null
+    if (!remote || !parsed) return
+    const hash = wireHash(remote.title, topicWire({ title: remote.title, ...parsed }).body)
+    withoutNoteWriteHook(() => {
+      upsertTopic({
+        id,
+        title: remote.title,
+        summary: parsed.summary,
+        aliases: parsed.aliases,
+        notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
+      })
+    })
+    return
+  }
+  if (topic.notion?.conflict) return
+  const wire = topicWire(topic)
+  const localHash = wireHash(wire.title, wire.body)
+  const remote = await loadKindPage(client, 'topic', id, topic.notion?.pageId)
+  const parsed = remote ? topicFromBody(remote.body) : null
+  const action = decideSync({
+    hasRemote: Boolean(remote && (parsed || remote.kind === 'topic')),
+    localHash,
+    remoteHash: parsed
+      ? wireHash(remote.title, topicWire({ title: remote.title, ...parsed }).body)
+      : null,
+    ackedHash: topic.notion?.ackedHash || null
+  })
+  if (action === 'pull' && parsed) {
+    const hash = wireHash(remote.title, topicWire({ title: remote.title, ...parsed }).body)
+    withoutNoteWriteHook(() => {
+      upsertTopic({
+        id,
+        title: remote.title,
+        summary: parsed.summary,
+        aliases: parsed.aliases,
+        notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
+      })
+    })
+    return
+  }
+  if (action === 'conflict' && remote) {
+    withoutNoteWriteHook(() => {
+      upsertTopic({
+        id,
+        title: topic.title,
+        summary: topic.summary,
+        aliases: topic.aliases,
+        notion: {
+          pageId: remote.pageId,
+          ackedHash: topic.notion?.ackedHash || null,
+          remoteEditedAt: remote.editedAt || null,
+          conflict: {
+            remoteTitle: remote.title || '',
+            remoteBody: remote.body || '',
+            remoteEditedAt: remote.editedAt || null
+          },
+          error: null
+        }
+      })
+    })
+    return
+  }
+  if (action !== 'create' && action !== 'push' && action !== 'relink') return
+  const page = await client.saveRow({
+    kind: 'topic',
+    externalId: id,
+    title: wire.title,
+    body: wire.body,
+    pageId: remote?.pageId || null,
+    emoji: PAGE_ICONS.topic
+  })
+  const hash = page?.body === undefined ? localHash : wireHash(page.title, page.body)
+  withoutNoteWriteHook(() => {
+    upsertTopic({
+      id,
+      title: topic.title,
+      summary: topic.summary,
+      aliases: topic.aliases,
+      notion: cursorFrom(page, hash)
+    })
+  })
+}
+
+function rememberTopicDelete(topic) {
+  const state = readState()
+  state.topicTombstones = (state.topicTombstones || []).filter((item) => item.topicId !== topic.id)
+  state.topicTombstones.push({
+    topicId: topic.id,
+    pageId: topic.notion?.pageId || null,
+    ackedHash: topic.notion?.ackedHash || null,
+    snapshot: {
+      title: topic.title || '',
+      summary: topic.summary || '',
+      aliases: topic.aliases || []
+    },
+    conflict: null
+  })
+  writeState(state)
+}
+
+async function reconcileTopicDelete(client, topicId) {
+  const tomb = (readState().topicTombstones || []).find((item) => item.topicId === topicId)
+  if (!tomb || tomb.conflict) return
+  const remote = tomb.pageId
+    ? await client.readPage(tomb.pageId)
+    : await loadKindPage(client, 'topic', topicId, null)
+  const parsed = remote ? topicFromBody(remote.body) : null
+  const action = decideDelete({
+    hasRemote: Boolean(remote),
+    remoteHash: parsed
+      ? wireHash(remote.title, topicWire({ title: remote.title, ...parsed }).body)
+      : null,
+    ackedHash: tomb.ackedHash
+  })
+  const drop = (extra) => {
+    const state = readState()
+    state.topicTombstones = (state.topicTombstones || [])
+      .filter((item) => item.topicId !== topicId)
+      .concat(extra || [])
+    writeState(state)
+  }
+  if (action === 'drop') {
+    drop()
+    return
+  }
+  if (action === 'archive') {
+    await client.archivePage(remote.pageId)
+    drop()
+    return
+  }
+  drop([
+    {
+      ...tomb,
+      conflict: {
+        remoteTitle: remote.title || '',
+        remoteBody: remote.body || '',
+        remoteEditedAt: remote.editedAt || null
+      }
+    }
+  ])
+}
+
+async function reconcileProject(client, id, coursePath) {
+  const project =
+    readStoredProject(coursePath, id) || listStoredProjects().find((item) => item.id === id)
+  if (!project || project.notion?.conflict) return
+  const wire = projectWire(project)
+  const localHash = wireHash(wire.title, wire.body)
+  const remote = await loadKindPage(client, 'project', id, project.notion?.pageId)
+  const parsed = remote ? projectFromBody(remote.body) : null
+  const action = decideSync({
+    hasRemote: Boolean(remote && parsed),
+    localHash,
+    remoteHash: parsed
+      ? wireHash(remote.title, projectWire({ title: remote.title, ...parsed }).body)
+      : null,
+    ackedHash: project.notion?.ackedHash || null
+  })
+  const folder = project.coursePath || coursePath
+  if (action === 'pull' && parsed) {
+    const hash = wireHash(remote.title, projectWire({ title: remote.title, ...parsed }).body)
+    withoutNoteWriteHook(() => {
+      upsertProject(folder, {
+        id,
+        title: remote.title,
+        notes: parsed.notes,
+        status: parsed.status,
+        sectionId: parsed.sectionId || null,
+        fileRelativePath: parsed.fileRelativePath || null,
+        notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
+      })
+    })
+    return
+  }
+  if (action === 'conflict' && remote) {
+    withoutNoteWriteHook(() => {
+      upsertProject(folder, {
+        id,
+        notion: {
+          pageId: remote.pageId,
+          ackedHash: project.notion?.ackedHash || null,
+          remoteEditedAt: remote.editedAt || null,
+          conflict: {
+            remoteTitle: remote.title || '',
+            remoteBody: remote.body || '',
+            remoteEditedAt: remote.editedAt || null
+          },
+          error: null
+        }
+      })
+    })
+    return
+  }
+  if (action !== 'create' && action !== 'push' && action !== 'relink') return
+  const page = await client.saveRow({
+    kind: 'project',
+    externalId: id,
+    parentExternalId: folder ? `course:${folder}` : '',
+    courseKey: folder ? `course:${folder}` : '',
+    title: wire.title,
+    body: wire.body,
+    status: wire.status,
+    pageId: remote?.pageId || null,
+    emoji: PAGE_ICONS.project
+  })
+  const hash = page?.body === undefined ? localHash : wireHash(page.title, page.body)
+  withoutNoteWriteHook(() => {
+    upsertProject(folder, { id, notion: cursorFrom(page, hash) })
+  })
+}
+
+function rememberProjectDelete(project) {
+  const state = readState()
+  state.projectTombstones = (state.projectTombstones || []).filter(
+    (item) => item.projectId !== project.id
+  )
+  state.projectTombstones.push({
+    projectId: project.id,
+    coursePath: project.coursePath || '',
+    pageId: project.notion?.pageId || null,
+    ackedHash: project.notion?.ackedHash || null,
+    snapshot: {
+      title: project.title || '',
+      notes: project.notes || '',
+      status: project.status || 'todo'
+    },
+    conflict: null
+  })
+  writeState(state)
+}
+
+async function reconcileProjectDelete(client, projectId) {
+  const tomb = (readState().projectTombstones || []).find((item) => item.projectId === projectId)
+  if (!tomb || tomb.conflict) return
+  const remote = tomb.pageId
+    ? await client.readPage(tomb.pageId)
+    : await loadKindPage(client, 'project', projectId, null)
+  const parsed = remote ? projectFromBody(remote.body) : null
+  const action = decideDelete({
+    hasRemote: Boolean(remote),
+    remoteHash: parsed
+      ? wireHash(remote.title, projectWire({ title: remote.title, ...parsed }).body)
+      : null,
+    ackedHash: tomb.ackedHash
+  })
+  const write = (items) => {
+    const state = readState()
+    state.projectTombstones = items
+    writeState(state)
+  }
+  const rest = () =>
+    (readState().projectTombstones || []).filter((item) => item.projectId !== projectId)
+  if (action === 'drop') {
+    write(rest())
+    return
+  }
+  if (action === 'archive') {
+    await client.archivePage(remote.pageId)
+    write(rest())
+    return
+  }
+  write(
+    rest().concat([
+      {
+        ...tomb,
+        conflict: {
+          remoteTitle: remote.title || '',
+          remoteBody: remote.body || '',
+          remoteEditedAt: remote.editedAt || null
+        }
+      }
+    ])
+  )
+}
+
+async function reconcileIntent(client) {
+  const intent = readPlaylistIntentRecord()
+  const wire = intentWire(intent)
+  const localHash = wireHash(wire.title, wire.body)
+  const remote = await loadKindPage(client, 'intent', PLAYLIST_INTENT_ID, intent?.notion?.pageId)
+  const parsed = remote ? intentFromBody(remote.body) : null
+  if (!String(intent?.goal || '').trim() && !(intent?.interests || []).length && !remote) return
+  const action = decideSync({
+    hasRemote: Boolean(remote && parsed),
+    localHash,
+    remoteHash: parsed ? wireHash(parsed.title, parsed.body) : null,
+    ackedHash: intent?.notion?.ackedHash || null
+  })
+  if (action === 'pull' && parsed) {
+    const data = JSON.parse(remote.body)
+    const hash = wireHash(parsed.title, parsed.body)
+    withoutNoteWriteHook(() => {
+      savePlaylistIntent({
+        goal: data.goal,
+        interests: data.interests,
+        notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
+      })
+    })
+    return
+  }
+  if (action === 'conflict' && remote) {
+    withoutNoteWriteHook(() => {
+      savePlaylistIntent({
+        goal: intent.goal,
+        interests: intent.interests,
+        notion: {
+          pageId: remote.pageId,
+          ackedHash: intent.notion?.ackedHash || null,
+          remoteEditedAt: remote.editedAt || null,
+          conflict: {
+            remoteTitle: remote.title || '',
+            remoteBody: remote.body || '',
+            remoteEditedAt: remote.editedAt || null
+          },
+          error: null
+        }
+      })
+    })
+    return
+  }
+  if (action !== 'create' && action !== 'push' && action !== 'relink') return
+  const page = await client.saveRow({
+    kind: 'intent',
+    externalId: PLAYLIST_INTENT_ID,
+    title: wire.title,
+    body: wire.body,
+    pageId: remote?.pageId || null,
+    emoji: PAGE_ICONS.intent
+  })
+  const hash = page?.body === undefined ? localHash : wireHash(page.title, page.body)
+  withoutNoteWriteHook(() => {
+    savePlaylistIntent({
+      goal: intent.goal,
+      interests: intent.interests,
+      notion: cursorFrom(page, hash)
+    })
+  })
+}
+
+function rowCursorEdited(row) {
+  const kind = row?.kind || ''
+  const id = row?.externalId || row?.findingId || row?.playlistId || row?.progressId || ''
+  if (kind === 'note' || (!kind && row?.findingId)) {
+    const finding = listFindingRecords().find(
+      (item) => item.id === (row.externalId || row.findingId)
+    )
+    return finding?.notion?.remoteEditedAt || ''
+  }
+  if (kind === 'playlist') return readPlaylist(id)?.notion?.remoteEditedAt || ''
+  if (kind === 'progress') return readCourseProgressRecord(id)?.notion?.remoteEditedAt || ''
+  if (kind === 'topic') return readTopic(id)?.notion?.remoteEditedAt || ''
+  if (kind === 'project')
+    return listStoredProjects().find((item) => item.id === id)?.notion?.remoteEditedAt || ''
+  if (kind === 'intent') return readPlaylistIntentRecord()?.notion?.remoteEditedAt || ''
+  return ''
+}
+
+function enqueueChangedRow(row) {
+  const kind =
+    row?.kind ||
+    (row?.playlistId ? 'playlist' : row?.progressId ? 'progress' : row?.findingId ? 'note' : '')
+  const id = row?.externalId || row?.findingId || row?.playlistId || row?.progressId || ''
+  if (!kind || !id || kind === 'course' || kind === 'file') return
+  if (row.editedAt && row.editedAt === rowCursorEdited(row)) return
+  if (kind === 'note') {
+    if (saveConflictParked(id)) return
+    const pending = jobs.get(id)
+    jobs.set(id, { op: 'upsert', attempts: pending?.attempts || 0 })
+    return
+  }
+  if (kind === 'playlist') {
+    const key = playlistKey(id)
+    if (saveConflictParked(key)) return
+    const pending = jobs.get(key)
+    jobs.set(key, { op: 'playlist-upsert', playlistId: id, attempts: pending?.attempts || 0 })
+    return
+  }
+  if (kind === 'progress') {
+    const key = progressKey(id)
+    if (saveConflictParked(key)) return
+    const pending = jobs.get(key)
+    jobs.set(key, { op: 'progress-upsert', coursePath: id, attempts: pending?.attempts || 0 })
+    return
+  }
+  if (kind === 'topic') {
+    const key = topicKey(id)
+    if (saveConflictParked(key)) return
+    jobs.set(key, { op: 'topic-upsert', topicId: id, attempts: jobs.get(key)?.attempts || 0 })
+    return
+  }
+  if (kind === 'project') {
+    const key = projectJobKey(id)
+    if (saveConflictParked(key)) return
+    const project = listStoredProjects().find((item) => item.id === id)
+    jobs.set(key, {
+      op: 'project-upsert',
+      projectId: id,
+      coursePath: project?.coursePath || row.courseKey?.replace(/^course:/, '') || '',
+      attempts: jobs.get(key)?.attempts || 0
+    })
+    return
+  }
+  if (kind === 'intent') {
+    jobs.set('intent:playlist-intent', {
+      op: 'intent-upsert',
+      attempts: jobs.get('intent:playlist-intent')?.attempts || 0
+    })
+  }
+}
+
+function queueLocalRowDrift() {
+  for (const finding of listFindingRecords()) {
+    if (finding.notion?.conflict || saveConflictParked(finding.id)) continue
+    const hash = localNoteHash(finding)
+    if (finding.notion?.ackedHash !== hash || (finding.notion?.wire || 0) < 2) {
+      const pending = jobs.get(finding.id)
+      jobs.set(finding.id, { op: 'upsert', attempts: pending?.attempts || 0 })
+    }
+  }
+  for (const playlist of listPlaylistRecords()) {
+    if (playlist.notion?.conflict) continue
+    const key = playlistKey(playlist.id)
+    if (saveConflictParked(key)) continue
+    const wire = playlistWire(playlist)
+    if (
+      playlist.notion?.ackedHash !== wireHash(wire.title, wire.body) ||
+      !playlist.notion?.pageId
+    ) {
+      const pending = jobs.get(key)
+      jobs.set(key, {
+        op: 'playlist-upsert',
+        playlistId: playlist.id,
+        attempts: pending?.attempts || 0
+      })
+    }
+  }
+  for (const course of listCourseProgressRecords()) {
+    if (course.notion?.conflict) continue
+    const key = progressKey(course.id)
+    if (saveConflictParked(key)) continue
+    const local = localProgress(course.id)
+    const hash = wireHash(course.id, progressWire(local).body)
+    const missing = !course.notion?.pageId && !progressIsEmpty(local)
+    if (
+      (course.notion?.ackedHash && course.notion.ackedHash !== hash) ||
+      missing ||
+      (!course.notion?.ackedHash && !progressIsEmpty(local))
+    ) {
+      const pending = jobs.get(key)
+      jobs.set(key, {
+        op: 'progress-upsert',
+        coursePath: course.id,
+        attempts: pending?.attempts || 0
+      })
+    }
+  }
+  for (const topic of listTopics()) {
+    if (topic.notion?.conflict) continue
+    const key = topicKey(topic.id)
+    if (saveConflictParked(key)) continue
+    const wire = topicWire(topic)
+    if (topic.notion?.ackedHash !== wireHash(wire.title, wire.body)) {
+      jobs.set(key, {
+        op: 'topic-upsert',
+        topicId: topic.id,
+        attempts: jobs.get(key)?.attempts || 0
+      })
+    }
+  }
+  for (const project of listStoredProjects()) {
+    if (project.notion?.conflict) continue
+    const key = projectJobKey(project.id)
+    if (saveConflictParked(key)) continue
+    const wire = projectWire(project)
+    if (project.notion?.ackedHash !== wireHash(wire.title, wire.body)) {
+      jobs.set(key, {
+        op: 'project-upsert',
+        projectId: project.id,
+        coursePath: project.coursePath,
+        attempts: jobs.get(key)?.attempts || 0
+      })
+    }
+  }
+  const intent = readPlaylistIntentRecord()
+  if (intent && !intent.notion?.conflict) {
+    const wire = intentWire(intent)
+    const hash = wireHash(wire.title, wire.body)
+    if ((intent.goal || intent.interests?.length) && intent.notion?.ackedHash !== hash) {
+      jobs.set('intent:playlist-intent', {
+        op: 'intent-upsert',
+        attempts: jobs.get('intent:playlist-intent')?.attempts || 0
+      })
+    }
+  }
+  for (const tomb of readState().topicTombstones || []) {
+    if (tomb.conflict) continue
+    const key = topicKey(tomb.topicId)
+    if (!saveConflictParked(key)) jobs.set(key, { op: 'topic-delete', topicId: tomb.topicId })
+  }
+  for (const tomb of readState().projectTombstones || []) {
+    if (tomb.conflict) continue
+    const key = projectJobKey(tomb.projectId)
+    if (!saveConflictParked(key)) {
+      jobs.set(key, {
+        op: 'project-delete',
+        projectId: tomb.projectId,
+        coursePath: tomb.coursePath || ''
+      })
+    }
+  }
+}
+
+async function queueRowPoll(client) {
+  const startedAt = new Date().toISOString()
+  const watermark = readState().pollWatermark || ''
+  notePrepare(watermark ? 'Revisando cambios…' : 'Leyendo la base…')
+  let changed = null
+  try {
+    changed = await client.listPages(watermark ? { editedAfter: watermark } : {})
+    if (changed) notePrepare(`Revisando ${changed.length} páginas`)
+  } catch (error) {
+    noteFailure(error)
+  }
+  if (Array.isArray(changed)) {
+    for (const row of changed) enqueueChangedRow(row)
+  }
+  queueLocalRowDrift()
+  const fresh = (changed || []).filter(
+    (row) =>
+      row.editedAt &&
+      row.editedAt !== rowCursorEdited(row) &&
+      row.kind !== 'course' &&
+      row.kind !== 'file'
+  )
+  if (Array.isArray(changed) && fresh.length === 0) {
+    const state = readState()
+    state.pollWatermark = startedAt
+    writeState(state)
+  }
+}
+
 async function queuePending() {
   if (!getNotionConfig().enabled) return
   notePrepare('Revisando Notion…')
+  const client = clientFromConfig()
+  try {
+    await ensureRowSchema(client)
+  } catch (error) {
+    noteFailure(error)
+    clearPrepare()
+    publish()
+    return
+  }
+  if (rowsReady()) {
+    const probe = {
+      at: new Date().toISOString(),
+      error: null,
+      recentCount: 0,
+      recentOldest: null,
+      recentComplete: true,
+      skipped: 0,
+      opened: 0,
+      queued: []
+    }
+    const errorBefore = lastError
+    lastProbe = probe
+    try {
+      await queueRowPoll(client)
+    } catch (error) {
+      noteFailure(error)
+    }
+    probe.error = lastError !== errorBefore ? lastError : null
+    clearPrepare()
+    publish()
+    return
+  }
   let remotePages = null
   let recent = { pages: [], complete: false }
-  const client = clientFromConfig()
   const probe = {
     at: new Date().toISOString(),
     error: null,
@@ -1179,9 +2258,7 @@ async function queuePending() {
   } catch {
     recent = { pages: [], complete: false }
   }
-  const recentById = new Map(
-    (recent.pages || []).map((page) => [notionPageKey(page.pageId), page])
-  )
+  const recentById = new Map((recent.pages || []).map((page) => [notionPageKey(page.pageId), page]))
   probe.recentCount = recentById.size
   probe.recentOldest = recent.pages?.length ? recent.pages[recent.pages.length - 1].editedAt : null
   probe.recentComplete = Boolean(recent.complete)
@@ -1211,14 +2288,16 @@ async function queuePending() {
     const localHash = wireHash(finding.title, finding.body)
     const row = (remotePages || []).find((page) => page.pageId === finding.notion?.pageId)
     const remote =
-      row || recentById.get(notionPageKey(finding.notion?.pageId)) || remoteByFinding.get(finding.id)
+      row ||
+      recentById.get(notionPageKey(finding.notion?.pageId)) ||
+      remoteByFinding.get(finding.id)
     const localChanged = !finding.notion?.ackedHash || finding.notion.ackedHash !== localHash
     const timeChanged = videoTimeNeedsSync(finding)
     const remoteChanged = Boolean(
       remote?.editedAt &&
-        remote.editedAt !== finding.notion?.remoteEditedAt &&
-        finding.notion?.ackedHash &&
-        finding.notion.ackedHash !== localHash
+      remote.editedAt !== finding.notion?.remoteEditedAt &&
+      finding.notion?.ackedHash &&
+      finding.notion.ackedHash !== localHash
     )
     const place = notionPlace(finding, courseTitles)
     const canPlace = Boolean(place.fileKey) || place.courseKey !== 'course:__loose__'
@@ -1279,7 +2358,10 @@ const PAGE_ICONS = {
   note: '📝',
   playlists: '📋',
   playlist: '🗂️',
-  progress: '✅'
+  progress: '✅',
+  topic: '🏷️',
+  project: '🎯',
+  intent: '✨'
 }
 
 const PLAYLIST_MARKER = 'node:table:playlists'
@@ -1344,6 +2426,15 @@ async function ensurePlaylistSection(client) {
 }
 
 async function loadPlaylistRemote(client, playlist, sectionId) {
+  if (rowsReady()) {
+    if (playlist?.notion?.pageId) {
+      const direct = await client.readPage(playlist.notion.pageId)
+      if (direct && (direct.kind === 'playlist' || direct.playlistId === playlist.id)) return direct
+    }
+    const found = await client.findRow('playlist', playlist.id)
+    if (!found?.pageId) return null
+    return client.readPage(found.pageId)
+  }
   if (playlist?.notion?.pageId) {
     const direct = await client.readPage(playlist.notion.pageId)
     if (direct) return direct
@@ -1367,6 +2458,17 @@ function playlistChildTitles(playlist) {
 async function savePlaylistPage(client, playlist, remote) {
   const wire = playlistWire(playlist)
   const titles = playlistChildTitles(playlist)
+  if (rowsReady()) {
+    return client.saveRow({
+      kind: 'playlist',
+      externalId: playlist.id,
+      title: wire.title,
+      body: wire.body,
+      pageId: remote?.pageId || null,
+      childTitles: titles,
+      emoji: PAGE_ICONS.playlist
+    })
+  }
   const parentId = await ensurePlaylistSection(client)
   if (remote?.pageId) {
     const parent = await client.pageParent(remote.pageId)
@@ -1459,7 +2561,11 @@ async function reconcilePlaylist(client, id, { refresh = false } = {}) {
       })
     } else {
       const hash = wireHash(remote.title, remote.body)
-      applyPlaylist(id, cursorFrom(remote, hash, listShapeExtra(remote, { pulledAt: Date.now() })), remote)
+      applyPlaylist(
+        id,
+        cursorFrom(remote, hash, listShapeExtra(remote, { pulledAt: Date.now() })),
+        remote
+      )
       notifyPlaylists()
     }
   } else if (action === 'relink') {
@@ -1514,7 +2620,9 @@ async function reconcilePlaylistDelete(client, playlistId) {
   })
   if (action === 'drop' || action === 'archive') {
     if (action === 'archive') await client.archivePage(tomb.pageId)
-    writePlaylistTombstones(readPlaylistTombstones().filter((item) => item.playlistId !== playlistId))
+    writePlaylistTombstones(
+      readPlaylistTombstones().filter((item) => item.playlistId !== playlistId)
+    )
     return
   }
   writePlaylistTombstones(
@@ -1549,11 +2657,7 @@ async function queuePlaylists(client, remotePages) {
   for (let index = 0; index < children.length; index += 1) {
     const child = children[index]
     const known = knownByPage.get(child.pageId)
-    notePrepare(
-      `Listas, ${index + 1} de ${children.length}${known?.title ? ` · ${known.title}` : ''}`,
-      index + 1,
-      children.length
-    )
+    notePrepare(known?.title ? `Listas · ${known.title}` : 'Listas', index + 1, children.length)
     const unchanged =
       known?.notion?.listShape === 'blocks' &&
       known.notion.remoteEditedAt &&
@@ -1572,11 +2676,7 @@ async function queuePlaylists(client, remotePages) {
     }
     const page = await client.readPage(child.pageId)
     if (!page?.playlistId) continue
-    notePrepare(
-      `Listas, ${index + 1} de ${children.length}${page.title ? ` · ${page.title}` : ''}`,
-      index + 1,
-      children.length
-    )
+    notePrepare(page.title ? `Listas · ${page.title}` : 'Listas', index + 1, children.length)
     remoteById.set(page.playlistId, page)
     if (readPlaylistTombstones().some((item) => item.playlistId === page.playlistId)) continue
     if (!readPlaylist(page.playlistId)) {
@@ -1591,7 +2691,7 @@ async function queuePlaylists(client, remotePages) {
       adopted += 1
     }
   }
-  if (children.length) notePrepare(`Listas, ${children.length} de ${children.length}`, children.length, children.length)
+  if (children.length) notePrepare('Listas', children.length, children.length)
   if (adopted) notifyPlaylists()
   for (const playlist of listPlaylistRecords()) {
     if (playlist.notion?.conflict) continue
@@ -1686,15 +2786,32 @@ function rememberProgressError(coursePath, message) {
   })
 }
 
+function withLocalPlayback(coursePath, data) {
+  const course = readCourseProgressRecord(coursePath)
+  const lessons = {}
+  for (const [key, lesson] of Object.entries(data?.lessons || {})) {
+    lessons[key] = {
+      ...lesson,
+      positionSec: course?.lessons?.[key]?.positionSec || lesson.positionSec || 0
+    }
+  }
+  return {
+    ...data,
+    lessons,
+    lastPositionSec: course?.lastPositionSec || data?.lastPositionSec || 0
+  }
+}
+
 async function applyProgress(coursePath, data, notion) {
+  const next = withLocalPlayback(coursePath, data)
   writeCourseProgress(coursePath, {
-    lessons: data.lessons,
+    lessons: next.lessons,
     replaceLessons: true,
-    lastLessonRelativePath: data.lastLessonRelativePath || null,
-    lastLessonTitle: data.lastLessonTitle || null,
-    lastPositionSec: data.lastPositionSec || 0,
-    lastOpenedAt: data.lastOpenedAt || null,
-    inProcess: Boolean(data.inProcess),
+    lastLessonRelativePath: next.lastLessonRelativePath || null,
+    lastLessonTitle: next.lastLessonTitle || null,
+    lastPositionSec: next.lastPositionSec || 0,
+    lastOpenedAt: next.lastOpenedAt || null,
+    inProcess: Boolean(next.inProcess),
     notion
   })
   const file = coursePropsFile(coursePath)
@@ -1724,6 +2841,15 @@ async function ensureProgressSection(client) {
 }
 
 async function loadProgressRemote(client, course, sectionId) {
+  if (rowsReady()) {
+    if (course?.notion?.pageId) {
+      const direct = await client.readPage(course.notion.pageId)
+      if (direct?.progressId || direct?.kind === 'progress') return direct
+    }
+    const found = await client.findRow('progress', course?.id)
+    if (!found?.pageId) return null
+    return client.readPage(found.pageId)
+  }
   if (course?.notion?.pageId) {
     const direct = await client.readPage(course.notion.pageId)
     if (direct?.progressId) return direct
@@ -1739,12 +2865,31 @@ async function loadProgressRemote(client, course, sectionId) {
 
 async function saveProgressPage(client, coursePath, data, remote) {
   const wire = progressWire(data)
+  if (rowsReady()) {
+    return client.saveRow({
+      kind: 'progress',
+      externalId: coursePath,
+      courseKey: `course:${coursePath}`,
+      title: courseTitle(coursePath),
+      body: wire.body,
+      inProcess: Boolean(data.inProcess),
+      pageId: remote?.pageId || null,
+      emoji: PAGE_ICONS.progress
+    })
+  }
   const parentId = await ensureProgressSection(client)
   const title = courseTitle(coursePath)
   if (remote?.pageId) {
     const parent = await client.pageParent(remote.pageId)
     if (parent?.type === 'page_id' && parent.id === parentId) {
-      return client.updatePage(remote.pageId, coursePath, title, wire.body, PAGE_ICONS.progress, 'progress')
+      return client.updatePage(
+        remote.pageId,
+        coursePath,
+        title,
+        wire.body,
+        PAGE_ICONS.progress,
+        'progress'
+      )
     }
     const created = await client.createPage(
       coursePath,
@@ -1789,14 +2934,28 @@ async function reconcileProgress(client, coursePath) {
     const page = await saveProgressPage(client, coursePath, local, remote)
     if (!page?.pageId) throw new Error('Notion no devolvió el progreso')
     const written = progressWire(local).body
-    const remoteHash = page.body === undefined ? localHash : wireHash(page.title, page.body || written)
-    writeCourseProgress(coursePath, { notion: cursorFrom(page, remoteHash === localHash ? localHash : remoteHash) })
+    const remoteHash =
+      page.body === undefined ? localHash : wireHash(page.title, page.body || written)
+    writeCourseProgress(coursePath, {
+      notion: cursorFrom(page, remoteHash === localHash ? localHash : remoteHash)
+    })
     return
   }
   if (!remoteData) return
+  if (action === 'relink' && remote?.body && String(remote.body).includes('"positionSec"')) {
+    const page = await saveProgressPage(client, coursePath, local, remote)
+    const hash = wireHash(coursePath, progressWire(local).body)
+    writeCourseProgress(coursePath, { notion: cursorFrom(page || remote, hash) })
+    return
+  }
   if (action === 'pull' || action === 'relink') {
-    const hash = action === 'relink' ? localHash : wireHash(coursePath, progressWire(remoteData).body)
-    await applyProgress(coursePath, remoteData, cursorFrom(remote, hash, action === 'pull' ? { pulledAt: Date.now() } : {}))
+    const hash =
+      action === 'relink' ? localHash : wireHash(coursePath, progressWire(remoteData).body)
+    await applyProgress(
+      coursePath,
+      remoteData,
+      cursorFrom(remote, hash, action === 'pull' ? { pulledAt: Date.now() } : {})
+    )
     return
   }
   const merged = mergeCourseProgress(local, remoteData)
@@ -1870,7 +3029,13 @@ async function queueProgress(client) {
     noteQueued(
       lastProbe,
       key,
-      adoptRemote ? 'sin cursor' : remoteChanged ? 'notion' : localChanged ? 'local' : 'falta la página'
+      adoptRemote
+        ? 'sin cursor'
+        : remoteChanged
+          ? 'notion'
+          : localChanged
+            ? 'local'
+            : 'falta la página'
     )
   }
 }
@@ -1962,7 +3127,11 @@ export function enqueueNotionProgress(coursePath, { soon = false } = {}) {
   conflictCooldown.delete(key)
   const course = readCourseProgressRecord(keyName)
   if (course?.notion?.conflict) return
-  jobs.set(key, { op: 'progress-upsert', coursePath: keyName, attempts: jobs.get(key)?.attempts || 0 })
+  jobs.set(key, {
+    op: 'progress-upsert',
+    coursePath: keyName,
+    attempts: jobs.get(key)?.attempts || 0
+  })
   if (soon || !timer) schedule(soon ? 1200 : 8000)
 }
 
@@ -1990,6 +3159,70 @@ export function enqueueNotionPlaylistUpsert(id) {
       refresh: true
     })
   }
+  schedule(1200)
+}
+
+export function enqueueNotionTopicUpsert(id) {
+  if (!id || !getNotionConfig().enabled) return
+  const key = topicKey(id)
+  conflictCooldown.delete(key)
+  const topic = readTopic(id)
+  if (!topic || topic.notion?.conflict) return
+  jobs.set(key, { op: 'topic-upsert', topicId: id, attempts: jobs.get(key)?.attempts || 0 })
+  schedule(1200)
+}
+
+export function enqueueNotionTopicDelete(topic) {
+  if (!getNotionConfig().enabled || !topic?.id) return
+  const key = topicKey(topic.id)
+  rememberTopicDelete(topic)
+  if (!topic.notion?.pageId) {
+    jobs.delete(key)
+    return
+  }
+  jobs.set(key, { op: 'topic-delete', topicId: topic.id })
+  schedule(1200)
+}
+
+export function enqueueNotionProjectUpsert(coursePath, id) {
+  const folder = path.basename(String(coursePath || ''))
+  if (!id || !folder || !getNotionConfig().enabled) return
+  const key = projectJobKey(id)
+  conflictCooldown.delete(key)
+  const project = readStoredProject(folder, id)
+  if (!project || project.notion?.conflict) return
+  jobs.set(key, {
+    op: 'project-upsert',
+    projectId: id,
+    coursePath: folder,
+    attempts: jobs.get(key)?.attempts || 0
+  })
+  schedule(1200)
+}
+
+export function enqueueNotionProjectDelete(project) {
+  if (!getNotionConfig().enabled || !project?.id) return
+  const key = projectJobKey(project.id)
+  rememberProjectDelete(project)
+  if (!project.notion?.pageId) {
+    jobs.delete(key)
+    return
+  }
+  jobs.set(key, {
+    op: 'project-delete',
+    projectId: project.id,
+    coursePath: project.coursePath || ''
+  })
+  schedule(1200)
+}
+
+export function enqueueNotionIntent() {
+  if (!getNotionConfig().enabled) return
+  const key = 'intent:playlist-intent'
+  conflictCooldown.delete(key)
+  const intent = readPlaylistIntentRecord()
+  if (intent?.notion?.conflict) return
+  jobs.set(key, { op: 'intent-upsert', attempts: jobs.get(key)?.attempts || 0 })
   schedule(1200)
 }
 
@@ -2062,7 +3295,8 @@ export function notionDebugReport() {
       `- ${clipDebug(finding.title || finding.id)} | página ${finding.notion?.pageId || 'no'} | cursor ${finding.notion?.ackedHash ? 'sí' : 'no'} | editada ${finding.notion?.remoteEditedAt || '—'} | conflicto ${finding.notion?.conflict ? 'sí' : 'no'}`
     )
   }
-  if (pendingNotes.length > 40) lines.push(`- y ${pendingNotes.length - 40} más sin cursor o en conflicto`)
+  if (pendingNotes.length > 40)
+    lines.push(`- y ${pendingNotes.length - 40} más sin cursor o en conflicto`)
   lines.push(`progreso: ${progress.length} cursos`)
   const pendingProgress = progress.filter(
     (course) => !course.notion?.pageId || !course.notion?.ackedHash || course.notion?.conflict
@@ -2310,16 +3544,16 @@ export async function resolveNotionPlaylistConflict(playlistId, choice) {
     if (choice === 'local') {
       await pushPlaylist(client, readPlaylist(playlistId) || playlist)
     } else if (choice === 'remote') {
-      const remote = await loadPlaylistRemote(
-        client,
-        playlist,
-        await ensurePlaylistSection(client)
-      )
+      const remote = await loadPlaylistRemote(client, playlist, await ensurePlaylistSection(client))
       if (!remote) throw new Error('La página de Notion ya no está')
       const parsed = playlistFromBody(remote.body)
       if (!parsed) throw new Error('La página de Notion ya no es una lista')
       const hash = wireHash(remote.title, remote.body)
-      applyPlaylist(playlistId, cursorFrom(remote, hash, listShapeExtra(remote, { pulledAt: Date.now() })), remote)
+      applyPlaylist(
+        playlistId,
+        cursorFrom(remote, hash, listShapeExtra(remote, { pulledAt: Date.now() })),
+        remote
+      )
       notifyPlaylists()
     } else {
       throw new Error('Elección desconocida')
@@ -2350,7 +3584,11 @@ export async function resolveNotionPlaylistDelete(playlistId, choice) {
       const parsed = playlistFromBody(remote.body)
       if (!parsed) throw new Error('La página de Notion ya no es una lista')
       const hash = wireHash(remote.title, remote.body)
-      applyPlaylist(playlistId, cursorFrom(remote, hash, listShapeExtra(remote, { pulledAt: Date.now() })), remote)
+      applyPlaylist(
+        playlistId,
+        cursorFrom(remote, hash, listShapeExtra(remote, { pulledAt: Date.now() })),
+        remote
+      )
       notifyPlaylists()
     } else {
       throw new Error('Elección desconocida')

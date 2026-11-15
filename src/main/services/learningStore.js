@@ -865,6 +865,7 @@ export function upsertTopic(payload = {}) {
     if (Array.isArray(payload.aliases)) {
       topic.aliases = payload.aliases.map((alias) => normalizeTopicTitle(alias)).filter(Boolean)
     }
+    if (payload.notion !== undefined) topic.notion = payload.notion
     topic.updatedAt = now
   } else {
     topic = {
@@ -873,12 +874,17 @@ export function upsertTopic(payload = {}) {
       aliases: [],
       summary: payload.summary ? String(payload.summary) : '',
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      ...(payload.notion !== undefined ? { notion: payload.notion } : {})
     }
     store.topics.push(topic)
   }
   writeStore(store)
   return topic
+}
+
+export function readTopic(id) {
+  return readStore().topics?.find((topic) => topic.id === id) || null
 }
 
 export function deleteTopic(topicId) {
@@ -981,6 +987,28 @@ export function listProjects(coursePath) {
 /**
  * Flatten projects across all courses for the global kanban board.
  */
+/** Every stored project, including courses hidden from the catalog. */
+export function listStoredProjects() {
+  const store = readStore()
+  const items = []
+  for (const [coursePath, value] of Object.entries(store.courses || {})) {
+    const key = courseKey(coursePath) || coursePath
+    for (const project of value?.projects || []) {
+      items.push({ ...project, coursePath: key })
+    }
+  }
+  return items
+}
+
+export function readStoredProject(coursePath, projectId) {
+  const key = courseKey(coursePath) || String(coursePath || '')
+  return (
+    listStoredProjects().find(
+      (item) => item.id === projectId && (!key || item.coursePath === key)
+    ) || null
+  )
+}
+
 export function listAllProjects() {
   const store = readStore()
   const hidden = hiddenCoursePathSet()
@@ -1069,6 +1097,7 @@ export function upsertProject(coursePath, payload) {
         payload.fileRelativePath !== undefined
           ? normalizeProjectRelativePath(payload.fileRelativePath)
           : course.projects[idx].fileRelativePath || null,
+      ...(payload.notion !== undefined ? { notion: payload.notion } : {}),
       updatedAt: now
     }
   } else {
@@ -1081,7 +1110,8 @@ export function upsertProject(coursePath, payload) {
       sectionId: payload.sectionId || null,
       fileRelativePath: normalizeProjectRelativePath(payload.fileRelativePath),
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      ...(payload.notion !== undefined ? { notion: payload.notion } : {})
     })
   }
 
@@ -1244,11 +1274,21 @@ export function getPlaylistIntent() {
   return normalizePlaylistIntent(store.playlistIntent)
 }
 
+export function readPlaylistIntentRecord() {
+  const store = readStore()
+  const intent = normalizePlaylistIntent(store.playlistIntent)
+  if (store.playlistIntent?.notion) intent.notion = store.playlistIntent.notion
+  return intent
+}
+
 export function savePlaylistIntent(payload) {
   const store = readStore()
-  store.playlistIntent = normalizePlaylistIntent(payload)
+  const next = normalizePlaylistIntent(payload)
+  if (payload?.notion !== undefined) next.notion = payload.notion
+  else if (store.playlistIntent?.notion) next.notion = store.playlistIntent.notion
+  store.playlistIntent = next
   writeStore(store)
-  return store.playlistIntent
+  return normalizePlaylistIntent(next)
 }
 
 function playlistsForDisplay(playlists) {

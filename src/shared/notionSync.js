@@ -219,21 +219,32 @@ export function playlistWire(playlist) {
 }
 
 function lessonWire(lesson) {
+  const wire = {
+    completed: Boolean(lesson?.completed),
+    durationSec: Math.max(0, Math.round(Number(lesson?.durationSec) || 0)),
+    lastOpenedAt: Math.max(0, Math.round(Number(lesson?.lastOpenedAt) || 0))
+  }
+  if (lesson && Object.prototype.hasOwnProperty.call(lesson, 'positionSec')) {
+    wire.positionSec = Math.max(0, Math.round(Number(lesson.positionSec) || 0))
+  }
+  return wire
+}
+
+function lessonShared(lesson) {
   return {
     completed: Boolean(lesson?.completed),
-    positionSec: Math.max(0, Math.round(Number(lesson?.positionSec) || 0)),
     durationSec: Math.max(0, Math.round(Number(lesson?.durationSec) || 0)),
     lastOpenedAt: Math.max(0, Math.round(Number(lesson?.lastOpenedAt) || 0))
   }
 }
 
-/** Progress shared between copies. The scanned lesson list stays on each computer. */
+/** Progress shared between copies. Playback position stays on this machine. */
 export function progressWire(progress) {
   const lessons = {}
   const source = progress?.lessons && typeof progress.lessons === 'object' ? progress.lessons : {}
   for (const key of Object.keys(source).sort()) {
     if (!key) continue
-    lessons[key] = lessonWire(source[key])
+    lessons[key] = lessonShared(source[key])
   }
   const body = normalizeBody(
     JSON.stringify({
@@ -241,7 +252,6 @@ export function progressWire(progress) {
       lessons,
       lastLessonRelativePath: String(progress?.lastLessonRelativePath || ''),
       lastLessonTitle: String(progress?.lastLessonTitle || ''),
-      lastPositionSec: Math.max(0, Math.round(Number(progress?.lastPositionSec) || 0)),
       lastOpenedAt: Math.max(0, Math.round(Number(progress?.lastOpenedAt) || 0))
     })
   )
@@ -323,6 +333,166 @@ export function mergeCourseProgress(local, remote) {
     lastLessonTitle: last.lastLessonTitle,
     lastPositionSec: last.lastPositionSec,
     lastOpenedAt: last.lastOpenedAt
+  }
+}
+
+function sortedStrings(values) {
+  const out = []
+  const seen = new Set()
+  for (const value of values || []) {
+    const text = String(value || '').trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    out.push(text)
+  }
+  return out
+}
+
+/** Anchors shared with Notion. Every place stays, not only the first one. */
+export function noteAnchorsWire(anchors) {
+  return (Array.isArray(anchors) ? anchors : []).map((anchor) => ({
+    coursePath: anchor?.coursePath || null,
+    lessonRelativePath: anchor?.lessonRelativePath || null,
+    lessonTitle: anchor?.lessonTitle || null,
+    timeSec: roundTimeSec(anchor?.timeSec),
+    projectId: anchor?.projectId || null,
+    projectTitle: anchor?.projectTitle || null
+  }))
+}
+
+export function anchorsToText(anchors) {
+  return JSON.stringify(noteAnchorsWire(anchors))
+}
+
+export function anchorsFromText(text) {
+  try {
+    const data = JSON.parse(String(text || ''))
+    if (!Array.isArray(data)) return []
+    return noteAnchorsWire(data)
+  } catch {
+    return []
+  }
+}
+
+export function topicIdsToText(ids) {
+  return sortedStrings(ids).join('\n')
+}
+
+export function topicIdsFromText(text) {
+  return sortedStrings(String(text || '').split('\n'))
+}
+
+/** Note fields that participate in the sync hash. */
+export function noteWire(finding) {
+  return {
+    title: normalizeTitle(finding?.title),
+    body: normalizeBody(finding?.body),
+    color: String(finding?.color || '').trim(),
+    anchors: noteAnchorsWire(finding?.anchors),
+    topicIds: sortedStrings(finding?.topicIds)
+  }
+}
+
+export function noteWireHash(finding) {
+  const wire = noteWire(finding)
+  return wireHash(
+    wire.title,
+    JSON.stringify({
+      body: wire.body,
+      color: wire.color,
+      anchors: wire.anchors,
+      topicIds: wire.topicIds
+    })
+  )
+}
+
+/** Topic title is the page title. Summary and aliases ride in the body. */
+export function topicWire(topic) {
+  const aliases = sortedStrings(topic?.aliases).sort((a, b) => a.localeCompare(b))
+  const body = normalizeBody(
+    JSON.stringify({
+      summary: String(topic?.summary || ''),
+      aliases
+    })
+  )
+  return { title: normalizeTitle(topic?.title) || 'Tema', body }
+}
+
+export function topicFromBody(body) {
+  try {
+    const data = JSON.parse(String(body || ''))
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+    return {
+      summary: String(data.summary || ''),
+      aliases: sortedStrings(data.aliases)
+    }
+  } catch {
+    return null
+  }
+}
+
+const PROJECT_STATUSES = new Set(['todo', 'in_progress', 'done'])
+
+/** Project brief and status. The linked folder path stays on this machine. */
+export function projectWire(project) {
+  const status = PROJECT_STATUSES.has(project?.status) ? project.status : 'todo'
+  const body = normalizeBody(
+    JSON.stringify({
+      notes: String(project?.notes || ''),
+      sectionId: String(project?.sectionId || ''),
+      fileRelativePath: String(project?.fileRelativePath || ''),
+      status
+    })
+  )
+  return { title: normalizeTitle(project?.title) || 'Proyecto', body, status }
+}
+
+export function projectFromBody(body) {
+  try {
+    const data = JSON.parse(String(body || ''))
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+    const status = PROJECT_STATUSES.has(data.status) ? data.status : 'todo'
+    return {
+      notes: String(data.notes || ''),
+      sectionId: String(data.sectionId || ''),
+      fileRelativePath: String(data.fileRelativePath || ''),
+      status
+    }
+  } catch {
+    return null
+  }
+}
+
+export const PLAYLIST_INTENT_ID = 'playlist-intent'
+
+/** One board-level goal. Canvas layout is not part of this payload. */
+export function intentWire(intent) {
+  const interests = []
+  const seen = new Set()
+  for (const item of Array.isArray(intent?.interests) ? intent.interests : []) {
+    const text = String(item || '').trim()
+    const key = text.toLowerCase()
+    if (text.length < 2 || seen.has(key)) continue
+    seen.add(key)
+    interests.push(text)
+    if (interests.length >= 8) break
+  }
+  const body = normalizeBody(
+    JSON.stringify({
+      goal: String(intent?.goal || '').trim(),
+      interests
+    })
+  )
+  return { title: 'Intención', body }
+}
+
+export function intentFromBody(body) {
+  try {
+    const data = JSON.parse(String(body || ''))
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+    return intentWire(data)
+  } catch {
+    return null
   }
 }
 

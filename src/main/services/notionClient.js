@@ -1,4 +1,5 @@
 import {
+  anchorsFromText,
   blocksToBody,
   bodyToBlocks,
   playlistBlocks,
@@ -15,8 +16,12 @@ import {
   noteAssetsFromBlocks,
   normalizeBody,
   normalizeTitle,
-  plainRichText
+  plainRichText,
+  topicIdsFromText
 } from '../../shared/notionSync.js'
+
+const KIND_OPTIONS = ['course', 'file', 'note', 'playlist', 'progress', 'topic', 'project', 'intent']
+const STATUS_OPTIONS = ['todo', 'in_progress', 'done']
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'])
 
@@ -202,39 +207,126 @@ export function createNotionClient({
     throw missing
   }
 
+  function selectOptions(names) {
+    return names.map((name) => ({ name }))
+  }
+
   async function loadSchema() {
     if (schema) return schema
     await useCurrentVersion()
     const dataSourceId = await resolveDataSourceId()
     const source = await request(`/data_sources/${dataSourceId}`)
+    const found = {}
     let titleName = null
-    let findingName = null
-    let nodeName = null
     for (const [name, property] of Object.entries(source.properties || {})) {
       if (property?.type === 'title') titleName = name
-      if (property?.type === 'rich_text' && name === 'Finding') findingName = name
-      if (property?.type === 'rich_text' && name === 'Nodo') nodeName = name
+      found[name] = property?.type || ''
     }
     if (!titleName) throw new Error('La base de Notion no tiene una propiedad de título')
     const properties = {}
-    if (!findingName) properties.Finding = { rich_text: {} }
-    if (!nodeName) properties.Nodo = { rich_text: {} }
+    const expect = {
+      Finding: 'rich_text',
+      Nodo: 'rich_text',
+      Kind: 'select',
+      Id: 'rich_text',
+      Parent: 'rich_text',
+      Course: 'rich_text',
+      Seconds: 'number',
+      'In progress': 'checkbox',
+      Color: 'rich_text',
+      Status: 'select',
+      Anchors: 'rich_text',
+      'Topic ids': 'rich_text'
+    }
+    for (const [name, type] of Object.entries(expect)) {
+      if (found[name] === type) continue
+      if (type === 'rich_text') properties[name] = { rich_text: {} }
+      else if (type === 'number') properties[name] = { number: { format: 'number' } }
+      else if (type === 'checkbox') properties[name] = { checkbox: {} }
+      else if (name === 'Kind') properties[name] = { select: { options: selectOptions(KIND_OPTIONS) } }
+      else if (name === 'Status') properties[name] = { select: { options: selectOptions(STATUS_OPTIONS) } }
+    }
     if (Object.keys(properties).length) {
       await request(`/data_sources/${dataSourceId}`, {
         method: 'PATCH',
         body: { properties }
       })
-      findingName = findingName || 'Finding'
-      nodeName = nodeName || 'Nodo'
     }
-    schema = { titleName, findingName, nodeName, dataSourceId }
+    schema = {
+      titleName,
+      findingName: 'Finding',
+      nodeName: 'Nodo',
+      kindName: 'Kind',
+      idName: 'Id',
+      parentName: 'Parent',
+      courseName: 'Course',
+      secondsName: 'Seconds',
+      inProcessName: 'In progress',
+      colorName: 'Color',
+      statusName: 'Status',
+      anchorsName: 'Anchors',
+      topicIdsName: 'Topic ids',
+      dataSourceId
+    }
     return schema
   }
 
-  function propertiesFor(names, findingId, title) {
-    return {
+  function richProperty(value) {
+    const text = String(value ?? '')
+    if (!text) return { rich_text: [] }
+    return { rich_text: chunkRichText(text) }
+  }
+
+  function propertiesFor(names, findingId, title, extra = null) {
+    const properties = {
       [names.titleName]: { title: chunkRichText(normalizeTitle(title)) },
       [names.findingName]: { rich_text: chunkRichText(String(findingId || '')) }
+    }
+    if (!extra) return properties
+    return { ...properties, ...rowProperties(names, { ...extra, title, externalId: extra.externalId || findingId }) }
+  }
+
+  function rowProperties(names, row) {
+    const seconds = row.seconds == null || row.seconds === '' ? null : Number(row.seconds)
+    return {
+      [names.titleName]: { title: chunkRichText(normalizeTitle(row.title)) },
+      [names.kindName]: { select: row.kind ? { name: row.kind } : null },
+      [names.idName]: richProperty(row.externalId),
+      [names.parentName]: richProperty(row.parentExternalId),
+      [names.courseName]: richProperty(row.courseKey),
+      [names.secondsName]: { number: Number.isFinite(seconds) ? seconds : null },
+      [names.inProcessName]: { checkbox: Boolean(row.inProcess) },
+      [names.colorName]: richProperty(row.color),
+      [names.statusName]: { select: row.status ? { name: row.status } : null },
+      [names.anchorsName]: richProperty(row.anchorsText),
+      [names.topicIdsName]: richProperty(row.topicIdsText),
+      ...(row.kind === 'note' && names.findingName
+        ? { [names.findingName]: { rich_text: chunkRichText(String(row.externalId || '')) } }
+        : {}),
+      ...(row.nodeMarker && names.nodeName
+        ? { [names.nodeName]: { rich_text: chunkRichText(String(row.nodeMarker)) } }
+        : {})
+    }
+  }
+
+  function selectValue(property) {
+    return property?.select?.name || ''
+  }
+
+  function rowFields(page, names) {
+    const props = page?.properties || {}
+    const seconds = props[names.secondsName]?.number
+    return {
+      kind: selectValue(props[names.kindName]),
+      externalId: plainRichText(props[names.idName]?.rich_text).trim(),
+      parentExternalId: plainRichText(props[names.parentName]?.rich_text).trim(),
+      courseKey: plainRichText(props[names.courseName]?.rich_text).trim(),
+      seconds: typeof seconds === 'number' && Number.isFinite(seconds) ? seconds : null,
+      inProcess: props[names.inProcessName]?.checkbox === true,
+      color: plainRichText(props[names.colorName]?.rich_text).trim(),
+      status: selectValue(props[names.statusName]),
+      anchors: anchorsFromText(plainRichText(props[names.anchorsName]?.rich_text)),
+      topicIds: topicIdsFromText(plainRichText(props[names.topicIdsName]?.rich_text))
     }
   }
 
@@ -276,7 +368,7 @@ export function createNotionClient({
     return blocks
   }
 
-  async function listPages() {
+  async function listPages({ editedAfter } = {}) {
     const names = await loadSchema()
     const pages = []
     const seen = new Set()
@@ -286,22 +378,51 @@ export function createNotionClient({
         method: 'POST',
         body: {
           page_size: 100,
-          ...(cursor ? { start_cursor: cursor } : {})
+          ...(cursor ? { start_cursor: cursor } : {}),
+          ...(editedAfter
+            ? {
+                filter: {
+                  timestamp: 'last_edited_time',
+                  last_edited_time: { on_or_after: editedAfter }
+                }
+              }
+            : {})
         }
       })
       for (const page of data.results || []) {
         if (page.archived || page.in_trash) continue
+        const fields = rowFields(page, names)
         pages.push({
           pageId: page.id,
           findingId: plainRichText(page.properties?.[names.findingName]?.rich_text).trim(),
           nodeMarker: plainRichText(page.properties?.[names.nodeName]?.rich_text).trim(),
           parentType: page.parent?.type || '',
-          editedAt: page.last_edited_time || null
+          editedAt: page.last_edited_time || null,
+          ...fields,
+          timeSec: fields.seconds
         })
       }
       cursor = advanceCursor(data, seen)
     } while (cursor)
     return pages
+  }
+
+  async function findRow(kind, externalId) {
+    const names = await loadSchema()
+    const id = String(externalId || '')
+    if (!id) return null
+    const filters = [{ property: names.idName, rich_text: { equals: id } }]
+    if (kind) filters.push({ property: names.kindName, select: { equals: kind } })
+    const data = await request(`/data_sources/${names.dataSourceId}/query`, {
+      method: 'POST',
+      body: {
+        page_size: 5,
+        filter: filters.length === 1 ? filters[0] : { and: filters }
+      }
+    })
+    const page = (data.results || []).find((item) => !item.archived && !item.in_trash)
+    if (!page) return null
+    return { pageId: page.id, editedAt: page.last_edited_time || null, ...rowFields(page, names) }
   }
 
   async function findPage(findingId) {
@@ -328,17 +449,30 @@ export function createNotionClient({
       if (!summary || summary.archived) return null
       const blocks = await listChildren(pageId)
       const fromProperty = plainRichText(page.properties?.[names.findingName]?.rich_text).trim()
-      const playlistId = playlistIdFromBlocks(blocks)
+      const fields = rowFields(page, names)
+      const playlistId =
+        fields.kind === 'playlist'
+          ? fields.externalId || playlistIdFromBlocks(blocks)
+          : playlistIdFromBlocks(blocks)
+      const progressId =
+        fields.kind === 'progress'
+          ? fields.externalId || progressIdFromBlocks(blocks)
+          : progressIdFromBlocks(blocks)
+      const blockTime = timeSecFromBlocks(blocks)
       return {
         ...summary,
         body: playlistId ? playlistBodyFromBlocks(blocks) : blocksToBody(blocks),
-        findingId: findingIdFromBlocks(blocks) || fromProperty,
-        timeSec: timeSecFromBlocks(blocks),
+        findingId:
+          fields.kind === 'note'
+            ? fields.externalId || findingIdFromBlocks(blocks) || fromProperty
+            : findingIdFromBlocks(blocks) || fromProperty,
+        timeSec: fields.seconds != null ? fields.seconds : blockTime,
         playlistId,
         playlistLegacy: playlistId ? playlistIsLegacy(blocks) : false,
-        progressId: progressIdFromBlocks(blocks),
+        progressId,
         marker: markerFromBlocks(blocks),
-        assets: noteAssetsFromBlocks(blocks)
+        assets: noteAssetsFromBlocks(blocks),
+        ...fields
       }
     } catch (error) {
       if (error.status === 404 || error.code === 'object_not_found') return null
@@ -374,6 +508,10 @@ export function createNotionClient({
     return bodyToBlocks(body, findingId, kind, timeSec)
   }
 
+  function contentBlocks(existing) {
+    return (existing || []).filter((block) => block?.type !== 'child_page' && !keepsBlock(block))
+  }
+
   async function writeBody(pageId, body, findingId, kind = 'finding', childTitles = null, timeSec = undefined) {
     const existing = await listChildren(pageId)
     const stamped =
@@ -384,10 +522,24 @@ export function createNotionClient({
           : findingIdFromBlocks(existing)
     const time =
       kind === 'finding' ? (timeSec !== undefined ? timeSec : timeSecFromBlocks(existing)) : undefined
-    await replaceContent(
-      pageId,
-      pageChildren(body, stamped || findingId || null, kind, childTitles, time)
-    )
+    const children = pageChildren(body, stamped || findingId || null, kind, childTitles, time)
+    const current = contentBlocks(existing)
+    const canPatch =
+      kind !== 'playlist' &&
+      children.length === 1 &&
+      children[0].type === 'code' &&
+      current.length === 1 &&
+      current[0].type === 'code' &&
+      current[0].id
+    if (canPatch) {
+      const patched = await request(`/blocks/${current[0].id}`, {
+        method: 'PATCH',
+        body: { code: children[0].code }
+      })
+      return { patched: true, editedAt: patched?.last_edited_time || null }
+    }
+    await replaceContent(pageId, children)
+    return { patched: false, editedAt: null }
   }
 
   async function writeMarker(pageId, marker) {
@@ -416,13 +568,14 @@ export function createNotionClient({
     timeSec = undefined
   ) {
     const names = await loadSchema()
+    const inDatabase = !parentPageId
     const children = marker
       ? markerBlocks(marker)
-      : pageChildren(body, findingId, kind, childTitles, timeSec)
+      : pageChildren(body, findingId, kind, childTitles, inDatabase ? undefined : timeSec)
     const first = children.slice(0, 100)
     const rest = children.slice(100)
-    const inDatabase = !parentPageId
     const icon = emojiIcon(emoji)
+    const rowKind = kind === 'playlist' ? 'playlist' : kind === 'progress' ? 'progress' : 'note'
     const page = await request('/pages', {
       method: 'POST',
       body: {
@@ -431,7 +584,11 @@ export function createNotionClient({
           : { type: 'page_id', page_id: parentPageId },
         ...(icon ? { icon } : {}),
         properties: inDatabase
-          ? propertiesFor(names, findingId, title)
+          ? propertiesFor(names, findingId, title, {
+              kind: rowKind,
+              externalId: findingId,
+              seconds: timeSec === undefined ? null : timeSec
+            })
           : pageTitleProperties(title, false, names),
         ...(first.length ? { children: first } : {})
       }
@@ -491,12 +648,104 @@ export function createNotionClient({
       ? propertiesFor(names, findingId, title)
       : pageTitleProperties(title, false, names)
     const icon = emojiIcon(emoji)
-    await request(`/pages/${pageId}`, {
+    const saved = await request(`/pages/${pageId}`, {
       method: 'PATCH',
       body: { properties, ...(icon ? { icon } : {}) }
     })
-    await writeBody(pageId, normalizeBody(body), findingId, kind, childTitles, timeSec)
+    const wrote = await writeBody(pageId, normalizeBody(body), findingId, kind, childTitles, timeSec)
+    if (wrote.patched) {
+      return {
+        pageId,
+        title: normalizeTitle(title),
+        body: normalizeBody(body),
+        editedAt: (await pageEditedAt(pageId)) || saved?.last_edited_time || wrote.editedAt || null,
+        timeSec: kind === 'finding' && timeSec !== undefined ? timeSec : undefined,
+        findingId: kind === 'finding' ? String(findingId || '') : '',
+        playlistId: kind === 'playlist' ? String(findingId || '') : '',
+        progressId: kind === 'progress' ? String(findingId || '') : '',
+        playlistLegacy: false
+      }
+    }
     return readPage(pageId)
+  }
+
+  async function saveRow(row) {
+    const names = await loadSchema()
+    const kind = row?.kind || 'note'
+    const externalId = String(row?.externalId || '')
+    let pageId = row?.pageId || null
+    if (pageId) {
+      const parent = await pageParent(pageId)
+      if (!parent || parent.type === 'page_id') pageId = null
+    }
+    if (!pageId && externalId) {
+      const found = await findRow(kind, externalId)
+      pageId = found?.pageId || null
+    }
+    const properties = rowProperties(names, { ...row, kind, externalId })
+    const icon = emojiIcon(row?.emoji)
+    const writeKind = kind === 'note' ? 'finding' : kind
+    const skipBody = kind === 'course' || kind === 'file'
+    if (!pageId) {
+      const children = skipBody
+        ? []
+        : pageChildren(row?.body || '', externalId, writeKind, row?.childTitles || null, undefined).slice(0, 100)
+      const page = await request('/pages', {
+        method: 'POST',
+        body: {
+          parent: { type: 'data_source_id', data_source_id: names.dataSourceId },
+          ...(icon ? { icon } : {}),
+          properties,
+          ...(children.length ? { children } : {})
+        }
+      })
+      return {
+        pageId: page.id,
+        title: normalizeTitle(row?.title),
+        body: normalizeBody(row?.body || ''),
+        editedAt: page.last_edited_time || null,
+        timeSec: row?.seconds == null ? undefined : row.seconds,
+        kind,
+        externalId,
+        color: row?.color || '',
+        anchors: row?.anchors || [],
+        topicIds: row?.topicIds || [],
+        status: row?.status || '',
+        inProcess: Boolean(row?.inProcess)
+      }
+    }
+    const saved = await request(`/pages/${pageId}`, {
+      method: 'PATCH',
+      body: { properties, ...(icon ? { icon } : {}) }
+    })
+    let editedAt = saved?.last_edited_time || null
+    if (!skipBody) {
+      const wrote = await writeBody(
+        pageId,
+        normalizeBody(row?.body || ''),
+        externalId,
+        writeKind,
+        row?.childTitles || null,
+        undefined
+      )
+      if (!wrote.patched) editedAt = (await pageEditedAt(pageId)) || editedAt
+      else editedAt = (await pageEditedAt(pageId)) || wrote.editedAt || editedAt
+    }
+    return {
+      pageId,
+      title: normalizeTitle(row?.title),
+      body: normalizeBody(row?.body || ''),
+      editedAt,
+      timeSec: row?.seconds == null ? undefined : row.seconds,
+      kind,
+      externalId,
+      color: row?.color || '',
+      anchors: row?.anchors || [],
+      topicIds: row?.topicIds || [],
+      status: row?.status || '',
+      inProcess: Boolean(row?.inProcess),
+      playlistLegacy: false
+    }
   }
 
   async function setPageIcon(pageId, emoji) {
@@ -701,6 +950,8 @@ export function createNotionClient({
     loadSchema,
     listPages,
     findPage,
+    findRow,
+    saveRow,
     findNode,
     readPage,
     createPage,
