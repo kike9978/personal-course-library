@@ -904,37 +904,24 @@ export function notionErrorMessage({ status, code, message } = {}) {
     return 'Notion estaba guardando esa página al mismo tiempo.'
   }
   if (/not supported for the File Upload API/i.test(message || '')) {
-    return 'Notion no acepta ese tipo de archivo. Un dibujo .excalidraw se puede compartir como JSON, solo como imagen, o dejarlo en esta biblioteca.'
+    return 'Notion no acepta ese tipo de archivo. Los dibujos se envían como JSON para que la otra copia los pueda abrir.'
   }
   return message || 'No se pudo hablar con Notion'
 }
 
 /**
  * Which note files to send, and under which filename.
- * Notion rejects `.excalidraw`. JSON keeps the drawing editable on the other copy.
- * `image` sends the preview only. `local` sends neither the drawing nor its preview.
+ * Notion rejects `.excalidraw`, so the scene is uploaded as JSON.
+ * The other copy writes those bytes back to `{id}.excalidraw` and opens them as a drawing.
+ * The PNG preview is uploaded beside it.
  */
-export function notionAssetsToUpload(names, drawingShare) {
+export function notionAssetsToUpload(names) {
   const list = Array.isArray(names) ? names : []
-  const sceneIds = new Set(
-    list
-      .filter((name) => String(name).toLowerCase().endsWith('.excalidraw'))
-      .map((name) => String(name).slice(0, -'.excalidraw'.length).toLowerCase())
-  )
   const plans = []
   for (const name of list) {
-    const lower = String(name).toLowerCase()
-    if (lower.endsWith('.excalidraw')) {
-      if (drawingShare !== 'json') continue
+    if (String(name).toLowerCase().endsWith('.excalidraw')) {
       const base = String(name).slice(0, -'.excalidraw'.length)
       plans.push({ name, filename: `${base}.json`, contentType: 'application/json' })
-      continue
-    }
-    if (
-      drawingShare === 'local' &&
-      lower.endsWith('.png') &&
-      sceneIds.has(lower.slice(0, -'.png'.length))
-    ) {
       continue
     }
     plans.push({ name, filename: name, contentType: '' })

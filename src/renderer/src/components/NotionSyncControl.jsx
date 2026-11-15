@@ -233,24 +233,6 @@ function choiceLabel(choice, kind) {
   return 'Quedó el texto de aquí'
 }
 
-const DRAWING_CHOICES = [
-  [
-    'json',
-    'Compartir como JSON',
-    'Notion recibe un archivo .json. La otra copia lo vuelve a guardar como dibujo editable, y también recibe la imagen.'
-  ],
-  [
-    'image',
-    'Solo la imagen',
-    'Se comparte la vista previa. El dibujo editable se queda en este equipo.'
-  ],
-  [
-    'local',
-    'Dejarlo aquí',
-    'Ni el dibujo ni su imagen se suben. El texto de la nota sí se sincroniza.'
-  ]
-]
-
 function MetaDiff({ rows }) {
   if (!rows?.length) return null
   return (
@@ -462,47 +444,6 @@ function NotionCredentials({
         />
       )}
     </>
-  )
-}
-
-function DrawingShare({ status, resolvingId, resolveWith }) {
-  if (!status?.drawings?.length) return null
-  const selected = status.drawingShare || 'image'
-  return (
-    <div className="notion-sync__deletes">
-      <h4>Dibujos</h4>
-      <p>
-        Notion no acepta la extensión .excalidraw, así que el dibujo editable no se puede subir con
-        ese nombre.
-        {status.drawings.length === 1
-          ? ` Hay uno en «${status.drawings[0].noteTitle}».`
-          : ` Hay ${status.drawings.length} en las notas.`}
-      </p>
-      <div className="dialog__actions-btns notion-sync__choices">
-        {DRAWING_CHOICES.map(([choice, label]) => (
-          <button
-            key={choice}
-            type="button"
-            className={`btn ${selected === choice ? 'btn--primary' : 'btn--ghost'}`}
-            aria-pressed={selected === choice}
-            disabled={resolvingId === 'drawing-share'}
-            onClick={() => {
-              if ((status.drawingShare || 'image') === choice) return
-              void resolveWith(
-                'drawing-share',
-                choice,
-                () => window.api.setNotionDrawingShare(choice),
-                'No se pudo guardar la elección',
-                'dibujo'
-              )
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <p>{DRAWING_CHOICES.find(([choice]) => choice === selected)?.[2]}</p>
-    </div>
   )
 }
 
@@ -892,9 +833,6 @@ export function NotionSyncButton() {
                 retryingSave={retryingSave}
               />
             ) : null}
-            {connected ? (
-              <DrawingShare status={status} resolvingId={resolvingId} resolveWith={resolveWith} />
-            ) : null}
             {connected ? <ShareScope expanded={false} /> : null}
             <NotionCredentials
               status={status}
@@ -908,9 +846,6 @@ export function NotionSyncButton() {
               editingDatabase={editingDatabase}
               setEditingDatabase={setEditingDatabase}
             />
-            {connected ? null : (
-              <DrawingShare status={status} resolvingId={resolvingId} resolveWith={resolveWith} />
-            )}
             {connected ? null : (
               <NotionSyncAttention
                 status={status}

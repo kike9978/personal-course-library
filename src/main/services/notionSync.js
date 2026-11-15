@@ -122,6 +122,7 @@ function readState() {
       topicTombstones: Array.isArray(data.topicTombstones) ? data.topicTombstones : [],
       projectTombstones: Array.isArray(data.projectTombstones) ? data.projectTombstones : [],
       drawingShare: ['json', 'image', 'local'].includes(data.drawingShare) ? data.drawingShare : '',
+      drawingsAsJson: data.drawingsAsJson === true,
       rowSchema: data.rowSchema === true,
       pollWatermark: typeof data.pollWatermark === 'string' ? data.pollWatermark : ''
     }
@@ -133,6 +134,7 @@ function readState() {
       topicTombstones: [],
       projectTombstones: [],
       drawingShare: '',
+      drawingsAsJson: false,
       rowSchema: false,
       pollWatermark: ''
     }
@@ -152,6 +154,7 @@ function writeState(state) {
         topicTombstones: state.topicTombstones || [],
         projectTombstones: state.projectTombstones || [],
         drawingShare: state.drawingShare || '',
+        drawingsAsJson: state.drawingsAsJson === true,
         rowSchema: state.rowSchema === true,
         pollWatermark: state.pollWatermark || ''
       },
@@ -350,8 +353,6 @@ function publicStatus() {
     deleteConflicts,
     playlistConflicts,
     playlistDeleteConflicts,
-    drawingShare: readState().drawingShare || '',
-    drawings: listDrawingFiles(),
     progressConflicts: listProgressConflicts(),
     migrating: Boolean(migrating) || (rowWrites && !readState().rowSchema)
   }
@@ -709,23 +710,21 @@ async function saveNotePage(client, finding, remote) {
 
 const MAX_NOTE_ASSET_BYTES = 20 * 1024 * 1024
 
-function listDrawingFiles() {
-  const drawings = []
-  const seen = new Set()
+/** Notes that still have a scene file need one upsert so the JSON reaches Notion. */
+function queueDrawingUploads() {
+  const state = readState()
+  if (state.drawingsAsJson) return
+  const alreadyJson = state.drawingShare === 'json'
+  state.drawingsAsJson = true
+  state.drawingShare = ''
+  writeState(state)
+  if (alreadyJson) return
   for (const finding of listFindingRecords()) {
     const names = noteAssetNames(finding.body || '')
-    for (const name of names) {
-      if (!String(name).toLowerCase().endsWith('.excalidraw') || seen.has(name)) continue
-      seen.add(name)
-      const id = name.slice(0, -'.excalidraw'.length)
-      drawings.push({
-        name,
-        noteTitle: finding.title || 'Sin título',
-        hasPreview: names.some((item) => item.toLowerCase() === `${id.toLowerCase()}.png`)
-      })
+    if (names.some((name) => String(name).toLowerCase().endsWith('.excalidraw'))) {
+      enqueueNotionUpsert(finding.id)
     }
   }
-  return drawings
 }
 
 function listProgressConflicts() {
@@ -741,7 +740,7 @@ function listProgressConflicts() {
 
 async function reconcileNoteFiles(client, pageId, body) {
   if (!pageId) return
-  const planned = notionAssetsToUpload(noteAssetNames(body), readState().drawingShare)
+  const planned = notionAssetsToUpload(noteAssetNames(body))
   const wanted = planned.map((item) => item.name)
   const remote = await client.listNoteAssets(pageId)
   for (const item of remote) {
@@ -2200,6 +2199,7 @@ async function queueRowPoll(client) {
 
 async function queuePending() {
   if (!getNotionConfig().enabled) return
+  queueDrawingUploads()
   notePrepare('Revisando Notion…')
   const client = clientFromConfig()
   try {
@@ -3320,21 +3320,6 @@ export function notionDebugReport() {
   for (const [id, job] of jobLines) lines.push(`- ${job.op || 'trabajo'} ${id}`)
   if (jobs.size > jobLines.length) lines.push(`- y ${jobs.size - jobLines.length} más`)
   return lines.join('\n')
-}
-
-export function setNotionDrawingShare(choice) {
-  if (!['json', 'image', 'local'].includes(choice)) throw new Error('Elección desconocida')
-  const state = readState()
-  state.drawingShare = choice
-  writeState(state)
-  for (const finding of listFindingRecords()) {
-    const names = noteAssetNames(finding.body || '')
-    if (names.some((name) => String(name).toLowerCase().endsWith('.excalidraw'))) {
-      enqueueNotionUpsert(finding.id)
-    }
-  }
-  publish()
-  return publicStatus()
 }
 
 export async function saveNotionSettings({ enabled, token, databaseId } = {}) {

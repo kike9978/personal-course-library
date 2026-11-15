@@ -94,7 +94,6 @@ import {
   resolveNotionPlaylistDelete,
   resolveNotionProgress,
   saveNotionSettings,
-  setNotionDrawingShare,
   startNotionSync,
   syncNotionNow
 } from './services/notionSync.js'
@@ -927,7 +926,6 @@ function registerIpcHandlers() {
   ipcMain.handle('get-notion-sync', () => getNotionSyncStatus())
   ipcMain.handle('get-notion-debug', () => notionDebugReport())
   ipcMain.handle('set-notion-sync', (_event, payload = {}) => saveNotionSettings(payload))
-  ipcMain.handle('set-notion-drawing-share', (_event, choice) => setNotionDrawingShare(choice))
   ipcMain.handle('sync-notion-now', (_event, findingId) => syncNotionNow(findingId || null))
   ipcMain.handle('resolve-notion-conflict', (_event, { findingId, choice } = {}) =>
     resolveNotionConflict(findingId, choice)

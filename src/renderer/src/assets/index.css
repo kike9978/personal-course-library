@@ -7865,10 +7865,6 @@ button.annotations-doc__save-status {
   grid-template-columns: 1fr;
 }
 
-.notion-sync__choices {
-  flex-wrap: wrap;
-}
-
 .notion-sync__progress {
   display: flex;
   flex-direction: column;

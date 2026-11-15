@@ -86,7 +86,6 @@ const api = {
   getNotionSync: () => ipcRenderer.invoke('get-notion-sync'),
   getNotionDebug: () => ipcRenderer.invoke('get-notion-debug'),
   setNotionSync: (payload) => ipcRenderer.invoke('set-notion-sync', payload || {}),
-  setNotionDrawingShare: (choice) => ipcRenderer.invoke('set-notion-drawing-share', choice),
   syncNotionNow: (findingId) => ipcRenderer.invoke('sync-notion-now', findingId || null),
   resolveNotionConflict: (findingId, choice) =>
     ipcRenderer.invoke('resolve-notion-conflict', { findingId, choice }),

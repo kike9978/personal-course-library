@@ -388,21 +388,13 @@ describe('notion errors', () => {
     )
   })
 
-  it('uploads a drawing as JSON, as its image, or not at all', () => {
+  it('uploads a drawing as JSON and keeps its preview image', () => {
     const names = ['shot.jpg', 'draw-1.png', 'draw-1.excalidraw']
-    assert.deepEqual(
-      notionAssetsToUpload(names, '').map((item) => item.name),
-      ['shot.jpg', 'draw-1.png']
-    )
-    assert.deepEqual(notionAssetsToUpload(names, 'json'), [
+    assert.deepEqual(notionAssetsToUpload(names), [
       { name: 'shot.jpg', filename: 'shot.jpg', contentType: '' },
       { name: 'draw-1.png', filename: 'draw-1.png', contentType: '' },
       { name: 'draw-1.excalidraw', filename: 'draw-1.json', contentType: 'application/json' }
     ])
-    assert.deepEqual(
-      notionAssetsToUpload(names, 'local').map((item) => item.name),
-      ['shot.jpg']
-    )
   })
 
   it('explains a save that collided and leaves it retryable', () => {
