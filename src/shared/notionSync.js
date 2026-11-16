@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto'
 import { resolveCourseTitle } from './knowledgeGraph.js'
+import { courseMediaNoteFile, markdownImageDestination } from './noteMedia.js'
+
+export { courseMediaNoteFile, markdownImageDestination }
 
 const RICH_TEXT_LIMIT = 2000
 
@@ -841,22 +844,6 @@ function addAssetName(names, raw) {
   const base = text.split(/[/\\]/).pop()
   if (!base || !ASSET_NAME.test(base) || names.includes(base)) return
   names.push(base)
-}
-
-/** Split `url` or `url "caption"` inside an image's parentheses. */
-export function markdownImageDestination(raw) {
-  const text = String(raw || '').trim()
-  const titled = /^(.*\S)\s+("(?:\\.|[^"])*")\s*$/.exec(text)
-  if (!titled) return { src: text, title: '' }
-  return { src: titled[1].trim(), title: titled[2] }
-}
-
-/** File param of a `course-media://note/` image, ignoring a markdown caption. */
-export function courseMediaNoteFile(destination) {
-  const { src } = markdownImageDestination(destination)
-  if (!/^course-media:\/\/note\//i.test(src)) return ''
-  const file = /[?&]file=([^&\s]+)/i.exec(src)
-  return file ? file[1] : ''
 }
 
 /** Basenames a note's markdown points at, including an Excalidraw scene file. */

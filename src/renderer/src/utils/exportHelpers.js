@@ -2,7 +2,7 @@
  * Shared helpers for exporting note content / drawings via Electron save dialog.
  */
 
-import { courseMediaNoteFile, markdownImageDestination } from '../../../shared/notionSync.js'
+import { courseMediaNoteFile, markdownImageDestination } from '../../../shared/noteMedia.js'
 
 export async function exportViaDialog({ defaultPath, filters, dataBase64, dataText }) {
   if (!window.api?.exportFile) {
