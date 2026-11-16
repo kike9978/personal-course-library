@@ -58,8 +58,13 @@ function courseFolderPath(courseDir) {
   return path.join(libraryPath, path.basename(courseDir))
 }
 
+let titleMapCache = null
+let titleMapLibrary = ''
+
 function invalidateCache(courseDir) {
   hiddenPathCache = null
+  titleMapCache = null
+  titleMapLibrary = ''
   if (courseDir) {
     courseCache.delete(courseDir)
   } else {
@@ -209,6 +214,7 @@ export function readCourseTitleMap() {
   } catch {
     return {}
   }
+  if (titleMapCache && titleMapLibrary === libraryPath) return titleMapCache
   let entries = []
   try {
     entries = fsSync.readdirSync(libraryPath, { withFileTypes: true })
@@ -229,7 +235,9 @@ export function readCourseTitleMap() {
       // The folder name is the title when this course has no props yet.
     }
   }
-  return titles
+  titleMapCache = titles
+  titleMapLibrary = libraryPath
+  return titleMapCache
 }
 
 export async function listCourseDirs() {

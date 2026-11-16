@@ -23,6 +23,7 @@ import {
   progressIdFromBlocks,
   progressIsEmpty,
   progressTrackKey,
+  progressSyncKey,
   progressWire,
   markerBlocks,
   noteAssetNames,
@@ -278,7 +279,8 @@ describe('course progress wire', () => {
     const blocks = bodyToBlocks(wire.body, 'Pack', 'progress')
     assert.equal(progressIdFromBlocks(blocks), 'Pack')
     assert.equal(progressFromBody(blocksToBody(blocks)).inProcess, true)
-    assert.equal(progressFromBody(wire.body).lessons['b.mp4'].positionSec, 12)
+    assert.equal(progressFromBody(wire.body).lessons['b.mp4'].positionSec || 0, 0)
+    assert.equal(progressFromBody(wire.body).lastViewedAt, 5)
     assert.equal(progressIsEmpty(wire), false)
     assert.equal(progressIsEmpty(progressWire({ inProcess: false, lessons: {} })), true)
   })
@@ -306,10 +308,31 @@ describe('course progress wire', () => {
     assert.equal(merged.lessons['a.mp4'].completed, true)
     assert.equal(merged.lessons['b.mp4'].completed, true)
     assert.equal(merged.lastLessonRelativePath, 'b.mp4')
+    assert.equal(merged.lastViewedAt, 4)
     assert.notEqual(
       progressTrackKey({ ...merged, inProcess: false }),
       progressTrackKey({ ...merged, inProcess: true })
     )
+  })
+
+  it('keeps the newer recent view and ignores pauses in the same session', () => {
+    const merged = mergeCourseProgress(
+      { inProcess: false, lessons: {}, lastViewedAt: 10_000, lastLessonRelativePath: 'a.mp4' },
+      { inProcess: false, lessons: {}, lastViewedAt: 50_000, lastLessonRelativePath: 'b.mp4' }
+    )
+    assert.equal(merged.lastViewedAt, 50_000)
+    assert.equal(merged.lastLessonRelativePath, 'b.mp4')
+    const early = progressFromBody(
+      progressWire({ inProcess: false, lessons: {}, lastViewedAt: 120_000 }).body
+    )
+    const paused = progressFromBody(
+      progressWire({ inProcess: false, lessons: {}, lastViewedAt: 150_000 }).body
+    )
+    const nextSession = progressFromBody(
+      progressWire({ inProcess: false, lessons: {}, lastViewedAt: 240_000 }).body
+    )
+    assert.equal(progressSyncKey(early), progressSyncKey(paused))
+    assert.notEqual(progressSyncKey(early), progressSyncKey(nextSession))
   })
 })
 

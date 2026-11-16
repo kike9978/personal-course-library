@@ -5,8 +5,10 @@ import { getLibraryPath, getNotionConfig, setNotionConfig } from './config.js'
 import { listCourseDirs, readCourseTitleMap, updateCourse } from './courses.js'
 import { createNotionClient } from './notionClient.js'
 import {
+  findFindingByPageId,
+  findFindingRecord,
   forkFinding,
-  listFindingRecords,
+  readFindingList,
   listCourseProgressRecords,
   listPlaylistRecords,
   listStoredProjects,
@@ -54,6 +56,8 @@ import {
   playlistWire,
   progressFromBody,
   progressIsEmpty,
+  progressSyncHash,
+  progressSyncKey,
   progressTrackKey,
   progressWire,
   projectFromBody,
@@ -88,6 +92,13 @@ let lastError = null
 let lastErrorCode = ''
 let turn = Promise.resolve()
 const conflictCooldown = new Map()
+let syncState = null
+let notionClient = null
+let notionClientKey = ''
+let localDriftGeneration = 0
+let driftedGeneration = -1
+let statusTimer = null
+let statusPublishedAt = 0
 
 const SAVE_CONFLICT_PASSES = 3
 
@@ -112,10 +123,26 @@ function statePath() {
   return path.join(app.getPath('userData'), STATE_FILE)
 }
 
+function emptySyncState() {
+  return {
+    tombstones: [],
+    nodes: {},
+    playlistTombstones: [],
+    topicTombstones: [],
+    projectTombstones: [],
+    drawingShare: '',
+    drawingsAsJson: false,
+    rowSchema: false,
+    pollWatermark: '',
+    parked: []
+  }
+}
+
 function readState() {
+  if (syncState) return syncState
   try {
     const data = JSON.parse(fs.readFileSync(statePath(), 'utf8'))
-    return {
+    syncState = {
       tombstones: Array.isArray(data.tombstones) ? data.tombstones : [],
       nodes: data.nodes && typeof data.nodes === 'object' ? data.nodes : {},
       playlistTombstones: Array.isArray(data.playlistTombstones) ? data.playlistTombstones : [],
@@ -124,24 +151,17 @@ function readState() {
       drawingShare: ['json', 'image', 'local'].includes(data.drawingShare) ? data.drawingShare : '',
       drawingsAsJson: data.drawingsAsJson === true,
       rowSchema: data.rowSchema === true,
-      pollWatermark: typeof data.pollWatermark === 'string' ? data.pollWatermark : ''
+      pollWatermark: typeof data.pollWatermark === 'string' ? data.pollWatermark : '',
+      parked: Array.isArray(data.parked) ? data.parked : []
     }
   } catch {
-    return {
-      tombstones: [],
-      nodes: {},
-      playlistTombstones: [],
-      topicTombstones: [],
-      projectTombstones: [],
-      drawingShare: '',
-      drawingsAsJson: false,
-      rowSchema: false,
-      pollWatermark: ''
-    }
+    syncState = emptySyncState()
   }
+  return syncState
 }
 
 function writeState(state) {
+  syncState = state
   const filePath = statePath()
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
   fs.writeFileSync(
@@ -156,13 +176,18 @@ function writeState(state) {
         drawingShare: state.drawingShare || '',
         drawingsAsJson: state.drawingsAsJson === true,
         rowSchema: state.rowSchema === true,
-        pollWatermark: state.pollWatermark || ''
+        pollWatermark: state.pollWatermark || '',
+        parked: Array.isArray(state.parked) ? state.parked : []
       },
       null,
       2
     ),
     'utf8'
   )
+}
+
+function bumpLocalDrift() {
+  localDriftGeneration += 1
 }
 
 function readTombstones() {
@@ -261,7 +286,12 @@ function playlistConflictView(playlist) {
 
 function clientFromConfig() {
   const config = getNotionConfig()
-  return createNotionClient({ token: config.token, databaseId: config.databaseId })
+  const key = `${config.token || ''}\n${config.databaseId || ''}`
+  if (!notionClient || notionClientKey !== key) {
+    notionClient = createNotionClient({ token: config.token, databaseId: config.databaseId })
+    notionClientKey = key
+  }
+  return notionClient
 }
 
 function placeLabel(anchor) {
@@ -310,7 +340,7 @@ function noteConflictView(finding) {
 function publicStatus() {
   const config = getNotionConfig()
   const conflicts = config.enabled
-    ? listFindingRecords()
+    ? readFindingList()
         .filter((finding) => finding.notion?.conflict)
         .map(noteConflictView)
     : []
@@ -358,8 +388,25 @@ function publicStatus() {
   }
 }
 
-function publish() {
-  hooks.notifyStatus(publicStatus())
+function publish(force = false) {
+  const send = () => {
+    statusPublishedAt = Date.now()
+    hooks.notifyStatus(publicStatus())
+  }
+  const now = Date.now()
+  if (force || !statusPublishedAt || now - statusPublishedAt >= 400) {
+    if (statusTimer) {
+      clearTimeout(statusTimer)
+      statusTimer = null
+    }
+    send()
+    return
+  }
+  if (statusTimer) return
+  statusTimer = setTimeout(() => {
+    statusTimer = null
+    send()
+  }, 400)
 }
 
 function clearPrepare() {
@@ -650,7 +697,10 @@ async function saveNoteRow(client, finding, remote) {
   const row = buildNoteRow(finding)
   if (remote?.pageId && (remote.kind === 'note' || remote.parentType === 'data_source_id')) {
     row.pageId = remote.pageId
+  } else if (finding.notion?.pageId && rowsReady()) {
+    row.pageId = finding.notion.pageId
   }
+  row.databaseRow = Boolean(row.pageId)
   const page = await client.saveRow(row)
   await reconcileNoteFiles(client, page?.pageId, finding.body)
   return page
@@ -719,7 +769,7 @@ function queueDrawingUploads() {
   state.drawingShare = ''
   writeState(state)
   if (alreadyJson) return
-  for (const finding of listFindingRecords()) {
+  for (const finding of readFindingList()) {
     const names = noteAssetNames(finding.body || '')
     if (names.some((name) => String(name).toLowerCase().endsWith('.excalidraw'))) {
       enqueueNotionUpsert(finding.id)
@@ -740,7 +790,9 @@ function listProgressConflicts() {
 
 async function reconcileNoteFiles(client, pageId, body) {
   if (!pageId) return
-  const planned = notionAssetsToUpload(noteAssetNames(body))
+  const names = noteAssetNames(body)
+  if (!names.length) return
+  const planned = notionAssetsToUpload(names)
   const wanted = planned.map((item) => item.name)
   const remote = await client.listNoteAssets(pageId)
   for (const item of remote) {
@@ -863,7 +915,7 @@ async function writeLocal(client, finding) {
   finishWrite(finding.id, page, localHash, noteVideoTime(finding))
 }
 
-async function reconcileUpsert(client, id) {
+async function reconcileUpsert(client, id, job = {}) {
   let finding = readFinding(id)
   if (!finding && rowsReady()) {
     const remote = await loadKindPage(client, 'note', id, null)
@@ -890,6 +942,14 @@ async function reconcileUpsert(client, id) {
   if (!finding || finding.notion?.conflict) return
 
   const localHash = rowsReady() ? localNoteHash(finding) : wireHash(finding.title, finding.body)
+  if (
+    !job.remote &&
+    (finding.notion?.wire || 0) >= 2 &&
+    finding.notion?.ackedHash === localHash &&
+    !videoTimeNeedsSync(finding)
+  ) {
+    return
+  }
   const remote = await loadRemote(client, finding)
   const action = noteSyncAction(finding, remote)
 
@@ -1034,7 +1094,7 @@ async function drain() {
     jobs.clear()
     syncTotal = 0
     syncDone = 0
-    publish()
+    publish(true)
     return
   }
   if (!jobs.size) return
@@ -1043,7 +1103,7 @@ async function drain() {
   syncTotal = batch.size
   syncDone = 0
   syncing = true
-  publish()
+  publish(true)
   let retryDelay = 0
   try {
     const client = clientFromConfig()
@@ -1059,7 +1119,7 @@ async function drain() {
           await reconcilePlaylist(client, job.playlistId, { refresh: job.refresh })
         } else if (job.op === 'playlist-delete')
           await reconcilePlaylistDelete(client, job.playlistId)
-        else if (job.op === 'progress-upsert') await reconcileProgress(client, job.coursePath)
+        else if (job.op === 'progress-upsert') await reconcileProgress(client, job.coursePath, job)
         else if (job.op === 'topic-upsert') await reconcileTopic(client, job.topicId)
         else if (job.op === 'topic-delete') await reconcileTopicDelete(client, job.topicId)
         else if (job.op === 'project-upsert')
@@ -1067,7 +1127,7 @@ async function drain() {
         else if (job.op === 'project-delete') await reconcileProjectDelete(client, job.projectId)
         else if (job.op === 'intent-upsert') await reconcileIntent(client)
         else if (job.op === 'delete') await reconcileDelete(client, id)
-        else await reconcileUpsert(client, id)
+        else await reconcileUpsert(client, id, job)
         clearFailure()
         syncDone += 1
         publish()
@@ -1095,7 +1155,7 @@ async function drain() {
         else if (job.op === 'progress-upsert') notifyProgress()
         else notifyNotes()
         syncDone += 1
-        publish()
+        publish(true)
       }
     }
   } catch (error) {
@@ -1115,7 +1175,7 @@ async function drain() {
       syncTotal = 0
       syncDone = 0
     }
-    publish()
+    publish(true)
   }
   if (jobs.size) schedule(retryDelay || 200)
 }
@@ -1133,9 +1193,9 @@ function makeFindingId() {
 }
 
 function linkedFinding(page) {
-  return listFindingRecords().find(
-    (finding) =>
-      finding.notion?.pageId === page.pageId || (page.findingId && finding.id === page.findingId)
+  return (
+    findFindingByPageId(page.pageId) ||
+    (page.findingId ? findFindingRecord(page.findingId) : null)
   )
 }
 
@@ -1163,7 +1223,7 @@ function noteQueued(probe, id, reason) {
 
 function oldestRemoteEditedAt() {
   const times = []
-  for (const finding of listFindingRecords()) {
+  for (const finding of readFindingList()) {
     if (finding.notion?.remoteEditedAt) times.push(finding.notion.remoteEditedAt)
   }
   for (const course of listCourseProgressRecords()) {
@@ -1198,7 +1258,7 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
     fileTitle: place.fileTitle,
     filePageId: place.filePageId
   })
-  const known = listFindingRecords().find((finding) => finding.notion?.pageId === pageId)
+  const known = findFindingByPageId(pageId)
   if (known && sharedIdsConfirmed.has(pageId) && !shouldRetarget(known, anchor)) {
     const unchanged = await notePageUnchanged(
       client,
@@ -1455,7 +1515,7 @@ async function migrateToRows(client) {
   rowWrites = true
   try {
     const titles = readCourseTitleMap()
-    const notes = listFindingRecords().filter((finding) => !finding.notion?.conflict)
+    const notes = readFindingList().filter((finding) => !finding.notion?.conflict)
     const playlists = listPlaylistRecords().filter((playlist) => !playlist.notion?.conflict)
     const progressRows = listCourseProgressRecords().filter((course) => {
       if (course.notion?.conflict) return false
@@ -1464,7 +1524,7 @@ async function migrateToRows(client) {
     })
     const files = new Map()
     const courses = new Map()
-    for (const finding of listFindingRecords()) {
+    for (const finding of readFindingList()) {
       const place = notionPlace(finding, titles)
       if (place.fileKey) files.set(place.fileKey, place)
       if (place.courseKey && place.courseKey !== 'course:__loose__')
@@ -1526,7 +1586,7 @@ async function migrateToRows(client) {
       const page = await saveProgressPage(client, course.id, local, null)
       await archiveLegacyPage(client, legacyId, page?.pageId)
       if (page?.pageId) {
-        const hash = wireHash(course.id, progressWire(local).body)
+        const hash = progressSyncHash(course.id, local)
         writeCourseProgress(course.id, { notion: cursorFrom(page, hash) })
       }
     }
@@ -1725,6 +1785,7 @@ async function reconcileTopic(client, id) {
     title: wire.title,
     body: wire.body,
     pageId: remote?.pageId || null,
+    databaseRow: Boolean(remote?.pageId),
     emoji: PAGE_ICONS.topic
   })
   const hash = page?.body === undefined ? localHash : wireHash(page.title, page.body)
@@ -1859,6 +1920,7 @@ async function reconcileProject(client, id, coursePath) {
     body: wire.body,
     status: wire.status,
     pageId: remote?.pageId || null,
+    databaseRow: Boolean(remote?.pageId),
     emoji: PAGE_ICONS.project
   })
   const hash = page?.body === undefined ? localHash : wireHash(page.title, page.body)
@@ -1983,6 +2045,7 @@ async function reconcileIntent(client) {
     title: wire.title,
     body: wire.body,
     pageId: remote?.pageId || null,
+    databaseRow: Boolean(remote?.pageId),
     emoji: PAGE_ICONS.intent
   })
   const hash = page?.body === undefined ? localHash : wireHash(page.title, page.body)
@@ -1999,9 +2062,7 @@ function rowCursorEdited(row) {
   const kind = row?.kind || ''
   const id = row?.externalId || row?.findingId || row?.playlistId || row?.progressId || ''
   if (kind === 'note' || (!kind && row?.findingId)) {
-    const finding = listFindingRecords().find(
-      (item) => item.id === (row.externalId || row.findingId)
-    )
+    const finding = findFindingRecord(row.externalId || row.findingId)
     return finding?.notion?.remoteEditedAt || ''
   }
   if (kind === 'playlist') return readPlaylist(id)?.notion?.remoteEditedAt || ''
@@ -2013,32 +2074,48 @@ function rowCursorEdited(row) {
   return ''
 }
 
+function noteConflictIsCurrent(id, editedAt) {
+  const finding = findFindingRecord(id)
+  if (!finding?.notion?.conflict || !editedAt) return false
+  return (finding.notion.conflict.remoteEditedAt || '') === editedAt
+}
+
 function enqueueChangedRow(row) {
   const kind =
     row?.kind ||
     (row?.playlistId ? 'playlist' : row?.progressId ? 'progress' : row?.findingId ? 'note' : '')
   const id = row?.externalId || row?.findingId || row?.playlistId || row?.progressId || ''
-  if (!kind || !id || kind === 'course' || kind === 'file') return
-  if (row.editedAt && row.editedAt === rowCursorEdited(row)) return
+  if (!kind || !id || kind === 'course' || kind === 'file') return false
+  if (row.editedAt && row.editedAt === rowCursorEdited(row)) return false
   if (kind === 'note') {
-    if (saveConflictParked(id)) return
+    if (saveConflictParked(id) || noteConflictIsCurrent(id, row.editedAt)) return false
     const pending = jobs.get(id)
-    jobs.set(id, { op: 'upsert', attempts: pending?.attempts || 0 })
-    return
+    jobs.set(id, { op: 'upsert', remote: true, attempts: pending?.attempts || 0 })
+    return true
   }
   if (kind === 'playlist') {
     const key = playlistKey(id)
-    if (saveConflictParked(key)) return
+    if (saveConflictParked(key)) return false
     const pending = jobs.get(key)
-    jobs.set(key, { op: 'playlist-upsert', playlistId: id, attempts: pending?.attempts || 0 })
-    return
+    jobs.set(key, {
+      op: 'playlist-upsert',
+      playlistId: id,
+      remote: true,
+      attempts: pending?.attempts || 0
+    })
+    return true
   }
   if (kind === 'progress') {
     const key = progressKey(id)
-    if (saveConflictParked(key)) return
+    if (saveConflictParked(key)) return false
     const pending = jobs.get(key)
-    jobs.set(key, { op: 'progress-upsert', coursePath: id, attempts: pending?.attempts || 0 })
-    return
+    jobs.set(key, {
+      op: 'progress-upsert',
+      coursePath: id,
+      remote: true,
+      attempts: pending?.attempts || 0
+    })
+    return true
   }
   if (kind === 'topic') {
     const key = topicKey(id)
@@ -2067,12 +2144,16 @@ function enqueueChangedRow(row) {
 }
 
 function queueLocalRowDrift() {
-  for (const finding of listFindingRecords()) {
+  for (const finding of readFindingList()) {
     if (finding.notion?.conflict || saveConflictParked(finding.id)) continue
     const hash = localNoteHash(finding)
     if (finding.notion?.ackedHash !== hash || (finding.notion?.wire || 0) < 2) {
       const pending = jobs.get(finding.id)
-      jobs.set(finding.id, { op: 'upsert', attempts: pending?.attempts || 0 })
+      jobs.set(finding.id, {
+        op: 'upsert',
+        remote: Boolean(pending?.remote),
+        attempts: pending?.attempts || 0
+      })
     }
   }
   for (const playlist of listPlaylistRecords()) {
@@ -2097,7 +2178,7 @@ function queueLocalRowDrift() {
     const key = progressKey(course.id)
     if (saveConflictParked(key)) continue
     const local = localProgress(course.id)
-    const hash = wireHash(course.id, progressWire(local).body)
+    const hash = progressSyncHash(course.id, local)
     const missing = !course.notion?.pageId && !progressIsEmpty(local)
     if (
       (course.notion?.ackedHash && course.notion.ackedHash !== hash) ||
@@ -2108,6 +2189,7 @@ function queueLocalRowDrift() {
       jobs.set(key, {
         op: 'progress-upsert',
         coursePath: course.id,
+        remote: Boolean(pending?.remote),
         attempts: pending?.attempts || 0
       })
     }
@@ -2168,9 +2250,49 @@ function queueLocalRowDrift() {
   }
 }
 
+function parkedIdentity(row) {
+  return {
+    pageId: row.pageId,
+    kind: row.kind || '',
+    externalId: row.externalId || row.findingId || row.playlistId || row.progressId || '',
+    findingId: row.findingId || '',
+    playlistId: row.playlistId || '',
+    progressId: row.progressId || '',
+    courseKey: row.courseKey || '',
+    editedAt: row.editedAt || ''
+  }
+}
+
+function jobIdForRow(row) {
+  const kind =
+    row?.kind ||
+    (row?.playlistId ? 'playlist' : row?.progressId ? 'progress' : row?.findingId ? 'note' : '')
+  const id = row?.externalId || row?.findingId || row?.playlistId || row?.progressId || ''
+  if (kind === 'note') return id
+  if (kind === 'playlist') return playlistKey(id)
+  if (kind === 'progress') return progressKey(id)
+  if (kind === 'topic') return topicKey(id)
+  if (kind === 'project') return projectJobKey(id)
+  if (kind === 'intent') return 'intent:playlist-intent'
+  return ''
+}
+
+function rememberParked(row, parked, seen) {
+  if (!row?.pageId || seen.has(row.pageId)) return
+  const kind =
+    row.kind ||
+    (row.playlistId ? 'playlist' : row.progressId ? 'progress' : row.findingId ? 'note' : '')
+  if (!kind || kind === 'course' || kind === 'file') return
+  if (row.editedAt && row.editedAt === rowCursorEdited({ ...row, kind })) return
+  seen.add(row.pageId)
+  enqueueChangedRow({ ...row, kind })
+  parked.push(parkedIdentity({ ...row, kind }))
+}
+
 async function queueRowPoll(client) {
   const startedAt = new Date().toISOString()
-  const watermark = readState().pollWatermark || ''
+  const state = readState()
+  const watermark = state.pollWatermark || ''
   notePrepare(watermark ? 'Revisando cambios…' : 'Leyendo la base…')
   let changed = null
   try {
@@ -2178,23 +2300,44 @@ async function queueRowPoll(client) {
     if (changed) notePrepare(`Revisando ${changed.length} páginas`)
   } catch (error) {
     noteFailure(error)
+    return
   }
-  if (Array.isArray(changed)) {
-    for (const row of changed) enqueueChangedRow(row)
+  const parked = []
+  const seen = new Set()
+  for (const row of changed || []) rememberParked(row, parked, seen)
+  for (const item of state.parked || []) {
+    if (!item?.pageId || seen.has(item.pageId)) continue
+    let editedAt = item.editedAt || ''
+    try {
+      editedAt = (await client.pageEditedAt(item.pageId)) || ''
+    } catch {
+      parked.push(item)
+      seen.add(item.pageId)
+      continue
+    }
+    const cursor = rowCursorEdited({ ...item, editedAt })
+    const jobId = jobIdForRow({ ...item, editedAt })
+    if (
+      editedAt &&
+      editedAt === item.editedAt &&
+      editedAt !== cursor &&
+      (noteConflictIsCurrent(item.externalId || item.findingId, editedAt) ||
+        jobs.has(jobId) ||
+        saveConflictParked(jobId))
+    ) {
+      parked.push({ ...item, editedAt })
+      seen.add(item.pageId)
+      continue
+    }
+    rememberParked({ ...item, editedAt }, parked, seen)
   }
-  queueLocalRowDrift()
-  const fresh = (changed || []).filter(
-    (row) =>
-      row.editedAt &&
-      row.editedAt !== rowCursorEdited(row) &&
-      row.kind !== 'course' &&
-      row.kind !== 'file'
-  )
-  if (Array.isArray(changed) && fresh.length === 0) {
-    const state = readState()
-    state.pollWatermark = startedAt
-    writeState(state)
+  if (localDriftGeneration !== driftedGeneration) {
+    queueLocalRowDrift()
+    driftedGeneration = localDriftGeneration
   }
+  state.pollWatermark = startedAt
+  state.parked = parked
+  writeState(state)
 }
 
 async function queuePending() {
@@ -2275,7 +2418,7 @@ async function queuePending() {
       noteFailure(error)
     }
   }
-  const findings = listFindingRecords().filter((finding) => !finding.notion?.conflict)
+  const findings = readFindingList().filter((finding) => !finding.notion?.conflict)
   const courseTitles = readCourseTitleMap()
   const remoteByFinding = new Map()
   for (const page of remotePages || []) {
@@ -2465,6 +2608,7 @@ async function savePlaylistPage(client, playlist, remote) {
       title: wire.title,
       body: wire.body,
       pageId: remote?.pageId || null,
+      databaseRow: Boolean(remote?.pageId),
       childTitles: titles,
       emoji: PAGE_ICONS.playlist
     })
@@ -2766,7 +2910,8 @@ function localProgress(coursePath) {
       lastLessonRelativePath: course?.lastLessonRelativePath || '',
       lastLessonTitle: course?.lastLessonTitle || '',
       lastPositionSec: course?.lastPositionSec || 0,
-      lastOpenedAt: course?.lastOpenedAt || 0
+      lastOpenedAt: course?.lastOpenedAt || 0,
+      lastViewedAt: course?.lastViewedAt || 0
     }).body
   )
 }
@@ -2804,13 +2949,16 @@ function withLocalPlayback(coursePath, data) {
 
 async function applyProgress(coursePath, data, notion) {
   const next = withLocalPlayback(coursePath, data)
+  const course = readCourseProgressRecord(coursePath)
+  const lastViewedAt = Math.max(Number(course?.lastViewedAt) || 0, Number(data?.lastViewedAt) || 0)
   writeCourseProgress(coursePath, {
     lessons: next.lessons,
     replaceLessons: true,
     lastLessonRelativePath: next.lastLessonRelativePath || null,
     lastLessonTitle: next.lastLessonTitle || null,
     lastPositionSec: next.lastPositionSec || 0,
-    lastOpenedAt: next.lastOpenedAt || null,
+    lastOpenedAt: next.lastOpenedAt || course?.lastOpenedAt || null,
+    lastViewedAt: lastViewedAt || null,
     inProcess: Boolean(next.inProcess),
     notion
   })
@@ -2874,6 +3022,7 @@ async function saveProgressPage(client, coursePath, data, remote) {
       body: wire.body,
       inProcess: Boolean(data.inProcess),
       pageId: remote?.pageId || null,
+      databaseRow: Boolean(remote?.pageId),
       emoji: PAGE_ICONS.progress
     })
   }
@@ -2914,43 +3063,39 @@ async function saveProgressPage(client, coursePath, data, remote) {
   )
 }
 
-async function reconcileProgress(client, coursePath) {
+async function reconcileProgress(client, coursePath, job = {}) {
   const course = readCourseProgressRecord(coursePath) || { id: coursePath }
   if (course.notion?.conflict) return
   const local = localProgress(coursePath)
-  if (progressIsEmpty(local) && !course.notion?.pageId) return
-  const localHash = wireHash(coursePath, progressWire(local).body)
+  if (progressIsEmpty(local) && !course.notion?.pageId && !job.remote) return
+  const localHash = progressSyncHash(coursePath, local)
+  if (!job.remote && course.notion?.ackedHash === localHash) return
   const sectionId = course.notion?.pageId ? null : await ensureProgressSection(client)
   const remote = await loadProgressRemote(client, { ...course, id: coursePath }, sectionId)
   const remoteData = remote ? progressFromBody(remote.body) : null
   const action = decideSync({
     hasRemote: Boolean(remote && remoteData),
     localHash,
-    remoteHash: remoteData ? wireHash(coursePath, progressWire(remoteData).body) : null,
+    remoteHash: remoteData ? progressSyncHash(coursePath, remoteData) : null,
     ackedHash: course.notion?.ackedHash || null
   })
   if ((action === 'create' || action === 'push') && progressIsEmpty(local) && !remote) return
   if (action === 'create' || action === 'push') {
     const page = await saveProgressPage(client, coursePath, local, remote)
     if (!page?.pageId) throw new Error('Notion no devolvió el progreso')
-    const written = progressWire(local).body
-    const remoteHash =
-      page.body === undefined ? localHash : wireHash(page.title, page.body || written)
     writeCourseProgress(coursePath, {
-      notion: cursorFrom(page, remoteHash === localHash ? localHash : remoteHash)
+      notion: cursorFrom(page, localHash)
     })
     return
   }
   if (!remoteData) return
   if (action === 'relink' && remote?.body && String(remote.body).includes('"positionSec"')) {
     const page = await saveProgressPage(client, coursePath, local, remote)
-    const hash = wireHash(coursePath, progressWire(local).body)
-    writeCourseProgress(coursePath, { notion: cursorFrom(page || remote, hash) })
+    writeCourseProgress(coursePath, { notion: cursorFrom(page || remote, localHash) })
     return
   }
   if (action === 'pull' || action === 'relink') {
-    const hash =
-      action === 'relink' ? localHash : wireHash(coursePath, progressWire(remoteData).body)
+    const hash = action === 'relink' ? localHash : progressSyncHash(coursePath, remoteData)
     await applyProgress(
       coursePath,
       remoteData,
@@ -2962,7 +3107,7 @@ async function reconcileProgress(client, coursePath) {
   if (!merged) return
   if (local.inProcess === remoteData.inProcess) {
     const page = await saveProgressPage(client, coursePath, merged, remote)
-    const hash = wireHash(coursePath, progressWire(merged).body)
+    const hash = progressSyncHash(coursePath, merged)
     await applyProgress(coursePath, merged, cursorFrom(page || remote, hash))
     return
   }
@@ -2972,6 +3117,7 @@ async function reconcileProgress(client, coursePath) {
     lastLessonTitle: merged.lastLessonTitle || null,
     lastPositionSec: merged.lastPositionSec || 0,
     lastOpenedAt: merged.lastOpenedAt || null,
+    lastViewedAt: merged.lastViewedAt || null,
     inProcess: local.inProcess,
     notion: {
       pageId: remote.pageId,
@@ -2984,7 +3130,7 @@ async function reconcileProgress(client, coursePath) {
     }
   })
   notifyProgress()
-  publish()
+  publish(true)
 }
 
 async function queueProgress(client) {
@@ -3016,7 +3162,7 @@ async function queueProgress(client) {
     const key = progressKey(coursePath)
     if (saveConflictParked(key)) continue
     const local = localProgress(coursePath)
-    const localHash = wireHash(coursePath, progressWire(local).body)
+    const localHash = progressSyncHash(coursePath, local)
     const remote = remoteById.get(coursePath)
     const acked = course?.notion?.ackedHash || ''
     const localChanged = Boolean(acked) && acked !== localHash
@@ -3025,7 +3171,12 @@ async function queueProgress(client) {
     const adoptRemote = Boolean(remote) && !acked
     if (!localChanged && !remoteChanged && !missingPage && !adoptRemote) continue
     const pending = jobs.get(key)
-    jobs.set(key, { op: 'progress-upsert', coursePath, attempts: pending?.attempts || 0 })
+    jobs.set(key, {
+      op: 'progress-upsert',
+      coursePath,
+      remote: true,
+      attempts: pending?.attempts || 0
+    })
     noteQueued(
       lastProbe,
       key,
@@ -3108,7 +3259,9 @@ export function enqueueNotionUpsert(id) {
   const finding = readFinding(id)
   if (!finding || finding.notion?.conflict) return
   if (jobs.get(id)?.op === 'delete') return
-  jobs.set(id, { op: 'upsert' })
+  const pending = jobs.get(id)
+  jobs.set(id, { op: 'upsert', remote: Boolean(pending?.remote), attempts: pending?.attempts || 0 })
+  bumpLocalDrift()
   schedule(1200)
 }
 
@@ -3117,6 +3270,7 @@ export function enqueueNotionDelete(finding) {
   rememberDelete(finding)
   if (!finding.notion?.pageId) return
   jobs.set(finding.id, { op: 'delete' })
+  bumpLocalDrift()
   schedule(1200)
 }
 
@@ -3127,16 +3281,25 @@ export function enqueueNotionProgress(coursePath, { soon = false } = {}) {
   conflictCooldown.delete(key)
   const course = readCourseProgressRecord(keyName)
   if (course?.notion?.conflict) return
+  const hash = progressSyncHash(keyName, localProgress(keyName))
+  if (course?.notion?.ackedHash === hash) return
+  const pending = jobs.get(key)
   jobs.set(key, {
     op: 'progress-upsert',
     coursePath: keyName,
-    attempts: jobs.get(key)?.attempts || 0
+    remote: Boolean(pending?.remote),
+    attempts: pending?.attempts || 0
   })
+  bumpLocalDrift()
   if (soon || !timer) schedule(soon ? 1200 : 8000)
 }
 
 export function localProgressTrack(coursePath) {
   return progressTrackKey(localProgress(coursePath))
+}
+
+export function localProgressSyncKey(coursePath) {
+  return progressSyncKey(localProgress(coursePath))
 }
 
 export function enqueueNotionPlaylistUpsert(id) {
@@ -3146,7 +3309,14 @@ export function enqueueNotionPlaylistUpsert(id) {
   if (jobs.get(key)?.op === 'playlist-delete') return
   const playlist = readPlaylist(id)
   if (!playlist || playlist.notion?.conflict) return
-  jobs.set(key, { op: 'playlist-upsert', playlistId: id, attempts: jobs.get(key)?.attempts || 0 })
+  const pending = jobs.get(key)
+  jobs.set(key, {
+    op: 'playlist-upsert',
+    playlistId: id,
+    remote: Boolean(pending?.remote),
+    attempts: pending?.attempts || 0
+  })
+  bumpLocalDrift()
   for (const other of listPlaylistRecords()) {
     if (!(other.childIds || []).includes(id) || other.notion?.conflict) continue
     const parentKey = playlistKey(other.id)
@@ -3169,6 +3339,7 @@ export function enqueueNotionTopicUpsert(id) {
   const topic = readTopic(id)
   if (!topic || topic.notion?.conflict) return
   jobs.set(key, { op: 'topic-upsert', topicId: id, attempts: jobs.get(key)?.attempts || 0 })
+  bumpLocalDrift()
   schedule(1200)
 }
 
@@ -3181,6 +3352,7 @@ export function enqueueNotionTopicDelete(topic) {
     return
   }
   jobs.set(key, { op: 'topic-delete', topicId: topic.id })
+  bumpLocalDrift()
   schedule(1200)
 }
 
@@ -3197,6 +3369,7 @@ export function enqueueNotionProjectUpsert(coursePath, id) {
     coursePath: folder,
     attempts: jobs.get(key)?.attempts || 0
   })
+  bumpLocalDrift()
   schedule(1200)
 }
 
@@ -3213,6 +3386,7 @@ export function enqueueNotionProjectDelete(project) {
     projectId: project.id,
     coursePath: project.coursePath || ''
   })
+  bumpLocalDrift()
   schedule(1200)
 }
 
@@ -3223,6 +3397,7 @@ export function enqueueNotionIntent() {
   const intent = readPlaylistIntentRecord()
   if (intent?.notion?.conflict) return
   jobs.set(key, { op: 'intent-upsert', attempts: jobs.get(key)?.attempts || 0 })
+  bumpLocalDrift()
   schedule(1200)
 }
 
@@ -3235,6 +3410,7 @@ export function enqueueNotionPlaylistDelete(playlist) {
     return
   }
   jobs.set(key, { op: 'playlist-delete', playlistId: playlist.id })
+  bumpLocalDrift()
   schedule(1200)
 }
 
@@ -3252,7 +3428,7 @@ function clipDebug(value, max = 70) {
 
 export function notionDebugReport() {
   const config = getNotionConfig()
-  const findings = listFindingRecords()
+  const findings = readFindingList()
   const progress = listCourseProgressRecords()
   const playlists = listPlaylistRecords()
   const probe = lastProbe
@@ -3340,6 +3516,8 @@ export async function saveNotionSettings({ enabled, token, databaseId } = {}) {
     throw new Error('Para activar Notion hace falta el token y la base')
   }
 
+  notionClient = null
+  notionClientKey = ''
   setNotionConfig({ enabled: false, token: nextToken, databaseId: nextDatabaseId })
   if (!nextEnabled) {
     jobs.clear()
@@ -3361,6 +3539,8 @@ export async function saveNotionSettings({ enabled, token, databaseId } = {}) {
     await client.loadSchema()
     const resolvedId = client.acceptedDatabaseId() || nextDatabaseId
     setNotionConfig({ enabled: true, token: nextToken, databaseId: resolvedId })
+    notionClient = client
+    notionClientKey = `${nextToken}\n${resolvedId}`
   } catch (error) {
     noteFailure(error)
     publish()
@@ -3606,7 +3786,7 @@ export async function resolveNotionProgress(coursePath, choice) {
       await ensureProgressSection(client)
     )
     const page = await saveProgressPage(client, keyName, next, remote)
-    const hash = wireHash(keyName, progressWire(next).body)
+    const hash = progressSyncHash(keyName, next)
     await applyProgress(keyName, next, cursorFrom(page || remote, hash))
     publish()
     return publicStatus()

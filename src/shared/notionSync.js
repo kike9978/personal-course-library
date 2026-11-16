@@ -233,12 +233,27 @@ function lessonWire(lesson) {
 function lessonShared(lesson) {
   return {
     completed: Boolean(lesson?.completed),
-    durationSec: Math.max(0, Math.round(Number(lesson?.durationSec) || 0)),
-    lastOpenedAt: Math.max(0, Math.round(Number(lesson?.lastOpenedAt) || 0))
+    durationSec: Math.max(0, Math.round(Number(lesson?.durationSec) || 0))
   }
 }
 
-/** Progress shared between copies. Playback position stays on this machine. */
+/** Two minutes. Pauses inside one session do not count as a new recent view. */
+export const VIEW_SESSION_MS = 2 * 60 * 1000
+
+export function viewSession(value) {
+  const time = Math.max(0, Math.round(Number(value) || 0))
+  if (!time) return 0
+  return Math.floor(time / VIEW_SESSION_MS) * VIEW_SESSION_MS
+}
+
+function viewedAtOf(progress) {
+  return Math.max(
+    0,
+    Math.round(Number(progress?.lastViewedAt) || Number(progress?.lastOpenedAt) || 0)
+  )
+}
+
+/** Progress shared between copies. Playback position and the open timestamp stay on this machine. */
 export function progressWire(progress) {
   const lessons = {}
   const source = progress?.lessons && typeof progress.lessons === 'object' ? progress.lessons : {}
@@ -252,7 +267,7 @@ export function progressWire(progress) {
       lessons,
       lastLessonRelativePath: String(progress?.lastLessonRelativePath || ''),
       lastLessonTitle: String(progress?.lastLessonTitle || ''),
-      lastOpenedAt: Math.max(0, Math.round(Number(progress?.lastOpenedAt) || 0))
+      lastViewedAt: viewedAtOf(progress)
     })
   )
   return { body }
@@ -274,7 +289,8 @@ export function progressFromBody(body) {
       lastLessonRelativePath: String(data.lastLessonRelativePath || ''),
       lastLessonTitle: String(data.lastLessonTitle || ''),
       lastPositionSec: Math.max(0, Math.round(Number(data.lastPositionSec) || 0)),
-      lastOpenedAt: Math.max(0, Math.round(Number(data.lastOpenedAt) || 0))
+      lastOpenedAt: Math.max(0, Math.round(Number(data.lastOpenedAt) || 0)),
+      lastViewedAt: viewedAtOf(data)
     }
   } catch {
     return null
@@ -286,6 +302,7 @@ export function progressIsEmpty(progress) {
   if (!data) return true
   if (data.inProcess) return false
   if (data.lastLessonRelativePath) return false
+  if (data.lastViewedAt) return false
   return !Object.values(data.lessons).some((lesson) => lesson.completed || lesson.positionSec > 0)
 }
 
@@ -299,6 +316,17 @@ export function progressTrackKey(progress) {
     .sort()
     .join('\n')
   return `${data.inProcess ? 1 : 0}\n${data.lastLessonRelativePath}\n${done}`
+}
+
+/** Completion, En curso, last lesson, and the 2-minute view session. Exact view time is not part of the ack. */
+export function progressSyncKey(progress) {
+  const data = progress?.lessons ? progress : progressFromBody(progress?.body || progress)
+  if (!data) return ''
+  return `${progressTrackKey(data)}\n${viewSession(viewedAtOf(data))}`
+}
+
+export function progressSyncHash(courseId, progress) {
+  return wireHash(String(courseId || ''), progressSyncKey(progress))
 }
 
 /**
@@ -317,22 +345,25 @@ export function mergeCourseProgress(local, remote) {
       lessons[key] = remoteLesson
       continue
     }
-    const completed = current.completed || remoteLesson.completed
-    const newer = (remoteLesson.lastOpenedAt || 0) >= (current.lastOpenedAt || 0) ? remoteLesson : current
+    const completed = Boolean(current.completed || remoteLesson.completed)
+    const durationSec = Math.max(current.durationSec || 0, remoteLesson.durationSec || 0)
     lessons[key] = {
-      ...newer,
       completed,
-      positionSec: completed && newer.durationSec ? newer.durationSec : newer.positionSec
+      durationSec,
+      lastOpenedAt: Math.max(current.lastOpenedAt || 0, remoteLesson.lastOpenedAt || 0),
+      positionSec:
+        completed && durationSec ? durationSec : current.positionSec || remoteLesson.positionSec || 0
     }
   }
-  const last = (right.lastOpenedAt || 0) >= (left.lastOpenedAt || 0) ? right : left
+  const last = viewedAtOf(right) >= viewedAtOf(left) ? right : left
   return {
     inProcess: Boolean(left.inProcess),
     lessons,
     lastLessonRelativePath: last.lastLessonRelativePath,
     lastLessonTitle: last.lastLessonTitle,
     lastPositionSec: last.lastPositionSec,
-    lastOpenedAt: last.lastOpenedAt
+    lastOpenedAt: Math.max(left.lastOpenedAt || 0, right.lastOpenedAt || 0),
+    lastViewedAt: Math.max(viewedAtOf(left), viewedAtOf(right))
   }
 }
 

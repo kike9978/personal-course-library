@@ -70,6 +70,7 @@ import {
   getProjectLinkedPath,
   getNotesSearchByCourse,
   ensureLearningStoreFile,
+  flushLearningStore,
   listPlaylists,
   upsertPlaylist,
   deletePlaylist,
@@ -84,7 +85,7 @@ import {
   enqueueNotionPlaylistUpsert,
   enqueueNotionProgress,
   enqueueNotionUpsert,
-  localProgressTrack,
+  localProgressSyncKey,
   getNotionSyncStatus,
   notionDebugReport,
   pollNotionChanges,
@@ -646,14 +647,21 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('set-lesson-progress', (_event, { coursePath, ...update }) => {
-    const before = localProgressTrack(coursePath)
+    const before = localProgressSyncKey(coursePath)
     const next = setLessonProgress(coursePath, update)
-    enqueueNotionProgress(coursePath, { soon: localProgressTrack(coursePath) !== before })
+    if (localProgressSyncKey(coursePath) !== before) {
+      enqueueNotionProgress(coursePath, { soon: true })
+    }
     return next
   })
 
   ipcMain.handle('record-course-view', (_event, coursePath) => {
-    return recordCourseView(coursePath)
+    const before = localProgressSyncKey(coursePath)
+    const next = recordCourseView(coursePath)
+    if (localProgressSyncKey(coursePath) !== before) {
+      enqueueNotionProgress(coursePath, { soon: true })
+    }
+    return next
   })
 
   ipcMain.handle('list-notes', (_event, coursePath) => listNotes(coursePath))
@@ -988,6 +996,10 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('before-quit', () => {
+  flushLearningStore()
 })
 
 app.on('window-all-closed', () => {

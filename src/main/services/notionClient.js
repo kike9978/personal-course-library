@@ -658,7 +658,7 @@ export function createNotionClient({
         pageId,
         title: normalizeTitle(title),
         body: normalizeBody(body),
-        editedAt: (await pageEditedAt(pageId)) || saved?.last_edited_time || wrote.editedAt || null,
+        editedAt: wrote.editedAt || saved?.last_edited_time || (await pageEditedAt(pageId)) || null,
         timeSec: kind === 'finding' && timeSec !== undefined ? timeSec : undefined,
         findingId: kind === 'finding' ? String(findingId || '') : '',
         playlistId: kind === 'playlist' ? String(findingId || '') : '',
@@ -674,7 +674,8 @@ export function createNotionClient({
     const kind = row?.kind || 'note'
     const externalId = String(row?.externalId || '')
     let pageId = row?.pageId || null
-    if (pageId) {
+    const trustRow = row?.databaseRow === true && Boolean(pageId)
+    if (pageId && !trustRow) {
       const parent = await pageParent(pageId)
       if (!parent || parent.type === 'page_id') pageId = null
     }
@@ -728,8 +729,8 @@ export function createNotionClient({
         row?.childTitles || null,
         undefined
       )
-      if (!wrote.patched) editedAt = (await pageEditedAt(pageId)) || editedAt
-      else editedAt = (await pageEditedAt(pageId)) || wrote.editedAt || editedAt
+      if (wrote.editedAt) editedAt = wrote.editedAt
+      else editedAt = (await pageEditedAt(pageId)) || editedAt
     }
     return {
       pageId,

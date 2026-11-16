@@ -21,6 +21,7 @@ import {
   sameCourse,
   topicKey
 } from '../../shared/knowledgeGraph.js'
+import { viewSession } from '../../shared/notionSync.js'
 
 const STORE_FILE = 'learning-store.json'
 const COMPLETE_THRESHOLD = 0.95
@@ -62,6 +63,13 @@ function makeId() {
 let noteWriteHook = null
 let playlistWriteHook = null
 let noteWriteSuppress = 0
+let storeCache = null
+let storeFlushTimer = null
+let storeDirty = false
+let findingById = new Map()
+let findingByPageId = new Map()
+
+const STORE_FLUSH_MS = 2000
 
 /** Main-process listener for saves and deletes. Sync uses this to enqueue work. */
 export function setNoteWriteHook(fn) {
@@ -233,13 +241,30 @@ function ensureKnowledge(store) {
   return dirty
 }
 
-function readStore() {
+function reindexFindings(store) {
+  findingById = new Map()
+  findingByPageId = new Map()
+  for (const finding of store?.findings || []) {
+    if (finding?.id) findingById.set(finding.id, finding)
+    const pageId = finding?.notion?.pageId
+    if (pageId) findingByPageId.set(pageId, finding)
+  }
+}
+
+function persistStore(store) {
+  const filePath = getStorePath()
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  fs.writeFileSync(filePath, JSON.stringify(store, null, 2), 'utf8')
+  storeDirty = false
+}
+
+function loadStoreFromDisk() {
   try {
     const filePath = getStorePath()
-    if (!fs.existsSync(filePath)) return emptyStore()
+    if (!fs.existsSync(filePath)) return { store: emptyStore(), ok: true }
     const raw = fs.readFileSync(filePath, 'utf8')
     const data = JSON.parse(raw)
-    if (!data || typeof data !== 'object' || !data.courses) return emptyStore()
+    if (!data || typeof data !== 'object' || !data.courses) return { store: emptyStore(), ok: false }
     let dirty = false
     for (const key of ['paths', 'courseBriefs', 'learnerGoals', 'activePathId']) {
       if (Object.prototype.hasOwnProperty.call(data, key)) {
@@ -253,17 +278,53 @@ function readStore() {
     }
     for (const course of Object.values(data.courses || {})) ensureArrays(course)
     if (ensureKnowledge(data)) dirty = true
-    if (dirty) writeStore(data)
-    return data
+    if (dirty) {
+      storeCache = data
+      reindexFindings(data)
+      persistStore(data)
+    }
+    return { store: data, ok: true }
   } catch {
-    return emptyStore()
+    return { store: emptyStore(), ok: false }
   }
 }
 
-function writeStore(store) {
-  const filePath = getStorePath()
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  fs.writeFileSync(filePath, JSON.stringify(store, null, 2), 'utf8')
+function readStore() {
+  if (!storeCache) {
+    const loaded = loadStoreFromDisk()
+    if (!loaded.ok) return loaded.store
+    storeCache = loaded.store
+    reindexFindings(storeCache)
+  }
+  return storeCache
+}
+
+function writeStore(store, { debounce = false } = {}) {
+  storeCache = store
+  reindexFindings(store)
+  if (!debounce) {
+    if (storeFlushTimer) {
+      clearTimeout(storeFlushTimer)
+      storeFlushTimer = null
+    }
+    persistStore(store)
+    return
+  }
+  storeDirty = true
+  if (storeFlushTimer) return
+  storeFlushTimer = setTimeout(() => {
+    storeFlushTimer = null
+    if (storeCache && storeDirty) persistStore(storeCache)
+  }, STORE_FLUSH_MS)
+}
+
+/** Write a pending playback update before quit. */
+export function flushLearningStore() {
+  if (storeFlushTimer) {
+    clearTimeout(storeFlushTimer)
+    storeFlushTimer = null
+  }
+  if (storeCache && storeDirty) persistStore(storeCache)
 }
 
 function courseKey(coursePath) {
@@ -386,6 +447,7 @@ export function writeCourseProgress(coursePath, patch = {}) {
   if ('lastLessonTitle' in patch) course.lastLessonTitle = patch.lastLessonTitle || null
   if ('lastPositionSec' in patch) course.lastPositionSec = Math.max(0, Number(patch.lastPositionSec) || 0)
   if ('lastOpenedAt' in patch) course.lastOpenedAt = Number(patch.lastOpenedAt) || null
+  if ('lastViewedAt' in patch) course.lastViewedAt = Number(patch.lastViewedAt) || null
   if ('inProcess' in patch) course.inProcess = Boolean(patch.inProcess)
   if ('notion' in patch) course.notion = patch.notion
   store.courses[key] = course
@@ -437,6 +499,9 @@ export function setLessonProgress(coursePath, update) {
     completed: false,
     lastOpenedAt: null
   }
+  const priorCompleted = Boolean(existing.completed)
+  const priorPath = course.lastLessonRelativePath || null
+  const priorSession = viewSession(course.lastViewedAt)
 
   let positionSec =
     typeof update.positionSec === 'number' ? Math.max(0, update.positionSec) : existing.positionSec
@@ -494,7 +559,11 @@ export function setLessonProgress(coursePath, update) {
   }
 
   store.courses[key] = course
-  writeStore(store)
+  const immediate =
+    Boolean(next.completed) !== priorCompleted ||
+    (course.lastLessonRelativePath || null) !== priorPath ||
+    viewSession(course.lastViewedAt) !== priorSession
+  writeStore(store, { debounce: !immediate })
   return presentCourse(store, key, course)
 }
 
@@ -792,6 +861,21 @@ export function deleteNote(coursePath, noteId) {
 
 export function listFindingRecords() {
   return structuredClone(readStore().findings || [])
+}
+
+/** Live findings for read-only sync scans. Callers must not mutate the records. */
+export function readFindingList() {
+  return readStore().findings || []
+}
+
+export function findFindingRecord(id) {
+  readStore()
+  return findingById.get(id) || null
+}
+
+export function findFindingByPageId(pageId) {
+  readStore()
+  return findingByPageId.get(pageId) || null
 }
 
 export function readFinding(id) {
