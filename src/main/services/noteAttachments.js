@@ -186,6 +186,14 @@ export function saveNoteAttachmentBytes(fileName, bytes) {
   return absolute
 }
 
+/** True when the attachment is already on disk and not empty. */
+export function noteAttachmentExists(fileName) {
+  const absolute = resolveNoteAttachmentPath(fileName)
+  if (!absolute || !fs.existsSync(absolute)) return false
+  const stat = fs.statSync(absolute)
+  return stat.isFile() && stat.size > 0
+}
+
 /** @param {string} fileName */
 export function readNoteAttachment(fileName) {
   const absolute = resolveNoteAttachmentPath(fileName)

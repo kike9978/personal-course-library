@@ -62,6 +62,7 @@ function makeId() {
 
 let noteWriteHook = null
 let playlistWriteHook = null
+let projectWriteHook = null
 let noteWriteSuppress = 0
 let storeCache = null
 let storeFlushTimer = null
@@ -78,6 +79,10 @@ export function setNoteWriteHook(fn) {
 
 export function setPlaylistWriteHook(fn) {
   playlistWriteHook = typeof fn === 'function' ? fn : null
+}
+
+export function setProjectWriteHook(fn) {
+  projectWriteHook = typeof fn === 'function' ? fn : null
 }
 
 /** Store writes from the sync worker must not enqueue another sync. */
@@ -98,6 +103,11 @@ function emitNoteWrite(event) {
 function emitPlaylistWrite(event) {
   if (noteWriteSuppress > 0 || !playlistWriteHook) return
   playlistWriteHook(event)
+}
+
+function emitProjectWrite(event) {
+  if (noteWriteSuppress > 0 || !projectWriteHook) return
+  projectWriteHook(event)
 }
 
 function ensureArrays(course) {
@@ -1142,7 +1152,7 @@ function normalizeProjectRelativePath(value) {
 
 export function upsertProject(coursePath, payload) {
   const store = readStore()
-  const { course } = getMutableCourse(store, coursePath)
+  const { key, course } = getMutableCourse(store, coursePath)
   const now = Date.now()
   const title = String(payload.title ?? '').trim()
   if (!payload.id && !title) {
@@ -1150,6 +1160,7 @@ export function upsertProject(coursePath, payload) {
   }
 
   const status = PROJECT_STATUSES.has(payload.status) ? payload.status : 'todo'
+  let savedId = payload.id || null
   const linkedFolderPath =
     payload.linkedFolderPath === undefined
       ? undefined
@@ -1184,9 +1195,11 @@ export function upsertProject(coursePath, payload) {
       ...(payload.notion !== undefined ? { notion: payload.notion } : {}),
       updatedAt: now
     }
+    savedId = course.projects[idx].id
   } else {
+    savedId = makeId()
     course.projects.push({
-      id: makeId(),
+      id: savedId,
       title,
       linkedFolderPath: linkedFolderPath ?? null,
       notes: String(payload.notes || '').trim(),
@@ -1200,15 +1213,39 @@ export function upsertProject(coursePath, payload) {
   }
 
   writeStore(store)
+  emitProjectWrite({ op: 'upsert', coursePath: key, id: savedId })
   return listProjects(coursePath)
 }
 
 export function deleteProject(coursePath, projectId) {
   const store = readStore()
-  const { course } = getMutableCourse(store, coursePath)
+  const { key, course } = getMutableCourse(store, coursePath)
+  const removed = course.projects.find((p) => p.id === projectId) || null
   course.projects = course.projects.filter((p) => p.id !== projectId)
   writeStore(store)
+  if (removed) {
+    emitProjectWrite({ op: 'delete', project: { ...structuredClone(removed), coursePath: key } })
+  }
   return listProjects(coursePath)
+}
+
+/** Put a project back after Notion wins a delete conflict. */
+export function restoreProject(coursePath, project) {
+  const store = readStore()
+  const { course } = getMutableCourse(store, coursePath)
+  const now = Date.now()
+  const existing = course.projects.findIndex((item) => item.id === project.id)
+  const next = {
+    ...(existing === -1 ? {} : course.projects[existing]),
+    ...project,
+    id: project.id,
+    updatedAt: now
+  }
+  if (existing === -1) course.projects.push({ ...next, createdAt: project.createdAt || now })
+  else course.projects[existing] = next
+  writeStore(store)
+  emitProjectWrite({ op: 'upsert', coursePath: courseKey(coursePath), id: project.id })
+  return next
 }
 
 /** Resolve a stored project link for open/reveal (absolute path only if owned by this course). */

@@ -43,20 +43,26 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
     return map
   }, [courses])
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true)
     try {
       const list = await window.api.listAllProjects()
       setItems(list || [])
     } catch (err) {
       toast.error(err.message || 'No se pudieron cargar los proyectos')
     } finally {
-      setLoading(false)
+      if (!quiet) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     load()
+  }, [load])
+
+  useEffect(() => {
+    return window.api.onProjectsChanged?.(() => {
+      void load({ quiet: true })
+    })
   }, [load])
 
   useEffect(() => {

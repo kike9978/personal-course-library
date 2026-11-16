@@ -23,6 +23,7 @@ import {
   restoreFinding,
   upsertTopic,
   upsertProject,
+  restoreProject,
   savePlaylistIntent,
   withoutNoteWriteHook,
   writeCourseProgress,
@@ -68,7 +69,14 @@ import {
   topicWire,
   wireHash
 } from '../../shared/notionSync.js'
-import { readNoteAttachment, saveNoteAttachmentBytes } from './noteAttachments.js'
+import {
+  noteAttachmentExists,
+  readNoteAttachment,
+  saveNoteAttachmentBytes
+} from './noteAttachments.js'
+
+const NOTE_FILE_TRIES = 3
+const NOTE_FILE_MISS = 'No se pudieron sincronizar las imágenes de esta nota.'
 
 const STATE_FILE = 'notion-sync.json'
 
@@ -115,6 +123,7 @@ let hooks = {
   notifyNotes() {},
   notifyPlaylists() {},
   notifyProgress() {},
+  notifyProjects() {},
   notifyCourse() {},
   notifyStatus() {}
 }
@@ -132,6 +141,7 @@ function emptySyncState() {
     projectTombstones: [],
     drawingShare: '',
     drawingsAsJson: false,
+    imagesQueued: false,
     rowSchema: false,
     pollWatermark: '',
     parked: []
@@ -150,6 +160,7 @@ function readState() {
       projectTombstones: Array.isArray(data.projectTombstones) ? data.projectTombstones : [],
       drawingShare: ['json', 'image', 'local'].includes(data.drawingShare) ? data.drawingShare : '',
       drawingsAsJson: data.drawingsAsJson === true,
+      imagesQueued: data.imagesQueued === true,
       rowSchema: data.rowSchema === true,
       pollWatermark: typeof data.pollWatermark === 'string' ? data.pollWatermark : '',
       parked: Array.isArray(data.parked) ? data.parked : []
@@ -175,6 +186,7 @@ function writeState(state) {
         projectTombstones: state.projectTombstones || [],
         drawingShare: state.drawingShare || '',
         drawingsAsJson: state.drawingsAsJson === true,
+        imagesQueued: state.imagesQueued === true,
         rowSchema: state.rowSchema === true,
         pollWatermark: state.pollWatermark || '',
         parked: Array.isArray(state.parked) ? state.parked : []
@@ -383,6 +395,24 @@ function publicStatus() {
     deleteConflicts,
     playlistConflicts,
     playlistDeleteConflicts,
+    projectConflicts: config.enabled
+      ? listStoredProjects()
+          .filter((project) => project.notion?.conflict)
+          .map(projectConflictView)
+      : [],
+    projectDeleteConflicts: (readState().projectTombstones || [])
+      .filter((item) => item.conflict)
+      .map((item) => {
+        const parsed = projectFromBody(item.conflict.remoteBody)
+        return {
+          projectId: item.projectId,
+          title: item.snapshot?.title || 'Proyecto',
+          remoteTitle: item.conflict.remoteTitle || '',
+          remoteBody: parsed
+            ? projectText({ title: item.conflict.remoteTitle, ...parsed })
+            : item.conflict.remoteBody || ''
+        }
+      }),
     progressConflicts: listProgressConflicts(),
     migrating: Boolean(migrating) || (rowWrites && !readState().rowSchema)
   }
@@ -458,6 +488,37 @@ function notifyPlaylists() {
 
 function notifyProgress() {
   hooks.notifyProgress()
+}
+
+function notifyProjects() {
+  hooks.notifyProjects()
+}
+
+const PROJECT_STATUS_LABEL = {
+  todo: 'Por hacer',
+  in_progress: 'En curso',
+  done: 'Hecho'
+}
+
+function projectText(project) {
+  const status = PROJECT_STATUS_LABEL[project?.status] || PROJECT_STATUS_LABEL.todo
+  const notes = String(project?.notes || '').trim()
+  return [status, notes].filter(Boolean).join('\n\n')
+}
+
+function projectConflictView(project) {
+  const remote = project.notion?.conflict || {}
+  const parsed = projectFromBody(remote.remoteBody)
+  return {
+    projectId: project.id,
+    coursePath: project.coursePath || '',
+    title: project.title || 'Proyecto',
+    localBody: projectText(project),
+    remoteTitle: remote.remoteTitle || '',
+    remoteBody: parsed
+      ? projectText({ title: remote.remoteTitle, ...parsed })
+      : remote.remoteBody || ''
+  }
 }
 
 function cursorFrom(page, hash, extra = {}) {
@@ -544,7 +605,13 @@ function preferLocalVideoTime(finding, remote) {
 function applyNotion(id, notion, text, timeSec = undefined) {
   withoutNoteWriteHook(() => {
     mutateFinding(id, (finding) => {
-      finding.notion = notion
+      const previous = finding.notion || {}
+      const next = { ...notion }
+      if (previous.filesPending && next.filesPending === undefined) {
+        next.filesPending = previous.filesPending
+      }
+      if (previous.error === NOTE_FILE_MISS && !next.error) next.error = previous.error
+      finding.notion = next
       if (text) {
         finding.title = normalizeTitle(text.title) || null
         finding.body = normalizeBody(text.body)
@@ -702,8 +769,8 @@ async function saveNoteRow(client, finding, remote) {
   }
   row.databaseRow = Boolean(row.pageId)
   const page = await client.saveRow(row)
-  await reconcileNoteFiles(client, page?.pageId, finding.body)
-  return page
+  const fileFetch = await reconcileNoteFiles(client, page?.pageId, finding.body, { remove: true })
+  return page ? { ...page, fileFetch } : page
 }
 
 async function saveNotePage(client, finding, remote) {
@@ -754,11 +821,31 @@ async function saveNotePage(client, finding, remote) {
     )
   }
   await retireFlatCopies(client, finding.id, page.pageId)
-  await reconcileNoteFiles(client, page?.pageId, finding.body)
-  return page
+  const fileFetch = await reconcileNoteFiles(client, page?.pageId, finding.body, { remove: true })
+  return page ? { ...page, fileFetch } : page
 }
 
 const MAX_NOTE_ASSET_BYTES = 20 * 1024 * 1024
+
+/** One pass so pictures skipped by an older sync get sent or fetched. */
+function queueImageUploads() {
+  const state = readState()
+  if (state.imagesQueued) return
+  for (const finding of readFindingList()) {
+    if (finding.notion?.conflict || !finding.notion?.pageId) continue
+    if (!noteAssetNames(finding.body || '').length) continue
+    const pending = jobs.get(finding.id)
+    if (pending?.op === 'delete') continue
+    jobs.set(finding.id, {
+      op: 'upsert',
+      remote: Boolean(pending?.remote),
+      attempts: pending?.attempts || 0,
+      files: true
+    })
+  }
+  state.imagesQueued = true
+  writeState(state)
+}
 
 /** Notes that still have a scene file need one upsert so the JSON reaches Notion. */
 function queueDrawingUploads() {
@@ -788,35 +875,92 @@ function listProgressConflicts() {
     }))
 }
 
-async function reconcileNoteFiles(client, pageId, body) {
-  if (!pageId) return
+function filesNeedFetch(notion) {
+  return Array.isArray(notion?.filesPending?.names) && notion.filesPending.names.length > 0
+}
+
+function recordNoteFiles(id, result) {
+  if (!result) return
+  withoutNoteWriteHook(() => {
+    mutateFinding(id, (finding) => {
+      const current = finding.notion || {}
+      if (!result.missing.length) {
+        if (!current.filesPending && current.error !== NOTE_FILE_MISS) return
+        const next = {
+          ...current,
+          error: current.error === NOTE_FILE_MISS ? null : current.error
+        }
+        delete next.filesPending
+        finding.notion = next
+        return
+      }
+      const tries = (current.filesPending?.tries || 0) + 1
+      const next = { ...current }
+      if (tries >= NOTE_FILE_TRIES) {
+        delete next.filesPending
+        next.error = NOTE_FILE_MISS
+      } else {
+        next.filesPending = { tries, names: result.missing }
+      }
+      finding.notion = next
+    })
+  })
+}
+
+/**
+ * Download files this computer lacks and upload local files the page lacks.
+ * `remove` drops page files the note no longer names. A pull leaves them, so a
+ * receive does not write to Notion unless a local file is actually missing there.
+ * Pass `assets` from a page just read to skip a second block list.
+ */
+async function reconcileNoteFiles(client, pageId, body, { assets, remove = false } = {}) {
+  const empty = { fetched: false, missing: [] }
+  if (!pageId) return empty
   const names = noteAssetNames(body)
-  if (!names.length) return
+  if (!names.length) return empty
   const planned = notionAssetsToUpload(names)
-  const wanted = planned.map((item) => item.name)
-  const remote = await client.listNoteAssets(pageId)
-  for (const item of remote) {
-    if (wanted.includes(item.name) || !item.blockId) continue
-    await client.deleteBlock(item.blockId)
+  const wanted = new Set(planned.map((item) => item.name))
+  const remote = Array.isArray(assets) ? assets : await client.listNoteAssets(pageId)
+  if (remove) {
+    for (const item of remote) {
+      if (wanted.has(item.name) || !item.blockId) continue
+      await client.deleteBlock(item.blockId)
+    }
   }
-  const present = new Set(
-    remote.filter((item) => wanted.includes(item.name)).map((item) => item.name)
-  )
+  const present = new Set()
+  const byName = new Map()
+  for (const item of remote) {
+    if (!wanted.has(item.name)) continue
+    present.add(item.name)
+    byName.set(item.name, item)
+  }
+  const missing = []
+  let fetched = false
   for (const name of wanted) {
-    const local = readNoteAttachment(name)
-    const onPage = remote.find((item) => item.name === name)
-    if (!local && onPage?.url) {
+    const onPage = byName.get(name)
+    if (!noteAttachmentExists(name)) {
+      if (!onPage?.url) {
+        missing.push(name)
+        continue
+      }
       try {
         const bytes = await client.downloadAsset(onPage.url)
-        if (bytes?.byteLength) saveNoteAttachmentBytes(name, bytes)
+        if (!bytes?.byteLength) {
+          missing.push(name)
+          continue
+        }
+        saveNoteAttachmentBytes(name, bytes)
+        fetched = true
       } catch {
-        // The note text still syncs when a file cannot be fetched.
+        missing.push(name)
       }
       continue
     }
-    if (local && !present.has(name)) {
-      if (local.size > MAX_NOTE_ASSET_BYTES) continue
-      const plan = planned.find((item) => item.name === name)
+    if (present.has(name)) continue
+    const local = readNoteAttachment(name)
+    if (!local || local.size > MAX_NOTE_ASSET_BYTES) continue
+    const plan = planned.find((item) => item.name === name)
+    try {
       await client.attachNoteFile(
         pageId,
         name,
@@ -824,21 +968,35 @@ async function reconcileNoteFiles(client, pageId, body) {
         plan?.contentType || local.contentType,
         plan?.filename || name
       )
+    } catch (error) {
+      if (remove) throw error
+      missing.push(name)
     }
   }
+  return { fetched, missing }
+}
+
+async function syncNoteFiles(client, id, page, body) {
+  if (page?.fileFetch) {
+    recordNoteFiles(id, page.fileFetch)
+    return page.fileFetch
+  }
+  const result = await reconcileNoteFiles(client, page?.pageId, body, {
+    assets: page?.assets,
+    remove: false
+  })
+  recordNoteFiles(id, result)
+  return result
 }
 
 async function placeExisting(client, finding, remote) {
-  if (rowsReady()) {
-    await reconcileNoteFiles(client, remote.pageId, remote.body)
-    return remote
-  }
+  if (rowsReady()) return remote
   const parentId = await ensurePlace(client, finding)
   const parent = await client.pageParent(remote.pageId)
   if (parent?.type === 'page_id' && parent.id === parentId) {
     await retireFlatCopies(client, finding.id, remote.pageId)
-    await reconcileNoteFiles(client, remote.pageId, remote.body)
-    return remote
+    const fileFetch = await reconcileNoteFiles(client, remote.pageId, remote.body)
+    return { ...remote, fileFetch }
   }
   const created = await client.createPage(
     finding.id,
@@ -853,8 +1011,15 @@ async function placeExisting(client, finding, remote) {
   )
   await client.archivePage(remote.pageId)
   await retireFlatCopies(client, finding.id, created.pageId)
-  await reconcileNoteFiles(client, created.pageId, remote.body)
-  return { ...remote, pageId: created.pageId, editedAt: created.editedAt || remote.editedAt }
+  const fileFetch = await reconcileNoteFiles(client, created.pageId, remote.body, {
+    remove: true
+  })
+  return {
+    ...remote,
+    pageId: created.pageId,
+    editedAt: created.editedAt || remote.editedAt,
+    fileFetch
+  }
 }
 
 function finishWrite(id, page, localHash, timeSec) {
@@ -913,6 +1078,7 @@ async function writeLocal(client, finding) {
   const page = await saveNotePage(client, finding, remote)
   const localHash = rowsReady() ? localNoteHash(finding) : wireHash(finding.title, finding.body)
   finishWrite(finding.id, page, localHash, noteVideoTime(finding))
+  recordNoteFiles(finding.id, page?.fileFetch)
 }
 
 async function reconcileUpsert(client, id, job = {}) {
@@ -936,6 +1102,7 @@ async function reconcileUpsert(client, id, job = {}) {
       pulledAt: Date.now()
     })
     withoutNoteWriteHook(() => restoreFinding(created))
+    await syncNoteFiles(client, id, remote, shape.body)
     notifyNotes()
     return
   }
@@ -948,6 +1115,11 @@ async function reconcileUpsert(client, id, job = {}) {
     finding.notion?.ackedHash === localHash &&
     !videoTimeNeedsSync(finding)
   ) {
+    if ((job.files || filesNeedFetch(finding.notion)) && finding.notion?.pageId) {
+      const result = await reconcileNoteFiles(client, finding.notion.pageId, finding.body)
+      recordNoteFiles(id, result)
+      if (result.fetched) notifyNotes()
+    }
     return
   }
   const remote = await loadRemote(client, finding)
@@ -956,6 +1128,7 @@ async function reconcileUpsert(client, id, job = {}) {
   if (action === 'create' || action === 'push') {
     const page = await saveNotePage(client, finding, remote)
     finishWrite(id, page, localHash, noteVideoTime(finding))
+    recordNoteFiles(id, page?.fileFetch)
     notifyNotes()
     return
   }
@@ -970,6 +1143,7 @@ async function reconcileUpsert(client, id, job = {}) {
       shape,
       Array.isArray(shape.anchors) ? undefined : placed.timeSec
     )
+    await syncNoteFiles(client, id, placed, shape.body ?? placed.body)
     notifyNotes()
     return
   }
@@ -981,15 +1155,18 @@ async function reconcileUpsert(client, id, job = {}) {
       if (remoteTime === undefined || preferLocalVideoTime(finding, remote)) {
         const page = await saveNotePage(client, finding, remote)
         finishWrite(id, page, localHash, localTime)
+        recordNoteFiles(id, page?.fileFetch)
       } else {
         const placed = await placeExisting(client, finding, remote)
         applyNotion(id, noteCursor(placed, localHash, remoteTime), null, remoteTime)
+        await syncNoteFiles(client, id, placed, placed.body)
       }
       notifyNotes()
       return
     }
     const placed = await placeExisting(client, finding, remote)
     applyNotion(id, noteCursor(placed, localHash, localTime))
+    await syncNoteFiles(client, id, placed, placed.body)
     notifyNotes()
     return
   }
@@ -1277,8 +1454,11 @@ async function takeSharedNote(client, pageId, place, seen, recent) {
   const page = await client.readPage(pageId)
   if (!page || page.playlistId) return false
   if (page.timeSec !== undefined && !anchor.projectId) anchor.timeSec = roundTimeSec(page.timeSec)
-  await reconcileNoteFiles(client, page.pageId, page.body)
+  const fileFetch = await reconcileNoteFiles(client, page.pageId, page.body, {
+    assets: page.assets
+  })
   const existing = linkedFinding(page)
+  if (existing) recordNoteFiles(existing.id, fileFetch)
   if (existing) {
     let changed = false
     const sameText = wireHash(existing.title, existing.body) === wireHash(page.title, page.body)
@@ -1550,6 +1730,9 @@ async function migrateToRows(client) {
       migrationStep(`Nota · ${finding.title || finding.id}`)
       const legacyId = finding.notion?.pageId || null
       const page = await client.saveRow(buildNoteRow(finding))
+      const fileFetch = await reconcileNoteFiles(client, page?.pageId, finding.body, {
+        remove: true
+      })
       await archiveLegacyPage(client, legacyId, page.pageId)
       finishWrite(
         finding.id,
@@ -1557,6 +1740,7 @@ async function migrateToRows(client) {
         localNoteHash(readFinding(finding.id) || finding),
         noteVideoTime(finding)
       )
+      recordNoteFiles(finding.id, fileFetch)
     }
     for (const playlist of playlists) {
       migrationStep(`Lista · ${playlist.title || playlist.id}`)
@@ -1889,6 +2073,7 @@ async function reconcileProject(client, id, coursePath) {
         notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
       })
     })
+    notifyProjects()
     return
   }
   if (action === 'conflict' && remote) {
@@ -1908,6 +2093,7 @@ async function reconcileProject(client, id, coursePath) {
         }
       })
     })
+    notifyProjects()
     return
   }
   if (action !== 'create' && action !== 'push' && action !== 'relink') return
@@ -1942,7 +2128,10 @@ function rememberProjectDelete(project) {
     snapshot: {
       title: project.title || '',
       notes: project.notes || '',
-      status: project.status || 'todo'
+      status: project.status || 'todo',
+      sectionId: project.sectionId || null,
+      fileRelativePath: project.fileRelativePath || null,
+      linkedFolderPath: project.linkedFolderPath || null
     },
     conflict: null
   })
@@ -2147,7 +2336,11 @@ function queueLocalRowDrift() {
   for (const finding of readFindingList()) {
     if (finding.notion?.conflict || saveConflictParked(finding.id)) continue
     const hash = localNoteHash(finding)
-    if (finding.notion?.ackedHash !== hash || (finding.notion?.wire || 0) < 2) {
+    if (
+      finding.notion?.ackedHash !== hash ||
+      (finding.notion?.wire || 0) < 2 ||
+      filesNeedFetch(finding.notion)
+    ) {
       const pending = jobs.get(finding.id)
       jobs.set(finding.id, {
         op: 'upsert',
@@ -2343,6 +2536,7 @@ async function queueRowPoll(client) {
 async function queuePending() {
   if (!getNotionConfig().enabled) return
   queueDrawingUploads()
+  queueImageUploads()
   notePrepare('Revisando Notion…')
   const client = clientFromConfig()
   try {
@@ -3245,6 +3439,7 @@ export function startNotionSync(nextHooks = {}) {
     notifyNotes: nextHooks.notifyNotes || (() => {}),
     notifyPlaylists: nextHooks.notifyPlaylists || (() => {}),
     notifyProgress: nextHooks.notifyProgress || (() => {}),
+    notifyProjects: nextHooks.notifyProjects || (() => {}),
     notifyCourse: nextHooks.notifyCourse || (() => {}),
     notifyStatus: nextHooks.notifyStatus || (() => {})
   }
@@ -3363,6 +3558,8 @@ export function enqueueNotionProjectUpsert(coursePath, id) {
   conflictCooldown.delete(key)
   const project = readStoredProject(folder, id)
   if (!project || project.notion?.conflict) return
+  const wire = projectWire(project)
+  if (project.notion?.pageId && project.notion.ackedHash === wireHash(wire.title, wire.body)) return
   jobs.set(key, {
     op: 'project-upsert',
     projectId: id,
@@ -3601,9 +3798,11 @@ export async function resolveNotionConflict(findingId, choice) {
         remote,
         remote.timeSec
       )
+      await syncNoteFiles(client, findingId, remote, remote.body)
     } else if (choice === 'both') {
       const remote = await loadRemote(client, finding)
       if (!remote) throw new Error('La página de Notion ya no está')
+      await reconcileNoteFiles(client, remote.pageId, remote.body, { assets: remote.assets })
       const copy = withoutNoteWriteHook(() =>
         forkFinding(findingId, {
           title: normalizeTitle(remote.title) || null,
@@ -3761,6 +3960,116 @@ export async function resolveNotionPlaylistDelete(playlistId, choice) {
     writePlaylistTombstones(
       readPlaylistTombstones().filter((item) => item.playlistId !== playlistId)
     )
+    publish()
+    return publicStatus()
+  })
+}
+
+async function pushProject(client, project) {
+  const wire = projectWire(project)
+  const localHash = wireHash(wire.title, wire.body)
+  const remote = await loadKindPage(client, 'project', project.id, project.notion?.pageId)
+  const folder = project.coursePath || ''
+  const page = await client.saveRow({
+    kind: 'project',
+    externalId: project.id,
+    parentExternalId: folder ? `course:${folder}` : '',
+    courseKey: folder ? `course:${folder}` : '',
+    title: wire.title,
+    body: wire.body,
+    status: wire.status,
+    pageId: remote?.pageId || null,
+    databaseRow: Boolean(remote?.pageId),
+    emoji: PAGE_ICONS.project
+  })
+  if (!page?.pageId) throw new Error('Notion no devolvió la página')
+  const hash = page.body === undefined ? localHash : wireHash(page.title, page.body)
+  withoutNoteWriteHook(() => {
+    upsertProject(folder, { id: project.id, notion: cursorFrom(page, hash) })
+  })
+}
+
+function dropProjectTombstone(projectId) {
+  const state = readState()
+  state.projectTombstones = (state.projectTombstones || []).filter(
+    (item) => item.projectId !== projectId
+  )
+  writeState(state)
+}
+
+export async function resolveNotionProjectConflict(projectId, choice) {
+  if (!getNotionConfig().enabled) throw new Error('La sincronización con Notion está apagada')
+  await flushQueued()
+  const project = listStoredProjects().find((item) => item.id === projectId)
+  if (!project?.notion?.conflict) throw new Error('Ese proyecto no está en conflicto')
+  const client = clientFromConfig()
+  return oneAtATime(async () => {
+    await client.loadSchema()
+    if (choice === 'local') {
+      await pushProject(client, readStoredProject(project.coursePath, projectId) || project)
+    } else if (choice === 'remote') {
+      const remote = await loadKindPage(client, 'project', projectId, project.notion?.pageId)
+      const parsed = remote ? projectFromBody(remote.body) : null
+      if (!remote || !parsed) throw new Error('La página de Notion ya no es un proyecto')
+      const hash = wireHash(remote.title, projectWire({ title: remote.title, ...parsed }).body)
+      withoutNoteWriteHook(() => {
+        upsertProject(project.coursePath, {
+          id: projectId,
+          title: remote.title,
+          notes: parsed.notes,
+          status: parsed.status,
+          sectionId: parsed.sectionId || null,
+          fileRelativePath: parsed.fileRelativePath || null,
+          notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
+        })
+      })
+      notifyProjects()
+    } else {
+      throw new Error('Elección desconocida')
+    }
+    publish()
+    return publicStatus()
+  })
+}
+
+export async function resolveNotionProjectDelete(projectId, choice) {
+  if (!getNotionConfig().enabled) throw new Error('La sincronización con Notion está apagada')
+  await flushQueued()
+  const tomb = (readState().projectTombstones || []).find((item) => item.projectId === projectId)
+  if (!tomb?.conflict) throw new Error('Ese borrado no está en conflicto')
+  const client = clientFromConfig()
+  return oneAtATime(async () => {
+    await client.loadSchema()
+    if (choice === 'discard') {
+      const remote = tomb.pageId ? await client.readPage(tomb.pageId) : null
+      if (remote) await client.archivePage(tomb.pageId)
+    } else if (choice === 'keep') {
+      const remote = (tomb.pageId ? await client.readPage(tomb.pageId) : null) || {
+        pageId: tomb.pageId,
+        title: tomb.conflict.remoteTitle,
+        body: tomb.conflict.remoteBody,
+        editedAt: tomb.conflict.remoteEditedAt
+      }
+      const parsed = projectFromBody(remote.body)
+      if (!parsed) throw new Error('La página de Notion ya no es un proyecto')
+      const hash = wireHash(remote.title, projectWire({ title: remote.title, ...parsed }).body)
+      withoutNoteWriteHook(() => {
+        restoreProject(tomb.coursePath, {
+          id: projectId,
+          title: remote.title || tomb.snapshot?.title || 'Proyecto',
+          notes: parsed.notes,
+          status: parsed.status,
+          sectionId: parsed.sectionId || tomb.snapshot?.sectionId || null,
+          fileRelativePath: parsed.fileRelativePath || tomb.snapshot?.fileRelativePath || null,
+          linkedFolderPath: tomb.snapshot?.linkedFolderPath || null,
+          notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
+        })
+      })
+      notifyProjects()
+    } else {
+      throw new Error('Elección desconocida')
+    }
+    dropProjectTombstone(projectId)
     publish()
     return publicStatus()
   })

@@ -203,6 +203,12 @@ function CourseRoom({
     return () => unsub?.()
   }, [coursePath, refreshStudy])
 
+  useEffect(() => {
+    return window.api.onProjectsChanged?.(() => {
+      void refreshProjects()
+    })
+  }, [refreshProjects])
+
   const flatLessons = useMemo(() => flattenLessons(tree?.sections), [tree])
 
   const programs = useMemo(() => collectCourseFacets(courses).programs, [courses])

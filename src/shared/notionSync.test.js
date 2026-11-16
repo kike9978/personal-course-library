@@ -116,6 +116,12 @@ describe('notion wire text', () => {
     ]
     assert.equal(blocksToBody(blocks), body)
     assert.equal(findingIdFromBlocks(blocks), 'note-1')
+    assert.deepEqual(
+      noteAssetNames(
+        '![Captura](course-media://note/?file=mw2pazt9-4b174209be23.jpg "pie de foto")'
+      ),
+      ['mw2pazt9-4b174209be23.jpg']
+    )
   })
 
   it('keeps the finding id out of the note text', () => {

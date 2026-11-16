@@ -843,18 +843,31 @@ function addAssetName(names, raw) {
   names.push(base)
 }
 
+/** Split `url` or `url "caption"` inside an image's parentheses. */
+export function markdownImageDestination(raw) {
+  const text = String(raw || '').trim()
+  const titled = /^(.*\S)\s+("(?:\\.|[^"])*")\s*$/.exec(text)
+  if (!titled) return { src: text, title: '' }
+  return { src: titled[1].trim(), title: titled[2] }
+}
+
+/** File param of a `course-media://note/` image, ignoring a markdown caption. */
+export function courseMediaNoteFile(destination) {
+  const { src } = markdownImageDestination(destination)
+  if (!/^course-media:\/\/note\//i.test(src)) return ''
+  const file = /[?&]file=([^&\s]+)/i.exec(src)
+  return file ? file[1] : ''
+}
+
 /** Basenames a note's markdown points at, including an Excalidraw scene file. */
 export function noteAssetNames(body) {
   const names = []
   const text = String(body || '')
-  for (const match of text.matchAll(/!\[[^\]]*]\(course-media:\/\/note\/\?file=([^)\s]+)\)/gi)) {
-    addAssetName(names, match[1])
-  }
-  for (const match of text.matchAll(/!\[excalidraw:([^\]]*)\]\(([^)]*)\)/gi)) {
-    const id = String(match[1] || '').trim()
-    if (/^[a-z0-9-]+$/i.test(id)) addAssetName(names, `${id}.excalidraw`)
-    const file = /[?&]file=([^)\s]+)/i.exec(match[2] || '')
-    if (file) addAssetName(names, file[1])
+  for (const match of text.matchAll(/!\[([^\]]*)\]\(([^)\n]*)\)/g)) {
+    const file = courseMediaNoteFile(match[2])
+    if (file) addAssetName(names, file)
+    const drawing = /^excalidraw:([a-z0-9-]+)$/i.exec(String(match[1] || '').trim())
+    if (drawing) addAssetName(names, `${drawing[1]}.excalidraw`)
   }
   return names
 }

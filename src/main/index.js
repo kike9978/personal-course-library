@@ -77,13 +77,16 @@ import {
   getPlaylistIntent,
   savePlaylistIntent,
   setNoteWriteHook,
-  setPlaylistWriteHook
+  setPlaylistWriteHook,
+  setProjectWriteHook
 } from './services/learningStore.js'
 import {
   enqueueNotionDelete,
   enqueueNotionPlaylistDelete,
   enqueueNotionPlaylistUpsert,
   enqueueNotionProgress,
+  enqueueNotionProjectDelete,
+  enqueueNotionProjectUpsert,
   enqueueNotionUpsert,
   localProgressSyncKey,
   getNotionSyncStatus,
@@ -94,6 +97,8 @@ import {
   resolveNotionPlaylistConflict,
   resolveNotionPlaylistDelete,
   resolveNotionProgress,
+  resolveNotionProjectConflict,
+  resolveNotionProjectDelete,
   saveNotionSettings,
   startNotionSync,
   syncNotionNow
@@ -408,7 +413,10 @@ function registerCourseMediaProtocol() {
         if (!file) return new Response('Not Found', { status: 404 })
         const absolute = resolveNoteAttachmentPath(file)
         if (!absolute || !fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
-          return new Response('Not Found', { status: 404 })
+          return new Response('Not Found', {
+            status: 404,
+            headers: { 'Cache-Control': 'no-store' }
+          })
         }
         const data = await fsPromises.readFile(absolute)
         const mime = getNoteAttachmentMime(absolute)
@@ -442,6 +450,10 @@ function registerIpcHandlers() {
   setPlaylistWriteHook((event) => {
     if (event.op === 'delete') enqueueNotionPlaylistDelete(event.playlist)
     else enqueueNotionPlaylistUpsert(event.id)
+  })
+  setProjectWriteHook((event) => {
+    if (event.op === 'delete') enqueueNotionProjectDelete(event.project)
+    else enqueueNotionProjectUpsert(event.coursePath, event.id)
   })
   ipcMain.handle('get-library-path', () => {
     const libraryPath = getLibraryPath()
@@ -950,6 +962,12 @@ function registerIpcHandlers() {
   ipcMain.handle('resolve-notion-progress', (_event, { coursePath, choice } = {}) =>
     resolveNotionProgress(coursePath, choice)
   )
+  ipcMain.handle('resolve-notion-project-conflict', (_event, { projectId, choice } = {}) =>
+    resolveNotionProjectConflict(projectId, choice)
+  )
+  ipcMain.handle('resolve-notion-project-delete', (_event, { projectId, choice } = {}) =>
+    resolveNotionProjectDelete(projectId, choice)
+  )
 
   ipcMain.handle('open-project-link', async (_event, { coursePath, projectId }) => {
     const linked = getProjectLinkedPath(coursePath, projectId)
@@ -973,6 +991,7 @@ app.whenReady().then(() => {
     notifyNotes: () => broadcastToWindows('notes-changed', {}),
     notifyPlaylists: () => broadcastToWindows('playlists-changed', {}),
     notifyProgress: () => broadcastToWindows('progress-changed', {}),
+    notifyProjects: () => broadcastToWindows('projects-changed', {}),
     notifyCourse: (coursePath, data) =>
       broadcastToWindows('course-updated', {
         coursePath,

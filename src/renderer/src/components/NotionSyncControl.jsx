@@ -225,9 +225,13 @@ function choiceLabel(choice, kind) {
   if (choice === 'image') return 'Se comparte solo la imagen del dibujo'
   if (choice === 'local' && kind === 'dibujo') return 'Los dibujos se quedan en esta biblioteca'
   if (choice === 'both') return 'La versión de Notion quedó en una nota nueva'
+  if (choice === 'local' && kind === 'proyecto') return 'Quedó el proyecto de esta biblioteca'
+  if (choice === 'remote' && kind === 'proyecto') return 'Quedó el proyecto de Notion'
   if (choice === 'remote') return 'Quedó el texto de Notion'
   if (choice === 'keep') {
-    return kind === 'lista' ? 'Lista recuperada desde Notion' : 'Nota recuperada desde Notion'
+    if (kind === 'lista') return 'Lista recuperada desde Notion'
+    if (kind === 'proyecto') return 'Proyecto recuperado desde Notion'
+    return 'Nota recuperada desde Notion'
   }
   if (choice === 'discard') return 'Página borrada en Notion'
   return 'Quedó el texto de aquí'
@@ -545,6 +549,33 @@ function NotionSyncAttention({ status, resolvingId, resolveWith, retryingSave })
           ))}
         </div>
       ) : null}
+      {status?.projectConflicts?.length ? (
+        <div className="notion-sync__deletes">
+          <h4>Proyectos por elegir</h4>
+          <p>
+            Cambiaron aquí y en Notion. El título, el estado y el breve viajan con la versión que
+            elijas. La carpeta vinculada se queda en este equipo.
+          </p>
+          {status.projectConflicts.map((item) => (
+            <VersionChoice
+              key={item.projectId}
+              title={item.title || 'Proyecto'}
+              localText={item.localBody}
+              remoteText={[item.remoteTitle, item.remoteBody].filter(Boolean).join('\n\n')}
+              busy={resolvingId === item.projectId}
+              onChoose={(choice) =>
+                void resolveWith(
+                  item.projectId,
+                  choice,
+                  () => window.api.resolveNotionProjectConflict(item.projectId, choice),
+                  'No se pudo resolver el conflicto',
+                  'proyecto'
+                )
+              }
+            />
+          ))}
+        </div>
+      ) : null}
       {status?.playlistConflicts?.length ? (
         <div className="notion-sync__deletes">
           <h4>Listas por elegir</h4>
@@ -607,6 +638,52 @@ function NotionSyncAttention({ status, resolvingId, resolveWith, retryingSave })
                   }
                 >
                   Recuperar la de Notion
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {status?.projectDeleteConflicts?.length ? (
+        <div className="notion-sync__deletes">
+          <h4>Proyectos borrados a medias</h4>
+          <p>El proyecto se borró aquí y Notion cambió después de la última sincronización.</p>
+          {status.projectDeleteConflicts.map((item) => (
+            <article key={item.projectId}>
+              <strong>{item.title || 'Proyecto'}</strong>
+              <pre>{item.remoteBody || item.remoteTitle || 'Sin texto'}</pre>
+              <div className="dialog__actions-btns">
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  disabled={resolvingId === item.projectId}
+                  onClick={() =>
+                    void resolveWith(
+                      item.projectId,
+                      'discard',
+                      () => window.api.resolveNotionProjectDelete(item.projectId, 'discard'),
+                      'No se pudo resolver el borrado',
+                      'proyecto'
+                    )
+                  }
+                >
+                  Borrar en Notion
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={resolvingId === item.projectId}
+                  onClick={() =>
+                    void resolveWith(
+                      item.projectId,
+                      'keep',
+                      () => window.api.resolveNotionProjectDelete(item.projectId, 'keep'),
+                      'No se pudo resolver el borrado',
+                      'proyecto'
+                    )
+                  }
+                >
+                  Recuperar el de Notion
                 </button>
               </div>
             </article>
@@ -755,6 +832,8 @@ export function NotionSyncButton() {
     (status?.deleteConflicts?.length || 0) +
     (status?.playlistConflicts?.length || 0) +
     (status?.playlistDeleteConflicts?.length || 0) +
+    (status?.projectConflicts?.length || 0) +
+    (status?.projectDeleteConflicts?.length || 0) +
     (status?.progressConflicts?.length || 0)
   const retryingSave =
     status?.lastErrorCode === 'conflict_error' && (status.syncing || status.queued)

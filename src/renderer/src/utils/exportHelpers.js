@@ -2,6 +2,8 @@
  * Shared helpers for exporting note content / drawings via Electron save dialog.
  */
 
+import { courseMediaNoteFile, markdownImageDestination } from '../../../shared/notionSync.js'
+
 export async function exportViaDialog({ defaultPath, filters, dataBase64, dataText }) {
   if (!window.api?.exportFile) {
     throw new Error('Exportación no disponible')
@@ -60,12 +62,18 @@ export function buildNoteMarkdownDocument({ title, bodyMarkdown, meta = {} }) {
 export function listMarkdownNoteAssets(markdown) {
   const text = String(markdown || '')
   const found = []
-  const re = /!\[[^\]]*]\((course-media:\/\/note\/\?file=([^)\s]+))\)/gi
-  let match
-  while ((match = re.exec(text))) {
-    const markdownUrl = match[1]
-    const file = decodeURIComponent(match[2] || '')
-    if (file) found.push({ file, markdownUrl })
+  const seen = new Set()
+  for (const match of text.matchAll(/!\[[^\]]*\]\(([^)\n]*)\)/g)) {
+    const fileRaw = courseMediaNoteFile(match[1])
+    if (!fileRaw || seen.has(fileRaw)) continue
+    seen.add(fileRaw)
+    let file = fileRaw
+    try {
+      file = decodeURIComponent(fileRaw)
+    } catch {
+      // The markdown already has the raw name.
+    }
+    found.push({ file, markdownUrl: markdownImageDestination(match[1]).src })
   }
   return found
 }
@@ -74,12 +82,17 @@ export function listMarkdownNoteAssets(markdown) {
  * Rewrite course-media image URLs to relative ./assets/ paths for portable .md export.
  */
 export function rewriteMarkdownAssetLinks(markdown, assetDirName = 'assets') {
-  return String(markdown || '').replace(
-    /(!\[[^\]]*]\()course-media:\/\/note\/\?file=([^)\s]+)(\))/gi,
-    (_full, open, fileEnc, close) => {
-      const file = decodeURIComponent(fileEnc)
-      const base = file.split(/[/\\]/).pop()
-      return `${open}./${assetDirName}/${base}${close}`
+  return String(markdown || '').replace(/(!\[[^\]]*]\()([^)\n]*)(\))/g, (full, open, dest, close) => {
+    const fileRaw = courseMediaNoteFile(dest)
+    if (!fileRaw) return full
+    let file = fileRaw
+    try {
+      file = decodeURIComponent(fileRaw)
+    } catch {
+      // The markdown already has the raw name.
     }
-  )
+    const base = file.split(/[/\\]/).pop()
+    const title = markdownImageDestination(dest).title
+    return `${open}./${assetDirName}/${base}${title ? ` ${title}` : ''}${close}`
+  })
 }
