@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
+import { Check, ChevronLeft, File, FileArchive, FileText, Image } from 'lucide-react'
 import LinkProjectMenu from './LinkProjectMenu'
+import { ProjectsButton } from './LessonTree'
 
 const PREVIEWABLE_EXT = new Set([
   '.pdf',
@@ -44,6 +46,74 @@ function isInlinePreview(resource) {
   return PREVIEWABLE_EXT.has(ext)
 }
 
+const KIND_ICON = {
+  doc: FileText,
+  image: Image,
+  archive: FileArchive,
+  other: File
+}
+
+function ResourceGroupView({
+  title,
+  hint,
+  resources = [],
+  progressByLesson = {},
+  projects = [],
+  selectedProjectId = null,
+  onSelectProject,
+  onToggleComplete,
+  onOpenResource
+}) {
+  return (
+    <div className="resource-group">
+      <header className="resource-group__header">
+        <h2>{title}</h2>
+        <p>{hint}</p>
+      </header>
+      <section className="resource-group__section">
+        <h3>Recursos</h3>
+        <ul className="resource-group__list">
+          {resources.map((res) => {
+            const done = Boolean(progressByLesson?.[res.relativePath]?.completed)
+            const Icon = KIND_ICON[res.kind] || File
+            const linked = projects.filter((project) => project.fileRelativePath === res.relativePath)
+            return (
+              <li key={res.relativePath}>
+                <div className={`resource-group__row${done ? ' is-done' : ''}`}>
+                  <button
+                    type="button"
+                    className={`resource-group__check${done ? ' is-done' : ''}`}
+                    title={done ? 'Marcar como no completado' : 'Marcar como completado'}
+                    aria-pressed={done}
+                    onClick={() => onToggleComplete?.(res, !done, { playable: false })}
+                  >
+                    {done ? <Check size={12} strokeWidth={2.75} aria-hidden="true" /> : null}
+                  </button>
+                  <button
+                    type="button"
+                    className="resource-group__file"
+                    onClick={() => onOpenResource?.(res)}
+                    title={res.relativePath}
+                  >
+                    <Icon size={16} strokeWidth={2} aria-hidden="true" />
+                    <span className="resource-group__name">{res.title || res.name}</span>
+                    <span className="resource-group__kind">{kindLabel(res.kind)}</span>
+                  </button>
+                  <ProjectsButton
+                    projects={linked}
+                    selectedProjectId={selectedProjectId}
+                    onSelectProject={onSelectProject}
+                  />
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+    </div>
+  )
+}
+
 function ResourceViewer({
   coursePath,
   resource,
@@ -52,7 +122,8 @@ function ResourceViewer({
   linkSectionTitle = '',
   onToggleProjectLink,
   onToggleSectionLink,
-  onCreateProject
+  onCreateProject,
+  onBack
 }) {
   const [src, setSrc] = useState(null)
   const [textBody, setTextBody] = useState(null)
@@ -131,6 +202,12 @@ function ResourceViewer({
   return (
     <div className="resource-viewer">
       <div className="resource-viewer__header">
+        {onBack ? (
+          <button type="button" className="resource-viewer__back" onClick={onBack}>
+            <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+            Recursos
+          </button>
+        ) : null}
         <div className="resource-viewer__heading">
           <h2 title={resource.relativePath}>{resource.title || resource.name}</h2>
           <span className="resource-viewer__kind">{kindLabel(resource.kind)}</span>
@@ -199,5 +276,5 @@ function ResourceViewer({
   )
 }
 
-export { isInlinePreview }
+export { isInlinePreview, ResourceGroupView }
 export default ResourceViewer

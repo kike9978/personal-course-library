@@ -4,13 +4,23 @@ import { collectTreeResources, flattenLessons } from '../../../shared/courseTree
 import { noteDisplayTitles, playbackMarkLabel } from '../../../shared/knowledgeGraph.js'
 import LessonTree from './LessonTree'
 import LessonPlayer from './LessonPlayer'
-import ResourceViewer from './ResourceViewer'
+import ResourceViewer, { ResourceGroupView } from './ResourceViewer'
 import ProjectPanel, { placementForFile, sectionForPath } from './ProjectPanel'
 import StudySidePanel, { formatTime } from './StudySidePanel'
 import CourseAnnotationsView from './CourseAnnotationsView'
 import { InstitutionMark } from './InstitutionMark'
 import { collectCourseFacets } from '../utils/courseFilters'
 import Loader from './Loader'
+
+const SIDEBAR_OPEN_KEY = 'course-sidebar-open'
+
+function readSidebarOpen() {
+  try {
+    return localStorage.getItem(SIDEBAR_OPEN_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
 
 function waitForEditorApi(apiRef, timeoutMs = 1600) {
   return new Promise((resolve, reject) => {
@@ -54,8 +64,10 @@ function CourseRoom({
   const [creatingProject, setCreatingProject] = useState(false)
   const [projectDraft, setProjectDraft] = useState(null)
   const [projects, setProjects] = useState([])
-  const [panelMode, setPanelMode] = useState('lesson') // 'lesson' | 'resource' | 'project'
+  const [panelMode, setPanelMode] = useState('lesson') // 'lesson' | 'resource' | 'resources' | 'project'
+  const [resourceGroup, setResourceGroup] = useState(null)
   const [studyOpen, setStudyOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen)
   const [showCourseAnnotations, setShowCourseAnnotations] = useState(false)
   const [annotations, setAnnotations] = useState([])
   const [topics, setTopics] = useState([])
@@ -160,6 +172,7 @@ function CourseRoom({
             }
           } else if (lastResource) {
             setSelectedPath(null)
+            setResourceGroup(null)
             setSelectedResourcePath(lastResource.relativePath)
             setPanelMode('resource')
             setNoteScope('file')
@@ -169,6 +182,7 @@ function CourseRoom({
             setPanelMode('lesson')
           } else if (resources[0]) {
             setSelectedPath(null)
+            setResourceGroup(null)
             setSelectedResourcePath(resources[0].relativePath)
             setPanelMode('resource')
             setNoteScope('file')
@@ -301,6 +315,14 @@ function CourseRoom({
         kind: 'resource'
       }
     }
+    if (panelMode === 'resources' && resourceGroup?.lessonPath && selectedLesson) {
+      return {
+        path: selectedLesson.relativePath,
+        projectId: null,
+        title: selectedLesson.title,
+        kind: 'lesson'
+      }
+    }
     if (panelMode === 'lesson' && selectedLesson) {
       return {
         path: selectedLesson.relativePath,
@@ -310,9 +332,16 @@ function CourseRoom({
       }
     }
     return null
-  }, [panelMode, selectedLesson, selectedResource, selectedProject])
+  }, [panelMode, selectedLesson, selectedResource, selectedProject, resourceGroup])
 
-  const treeHighlightPath = panelMode === 'resource' ? selectedResourcePath : selectedPath
+  const treeHighlightPath =
+    panelMode === 'project'
+      ? null
+      : resourceGroup?.lessonPath && (panelMode === 'resources' || panelMode === 'resource')
+        ? resourceGroup.lessonPath
+        : panelMode === 'resource'
+          ? selectedResourcePath
+          : selectedPath
 
   useEffect(() => {
     if ((panelMode === 'resource' || panelMode === 'project') && noteScope === 'moment') {
@@ -350,10 +379,21 @@ function CourseRoom({
   const handleSelectLesson = (lesson) => {
     setSelectedPath(lesson.relativePath)
     setSelectedResourcePath(null)
+    setResourceGroup(null)
     setSelectedProjectId(null)
     setCreatingProject(false)
     setPanelMode('lesson')
     setNoteScope((s) => (s === 'file' || s === 'moment' ? 'moment' : s))
+  }
+
+  const handleOpenResources = (group) => {
+    setResourceGroup(group)
+    setSelectedResourcePath(null)
+    setSelectedProjectId(null)
+    setCreatingProject(false)
+    setSelectedPath(group.lessonPath || null)
+    setPanelMode('resources')
+    setNoteScope((s) => (group.lessonPath ? 'file' : s === 'moment' ? 'file' : s))
   }
 
   const handleSelectResource = (resource) => {
@@ -366,6 +406,7 @@ function CourseRoom({
 
   const handleSelectProject = (project) => {
     setSelectedProjectId(project.id)
+    setResourceGroup(null)
     setCreatingProject(false)
     setProjectDraft(null)
     setPanelMode('project')
@@ -494,17 +535,27 @@ function CourseRoom({
   )
 
   const toggleLessonComplete = useCallback(
-    async (lesson, completed) => {
+    async (lesson, completed, options = {}) => {
       if (!lesson?.relativePath) return
+      const playable = options.playable !== false
       try {
         const next = await window.api.setLessonProgress(coursePath, {
           relativePath: lesson.relativePath,
-          title: lesson.title,
+          title: lesson.title || lesson.name,
           completed,
-          setAsLast: true
+          setAsLast: playable,
+          trackAsPlayable: playable
         })
         applyProgress(next)
-        toast.success(completed ? 'Lección completada' : 'Lección reabierta')
+        toast.success(
+          completed
+            ? playable
+              ? 'Lección completada'
+              : 'Archivo completado'
+            : playable
+              ? 'Lección reabierta'
+              : 'Archivo reabierto'
+        )
       } catch (err) {
         toast.error(err.message || 'No se pudo actualizar')
       }
@@ -537,6 +588,7 @@ function CourseRoom({
       setCreatingProject(false)
 
       if (isLesson) {
+        setResourceGroup(null)
         setPanelMode('lesson')
         setSelectedResourcePath(null)
         if (path !== selectedPath) {
@@ -551,6 +603,7 @@ function CourseRoom({
       }
 
       if (resource) {
+        setResourceGroup(null)
         setPanelMode('resource')
         setSelectedResourcePath(path)
         setNoteScope((s) => (s === 'moment' ? 'file' : s))
@@ -1109,18 +1162,35 @@ function CourseRoom({
         <div
           className={`course-room__body course-room__body--study${
             studyOpen ? '' : ' course-room__body--study-collapsed'
-          }`}
+          }${sidebarOpen ? '' : ' course-room__body--sidebar-collapsed'}`}
         >
-          <aside className="course-room__sidebar">
+          <aside className={`course-room__sidebar${sidebarOpen ? '' : ' is-collapsed'}`}>
             <LessonTree
+              collapsed={!sidebarOpen}
+              onToggleCollapsed={() => {
+                setSidebarOpen((open) => {
+                  const next = !open
+                  try {
+                    localStorage.setItem(SIDEBAR_OPEN_KEY, next ? '1' : '0')
+                  } catch {
+                    // Preference is optional.
+                  }
+                  return next
+                })
+              }}
               sections={tree?.sections || []}
               courseResources={tree?.courseResources || []}
               courseResourceSections={tree?.courseResourceSections || []}
               projects={projects}
               selectedPath={treeHighlightPath}
               selectedProjectId={creatingProject ? null : selectedProjectId}
+              activeResourceGroupId={
+                resourceGroup && (panelMode === 'resources' || panelMode === 'resource')
+                  ? resourceGroup.id
+                  : null
+              }
               onSelectLesson={handleSelectLesson}
-              onSelectResource={handleSelectResource}
+              onOpenResources={handleOpenResources}
               onSelectProject={handleSelectProject}
               onAddProject={handleAddProject}
               onToggleLessonComplete={toggleLessonComplete}
@@ -1148,6 +1218,18 @@ function CourseRoom({
                   else setPanelMode('lesson')
                 }}
               />
+            ) : panelMode === 'resources' && resourceGroup ? (
+              <ResourceGroupView
+                title={resourceGroup.title}
+                hint={resourceGroup.hint}
+                resources={resourceGroup.resources}
+                progressByLesson={progress?.lessons || {}}
+                projects={projects}
+                selectedProjectId={selectedProjectId}
+                onSelectProject={handleSelectProject}
+                onToggleComplete={toggleLessonComplete}
+                onOpenResource={handleSelectResource}
+              />
             ) : panelMode === 'resource' ? (
               <ResourceViewer
                 coursePath={coursePath}
@@ -1158,6 +1240,14 @@ function CourseRoom({
                 onToggleProjectLink={toggleProjectFileLink}
                 onToggleSectionLink={toggleProjectSectionLink}
                 onCreateProject={handleAddProject}
+                onBack={
+                  resourceGroup
+                    ? () => {
+                        setSelectedResourcePath(null)
+                        setPanelMode('resources')
+                      }
+                    : null
+                }
               />
             ) : (
               <LessonPlayer

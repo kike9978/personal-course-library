@@ -562,10 +562,12 @@ export function setLessonProgress(coursePath, update) {
     course.lastOpenedAt = now
   }
 
-  // Ensure curriculum knows about this lesson
-  if (!Array.isArray(course.playableLessons)) course.playableLessons = []
-  if (!course.playableLessons.some((l) => l.relativePath === relativePath)) {
-    course.playableLessons.push({ relativePath, title })
+  // Files can be checked off without becoming part of the playable curriculum.
+  if (update.trackAsPlayable !== false) {
+    if (!Array.isArray(course.playableLessons)) course.playableLessons = []
+    if (!course.playableLessons.some((l) => l.relativePath === relativePath)) {
+      course.playableLessons.push({ relativePath, title })
+    }
   }
 
   store.courses[key] = course

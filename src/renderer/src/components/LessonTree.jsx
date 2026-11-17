@@ -1,5 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  Captions,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  File,
+  FileArchive,
+  FileText,
+  Folder,
+  FolderKanban,
+  Image,
+  Music,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Play
+} from 'lucide-react'
+import {
   ancestorIds,
   collectFilePaths,
   flattenLessons,
@@ -10,14 +26,68 @@ import {
 } from '../../../shared/courseTree.js'
 import { statusLabel } from './ProjectPanel'
 
-const KIND_LABEL = {
-  doc: 'doc',
-  image: 'img',
-  archive: 'zip',
-  subtitle: 'cc',
-  other: 'file',
-  video: '▶',
-  audio: '♪'
+const KIND_ICON = {
+  doc: FileText,
+  image: Image,
+  archive: FileArchive,
+  subtitle: Captions,
+  other: File,
+  video: Play,
+  audio: Music
+}
+
+const KIND_NAME = {
+  doc: 'Documento',
+  image: 'Imagen',
+  archive: 'Archivo comprimido',
+  subtitle: 'Subtítulos',
+  other: 'Archivo',
+  video: 'Video',
+  audio: 'Audio'
+}
+
+function KindMark({ kind, size = 14 }) {
+  const Icon = KIND_ICON[kind] || File
+  return <Icon size={size} strokeWidth={2} aria-hidden="true" />
+}
+
+function formatDuration(sec) {
+  const total = Math.round(Number(sec) || 0)
+  if (total <= 0) return ''
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.round((total % 3600) / 60)
+  if (hours > 0 && minutes > 0) return `${hours} h ${minutes} min`
+  if (hours > 0) return `${hours} h`
+  if (minutes > 0) return `${minutes} min`
+  return `${total} s`
+}
+
+function collectSectionFiles(section) {
+  const files = [
+    ...visibleResources(section?.resources),
+    ...(section?.lessons || []).flatMap((lesson) => visibleResources(lesson.resources))
+  ]
+  for (const child of section?.sections || []) files.push(...collectSectionFiles(child))
+  return files
+}
+
+function sectionMeta(section, progressByLesson) {
+  const lessons = flattenLessons([section])
+  const files = collectSectionFiles(section)
+  if (!lessons.length && !files.length) return ''
+  let done = 0
+  let duration = 0
+  for (const lesson of lessons) {
+    const prog = progressByLesson?.[lesson.relativePath]
+    if (prog?.completed) done += 1
+    duration += Number(prog?.durationSec) || 0
+  }
+  for (const file of files) {
+    if (progressByLesson?.[file.relativePath]?.completed) done += 1
+  }
+  const count = `${done} / ${lessons.length + files.length}`
+  const length = formatDuration(duration)
+  return length ? `${count} | ${length}` : count
 }
 
 function visibleResources(resources) {
@@ -47,13 +117,26 @@ function sectionIdForSelection({
   return sectionIdForPath(sections, courseResources, selectedPath)
 }
 
-function TreeSection({ id, title, open, onToggle, nested, dense, idPrefix, children }) {
+function TreeSection({
+  id,
+  title,
+  meta,
+  open,
+  onToggle,
+  nested,
+  dense,
+  bar,
+  idPrefix,
+  actions,
+  children
+}) {
   const panelId = panelIdFor(id, idPrefix)
+  const Chevron = bar ? ChevronDown : ChevronRight
   return (
     <div
       className={`lesson-tree__section${nested ? ' lesson-tree__section--nested' : ''}${
         dense ? ' lesson-tree__section--dense' : ''
-      }${open ? '' : ' is-collapsed'}`}
+      }${bar ? ' lesson-tree__section--bar' : ''}${open ? '' : ' is-collapsed'}`}
     >
       <h3 className="lesson-tree__section-head">
         <button
@@ -65,20 +148,24 @@ function TreeSection({ id, title, open, onToggle, nested, dense, idPrefix, child
           title={title}
           onClick={onToggle}
         >
-          <svg
-            className="lesson-tree__section-chevron"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-          <span className="lesson-tree__section-title">{title}</span>
+          {bar ? null : <Chevron className="lesson-tree__section-chevron" aria-hidden="true" />}
+          <span className="lesson-tree__section-copy">
+            <span className="lesson-tree__section-title">{title}</span>
+            {meta ? <span className="lesson-tree__section-meta">{meta}</span> : null}
+          </span>
         </button>
+        {actions ? <div className="lesson-tree__actions">{actions}</div> : null}
+        {bar ? (
+          <button
+            type="button"
+            className="lesson-tree__section-chevron-btn"
+            aria-expanded={open}
+            aria-label={open ? `Contraer ${title}` : `Expandir ${title}`}
+            onClick={onToggle}
+          >
+            <Chevron className="lesson-tree__section-chevron" aria-hidden="true" />
+          </button>
+        ) : null}
       </h3>
       <div id={panelId} hidden={!open}>
         {children}
@@ -87,52 +174,99 @@ function TreeSection({ id, title, open, onToggle, nested, dense, idPrefix, child
   )
 }
 
-function ResourceRow({
-  res,
-  selectedPath,
-  onSelectResource,
-  linkedProjects,
-  selectedProjectId,
-  onSelectProject
-}) {
-  const isActive = selectedPath === res.relativePath
-  const projects = linkedProjects || []
+function CheckControl({ done, onToggle, doneLabel, openLabel }) {
   return (
-    <li className={projects.length ? 'lesson-tree__block' : undefined}>
-      <button
-        type="button"
-        className={`lesson-tree__item lesson-tree__item--resource${isActive ? ' is-active' : ''}`}
-        onClick={() => onSelectResource?.(res)}
-        title={res.relativePath}
-      >
-        <span className="lesson-tree__kind" aria-hidden="true">
-          {KIND_LABEL[res.kind] || '·'}
-        </span>
-        <span className="lesson-tree__label">{res.title || res.name}</span>
-        <span className="lesson-tree__ext">{res.kind}</span>
-      </button>
-      <LinkedProjects
-        projects={projects}
-        selectedProjectId={selectedProjectId}
-        onSelectProject={onSelectProject}
-      />
-    </li>
+    <button
+      type="button"
+      className={`lesson-tree__check${done ? ' is-done' : ''}`}
+      title={done ? doneLabel : openLabel}
+      aria-pressed={done}
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle?.()
+      }}
+    >
+      {done ? <Check size={12} strokeWidth={2.75} aria-hidden="true" /> : null}
+    </button>
   )
 }
 
-function LinkedProjects({ projects, selectedProjectId, onSelectProject }) {
-  if (!projects?.length) return null
+function ProjectsButton({ projects, selectedProjectId, onSelectProject }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef(null)
+  const list = projects || []
+  const active = list.some((project) => project.id === selectedProjectId)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onPointer = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false)
+    }
+    const onKey = (event) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  if (!list.length) return null
+
+  const single = list.length === 1
+  const label = single ? list[0].title || 'Proyecto' : 'Proyectos'
+  const hint = list
+    .map((project) =>
+      project.linkMissing ? `${project.title} (sin carpeta)` : project.title || 'Proyecto'
+    )
+    .join(', ')
+
+  const choose = (project) => {
+    setOpen(false)
+    onSelectProject?.(project)
+  }
+
   return (
-    <ul className="lesson-tree__list lesson-tree__list--nested">
-      {projects.map((project) => (
-        <ProjectRow
-          key={project.id}
-          project={project}
-          selectedProjectId={selectedProjectId}
-          onSelectProject={onSelectProject}
-        />
-      ))}
-    </ul>
+    <span className="lesson-tree__projects" ref={rootRef}>
+      <button
+        type="button"
+        className={`lesson-tree__resources${active ? ' is-active' : ''}${open ? ' is-open' : ''}`}
+        aria-expanded={single ? undefined : open}
+        aria-haspopup={single ? undefined : 'menu'}
+        title={hint}
+        onClick={(event) => {
+          event.stopPropagation()
+          if (single) choose(list[0])
+          else setOpen((value) => !value)
+        }}
+      >
+        <FolderKanban size={14} strokeWidth={2} aria-hidden="true" />
+        <span className="lesson-tree__pill-label">{label}</span>
+        {single ? null : <ChevronDown size={14} strokeWidth={2} aria-hidden="true" />}
+      </button>
+      {open ? (
+        <ul className="lesson-tree__projects-menu" role="menu">
+          {list.map((project) => (
+            <li key={project.id}>
+              <button
+                type="button"
+                role="menuitem"
+                className={selectedProjectId === project.id ? 'is-active' : ''}
+                title={project.linkMissing ? 'Sin carpeta vinculada' : project.linkedFolderPath || project.title}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  choose(project)
+                }}
+              >
+                {project.title || 'Proyecto'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </span>
   )
 }
 
@@ -148,12 +282,12 @@ function ProjectRow({ project, selectedProjectId, onSelectProject }) {
         onClick={() => onSelectProject?.(project)}
         title={project.linkedFolderPath || 'Sin carpeta vinculada'}
       >
-        <span className="lesson-tree__kind" aria-hidden="true">
-          ◇
-        </span>
-        <span className="lesson-tree__label">{project.title}</span>
-        <span className="lesson-tree__ext">
-          {project.linkMissing ? '!' : statusLabel(project.status)}
+        <span className="lesson-tree__body">
+          <span className="lesson-tree__label">{project.title}</span>
+          <span className="lesson-tree__meta">
+            <FolderKanban size={13} strokeWidth={2} aria-hidden="true" />
+            <span>{project.linkMissing ? 'Sin carpeta' : statusLabel(project.status)}</span>
+          </span>
         </span>
       </button>
     </li>
@@ -180,11 +314,14 @@ function LessonTree({
   projects = [],
   selectedPath,
   selectedProjectId,
+  activeResourceGroupId = null,
   onSelectLesson,
-  onSelectResource,
+  onOpenResources,
   onSelectProject,
   onAddProject,
   onToggleLessonComplete,
+  onToggleCollapsed,
+  collapsed = false,
   progressByLesson = {},
   completedCount = 0,
   playableCount = 0
@@ -276,6 +413,20 @@ function LessonTree({
   const projectsFor = (relativePath) => (relativePath ? projectsByFile.get(relativePath) || [] : [])
 
   if (!hasContent) {
+    if (collapsed && onToggleCollapsed) {
+      return (
+        <button
+          type="button"
+          className="lesson-tree__expand"
+          onClick={onToggleCollapsed}
+          title="Mostrar contenido"
+          aria-expanded={false}
+          aria-label="Mostrar contenido"
+        >
+          <PanelLeftOpen size={16} strokeWidth={2} aria-hidden="true" />
+        </button>
+      )
+    }
     return (
       <div className="lesson-tree lesson-tree--empty">
         <p>No hay lecciones ni recursos en esta carpeta.</p>
@@ -287,30 +438,59 @@ function LessonTree({
   }
 
   return (
-    <nav className="lesson-tree" aria-label="Contenido del curso">
-      <div className="lesson-tree__toolbar">
-        {playableCount > 0 ? (
-          <span
-            className="lesson-tree__progress"
-            title={`${completedCount} de ${playableCount} lecciones`}
+    <>
+    {collapsed && onToggleCollapsed ? (
+      <button
+        type="button"
+        className="lesson-tree__expand"
+        onClick={onToggleCollapsed}
+        title="Mostrar contenido"
+        aria-expanded={false}
+        aria-label="Mostrar contenido"
+      >
+        <PanelLeftOpen size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+    ) : null}
+    <nav className="lesson-tree" aria-label="Contenido del curso" hidden={collapsed}>
+      <div className="lesson-tree__header">
+        <div className="lesson-tree__header-copy">
+          <h2>Contenido</h2>
+          {playableCount > 0 ? (
+            <p>
+              {completedCount} / {playableCount}
+            </p>
+          ) : null}
+        </div>
+        <div className="lesson-tree__header-actions">
+          {onToggleCollapsed ? (
+            <button
+              type="button"
+              className="lesson-tree__collapse"
+              onClick={onToggleCollapsed}
+              title="Ocultar contenido"
+              aria-expanded={!collapsed}
+              aria-label="Ocultar contenido"
+            >
+              <PanelLeftClose size={16} strokeWidth={2} aria-hidden="true" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="lesson-tree__add-project"
+            onClick={() => onAddProject?.()}
+            title="Añadir proyecto virtual"
           >
-            {completedCount} de {playableCount}
-          </span>
-        ) : null}
-        <button
-          type="button"
-          className="lesson-tree__add-project"
-          onClick={() => onAddProject?.()}
-          title="Añadir proyecto virtual"
-        >
-          + Proyecto
-        </button>
+            + Proyecto
+          </button>
+        </div>
       </div>
 
       {unanchored.length > 0 ? (
         <TreeSection
           id="__projects__"
           title="Proyectos"
+          meta={`${unanchored.length} ${unanchored.length === 1 ? 'proyecto' : 'proyectos'}`}
+          bar
           open={!collapsedIds.has('__projects__')}
           onToggle={() => toggleSection('__projects__')}
         >
@@ -339,7 +519,8 @@ function LessonTree({
           selectedPath={selectedPath}
           selectedProjectId={selectedProjectId}
           onSelectLesson={onSelectLesson}
-          onSelectResource={onSelectResource}
+          onOpenResources={onOpenResources}
+          activeResourceGroupId={activeResourceGroupId}
           onSelectProject={onSelectProject}
           onToggleLessonComplete={onToggleLessonComplete}
           progressByLesson={progressByLesson}
@@ -357,13 +538,15 @@ function LessonTree({
           selectedPath={selectedPath}
           selectedProjectId={selectedProjectId}
           onSelectLesson={onSelectLesson}
-          onSelectResource={onSelectResource}
+          onOpenResources={onOpenResources}
+          activeResourceGroupId={activeResourceGroupId}
           onSelectProject={onSelectProject}
           onToggleLessonComplete={onToggleLessonComplete}
           progressByLesson={progressByLesson}
         />
       ) : null}
     </nav>
+    </>
   )
 }
 
@@ -372,8 +555,9 @@ function LessonRow({
   progressByLesson,
   selectedPath,
   selectedProjectId,
+  activeResourceGroupId,
   onSelectLesson,
-  onSelectResource,
+  onOpenResources,
   onSelectProject,
   onToggleLessonComplete,
   projectsFor
@@ -382,56 +566,71 @@ function LessonRow({
   const isActive = selectedPath === lesson.relativePath
   const isDone = Boolean(prog?.completed)
   const sidecars = visibleResources(lesson.resources)
+  const linked = projectsFor(lesson.relativePath)
+  const groupId = `lesson:${lesson.relativePath}`
+  const resourcesActive = activeResourceGroupId === groupId
+  const duration = formatDuration(prog?.durationSec)
+  const kind = lesson.kind === 'audio' ? 'audio' : 'video'
+
   return (
     <li className="lesson-tree__block">
-      <div className="lesson-tree__row">
-        <button
-          type="button"
-          className={`lesson-tree__check${isDone ? ' is-done' : ''}`}
-          title={isDone ? 'Marcar como no completada' : 'Marcar como completada'}
-          aria-pressed={isDone}
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggleLessonComplete?.(lesson, !isDone)
-          }}
-        >
-          {isDone ? '✓' : ''}
-        </button>
+      <div
+        className={`lesson-tree__row${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
+      >
+        <CheckControl
+          done={isDone}
+          doneLabel="Marcar como no completada"
+          openLabel="Marcar como completada"
+          onToggle={() => onToggleLessonComplete?.(lesson, !isDone)}
+        />
         <button
           type="button"
           className={`lesson-tree__item${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
           onClick={() => onSelectLesson?.(lesson)}
           title={lesson.relativePath}
         >
-          <span className="lesson-tree__kind" aria-hidden="true">
-            {lesson.kind === 'audio' ? '♪' : '▶'}
+          <span className="lesson-tree__body">
+            <span className="lesson-tree__label">{lesson.title}</span>
+            <span className="lesson-tree__meta">
+              <KindMark kind={kind} size={13} />
+              <span>{duration || KIND_NAME[kind]}</span>
+              {prog?.positionSec > 0 && !isDone ? (
+                <span className="lesson-tree__resume" aria-hidden="true" />
+              ) : null}
+            </span>
           </span>
-          <span className="lesson-tree__label">{lesson.title}</span>
-          {prog?.positionSec > 0 && !isDone ? (
-            <span className="lesson-tree__resume" aria-hidden="true" />
-          ) : null}
         </button>
-      </div>
-      <LinkedProjects
-        projects={projectsFor(lesson.relativePath)}
-        selectedProjectId={selectedProjectId}
-        onSelectProject={onSelectProject}
-      />
-      {sidecars.length > 0 ? (
-        <ul className="lesson-tree__list lesson-tree__list--nested">
-          {sidecars.map((res) => (
-            <ResourceRow
-              key={res.relativePath}
-              res={res}
-              selectedPath={selectedPath}
-              onSelectResource={onSelectResource}
-              linkedProjects={projectsFor(res.relativePath)}
+        {linked.length > 0 || sidecars.length > 0 ? (
+          <div className="lesson-tree__actions">
+            <ProjectsButton
+              projects={linked}
               selectedProjectId={selectedProjectId}
               onSelectProject={onSelectProject}
             />
-          ))}
-        </ul>
-      ) : null}
+            {sidecars.length > 0 ? (
+              <button
+                type="button"
+                className={`lesson-tree__resources${resourcesActive ? ' is-active' : ''}`}
+                aria-pressed={resourcesActive}
+                onClick={() =>
+                  onOpenResources?.({
+                    id: groupId,
+                    title: lesson.title,
+                    hint: 'Archivos adjuntos de esta lección.',
+                    lessonPath: lesson.relativePath,
+                    sectionId: lesson.sectionId,
+                    resources: sidecars
+                  })
+                }
+              >
+                <Folder size={14} strokeWidth={2} aria-hidden="true" />
+                Recursos
+                <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     </li>
   )
 }
@@ -445,8 +644,9 @@ function SectionView({
   projectsFor,
   selectedPath,
   selectedProjectId,
+  activeResourceGroupId,
   onSelectLesson,
-  onSelectResource,
+  onOpenResources,
   onSelectProject,
   onToggleLessonComplete,
   progressByLesson
@@ -471,8 +671,9 @@ function SectionView({
             progressByLesson={progressByLesson}
             selectedPath={selectedPath}
             selectedProjectId={selectedProjectId}
+            activeResourceGroupId={activeResourceGroupId}
             onSelectLesson={onSelectLesson}
-            onSelectResource={onSelectResource}
+            onOpenResources={onOpenResources}
             onSelectProject={onSelectProject}
             onToggleLessonComplete={onToggleLessonComplete}
             projectsFor={projectsFor}
@@ -499,8 +700,9 @@ function SectionView({
         projectsFor={projectsFor}
         selectedPath={selectedPath}
         selectedProjectId={selectedProjectId}
+        activeResourceGroupId={activeResourceGroupId}
         onSelectLesson={onSelectLesson}
-        onSelectResource={onSelectResource}
+        onOpenResources={onOpenResources}
         onSelectProject={onSelectProject}
         onToggleLessonComplete={onToggleLessonComplete}
         progressByLesson={progressByLesson}
@@ -513,42 +715,58 @@ function SectionView({
     <TreeSection
       id={section.id}
       title={section.title}
+      meta={sectionMeta(section, progressByLesson)}
       nested={depth > 0}
+      bar
       open={!collapsedIds.has(section.id)}
       onToggle={() => onToggle(section.id)}
+      actions={
+        sectionProjects.length > 0 ? (
+          <ProjectsButton
+            projects={sectionProjects}
+            selectedProjectId={selectedProjectId}
+            onSelectProject={onSelectProject}
+          />
+        ) : null
+      }
     >
-      {sectionProjects.length > 0 ? (
-        <ul className="lesson-tree__list">
-          {sectionProjects.map((project) => (
-            <ProjectRow
-              key={project.id}
-              project={project}
-              selectedProjectId={selectedProjectId}
-              onSelectProject={onSelectProject}
-            />
-          ))}
-        </ul>
-      ) : null}
       {blocks}
       {resources.length > 0 ? (
         <ul className="lesson-tree__list">
-          {resources.map((res) => (
-            <ResourceRow
-              key={res.relativePath}
-              res={res}
-              selectedPath={selectedPath}
-              onSelectResource={onSelectResource}
-              linkedProjects={projectsFor(res.relativePath)}
-              selectedProjectId={selectedProjectId}
-              onSelectProject={onSelectProject}
-            />
-          ))}
+          <li>
+            <button
+              type="button"
+              className={`lesson-tree__item lesson-tree__item--resources${
+                activeResourceGroupId === `section:${section.id}` ? ' is-active' : ''
+              }`}
+              onClick={() =>
+                onOpenResources?.({
+                  id: `section:${section.id}`,
+                  title: section.title,
+                  hint: 'Archivos de esta sección.',
+                  sectionId: section.id,
+                  resources
+                })
+              }
+            >
+              <span className="lesson-tree__body">
+                <span className="lesson-tree__label">Recursos</span>
+                <span className="lesson-tree__meta">
+                  <Folder size={13} strokeWidth={2} aria-hidden="true" />
+                  <span>
+                    {resources.length} {resources.length === 1 ? 'archivo' : 'archivos'}
+                  </span>
+                </span>
+              </span>
+              <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+            </button>
+          </li>
         </ul>
       ) : null}
     </TreeSection>
   )
 }
 
-export { flattenLessons, TreeSection }
+export { flattenLessons, TreeSection, ProjectsButton }
 
 export default LessonTree
