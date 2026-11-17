@@ -1,7 +1,9 @@
 import fsSync from 'fs'
 import path from 'path'
+import { app } from 'electron'
 import { getLibraryPath, isLibraryPathValid } from './config.js'
 import { scanCourseAt } from './courseOutline.js'
+import { applyLessonDurations } from './mediaDuration.js'
 
 function requireLibraryPath() {
   const libraryPath = getLibraryPath()
@@ -44,7 +46,14 @@ export function resolveCourseFile(courseDir, relativePath) {
  */
 export async function scanCourse(courseDir) {
   const { courseName, courseRoot } = resolveCourseRoot(courseDir)
-  return scanCourseAt(courseRoot, courseName)
+  const tree = await scanCourseAt(courseRoot, courseName)
+  try {
+    const cacheFile = path.join(app.getPath('userData'), 'media-durations.json')
+    await applyLessonDurations(courseRoot, courseName, tree.flatLessons, { cacheFile })
+  } catch (err) {
+    console.error('Failed to read media durations', err)
+  }
+  return tree
 }
 
 export function getLessonMime(relativePath) {

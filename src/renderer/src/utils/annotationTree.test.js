@@ -35,15 +35,15 @@ describe('buildAnnotationTree', () => {
 
     assert.deepEqual(
       tree.map((node) => node.title),
-      ['Sin curso', 'Colorful Illustrations']
+      ['Colorful Illustrations', 'Sin curso']
     )
-    assert.equal(tree[0].children, undefined)
+    assert.equal(tree[1].children, undefined)
     assert.deepEqual(
-      tree[0].items.map((item) => item.id),
+      tree[1].items.map((item) => item.id),
       ['a']
     )
     assert.deepEqual(
-      tree[1].children.map((node) => node.title),
+      tree[0].children.map((node) => node.title),
       ['week 01', 'Del curso']
     )
   })

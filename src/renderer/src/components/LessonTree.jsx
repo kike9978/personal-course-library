@@ -80,7 +80,7 @@ function sectionMeta(section, progressByLesson) {
   for (const lesson of lessons) {
     const prog = progressByLesson?.[lesson.relativePath]
     if (prog?.completed) done += 1
-    duration += Number(prog?.durationSec) || 0
+    duration += lessonDurationSec(lesson, prog)
   }
   for (const file of files) {
     if (progressByLesson?.[file.relativePath]?.completed) done += 1
@@ -88,6 +88,12 @@ function sectionMeta(section, progressByLesson) {
   const count = `${done} / ${lessons.length + files.length}`
   const length = formatDuration(duration)
   return length ? `${count} | ${length}` : count
+}
+
+function lessonDurationSec(lesson, prog) {
+  const probed = Number(lesson?.durationSec) || 0
+  const played = Number(prog?.durationSec) || 0
+  return Math.max(probed, played)
 }
 
 function visibleResources(resources) {
@@ -128,6 +134,7 @@ function TreeSection({
   bar,
   idPrefix,
   actions,
+  className,
   children
 }) {
   const panelId = panelIdFor(id, idPrefix)
@@ -136,7 +143,9 @@ function TreeSection({
     <div
       className={`lesson-tree__section${nested ? ' lesson-tree__section--nested' : ''}${
         dense ? ' lesson-tree__section--dense' : ''
-      }${bar ? ' lesson-tree__section--bar' : ''}${open ? '' : ' is-collapsed'}`}
+      }${bar ? ' lesson-tree__section--bar' : ''}${open ? '' : ' is-collapsed'}${
+        className ? ` ${className}` : ''
+      }`}
     >
       <h3 className="lesson-tree__section-head">
         <button
@@ -569,7 +578,7 @@ function LessonRow({
   const linked = projectsFor(lesson.relativePath)
   const groupId = `lesson:${lesson.relativePath}`
   const resourcesActive = activeResourceGroupId === groupId
-  const duration = formatDuration(prog?.durationSec)
+  const duration = formatDuration(lessonDurationSec(lesson, prog))
   const kind = lesson.kind === 'audio' ? 'audio' : 'video'
 
   return (

@@ -1812,9 +1812,48 @@ select {
 
 .detail-outline__head h3 {
   margin: 0;
+  min-width: 0;
+  flex: 1;
+}
+
+.detail-outline__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
   font-family: var(--font-display);
   font-size: 0.95rem;
   font-weight: 800;
+  color: var(--clr-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.detail-outline__toggle:hover {
+  color: var(--clr-coral-deep);
+}
+
+.detail-outline__toggle:focus-visible {
+  outline: 2px solid var(--clr-coral);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.detail-outline__chevron {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex-shrink: 0;
+  color: currentColor;
+  transition: transform 120ms var(--ease-pop);
+}
+
+.detail-outline__toggle[aria-expanded='true'] .detail-outline__chevron {
+  transform: rotate(90deg);
 }
 
 .detail-outline__head span {
@@ -1903,9 +1942,17 @@ select {
 
 .detail-outline__label {
   min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.detail-outline__duration {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--clr-ink-soft);
 }
 
 .detail-description {
@@ -7744,6 +7791,10 @@ button.annotations-doc__save-status {
 }
 
 .annotations-page-list {
+  --ann-pad-x: 0.35rem;
+  --ann-chevron: 0.7rem;
+  --ann-chevron-gap: 0.3rem;
+  --ann-indent: calc(var(--ann-chevron) + var(--ann-chevron-gap));
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -7770,7 +7821,83 @@ button.annotations-doc__save-status {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.55rem 0.45rem 0.85rem;
+}
+
+.annotations-page-list__items > .lesson-tree__section {
+  margin: 0;
+  padding: 0.12rem 0.15rem 0.2rem;
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-md);
+  background: var(--clr-surface);
+}
+
+.annotations-page-list__items > .lesson-tree__section.is-loose {
+  background: transparent;
+  border-style: dashed;
+}
+
+.annotations-page-list .lesson-tree__section-copy {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.annotations-page-list .lesson-tree__section-title {
+  flex: 1;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.annotations-page-list .lesson-tree__section-meta {
+  flex: none;
+  margin-top: 0.05rem;
+  min-width: 1.15rem;
+  padding: 0.02rem 0.38rem;
+  border-radius: var(--radius-pill);
+  background: var(--clr-cream-deep);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.annotations-page-list .lesson-tree__section-toggle {
+  gap: var(--ann-chevron-gap);
+  margin-bottom: 0;
+  padding: 0.22rem var(--ann-pad-x);
+}
+
+.annotations-page-list .lesson-tree__section--dense .lesson-tree__section-chevron {
+  width: var(--ann-chevron);
+  height: var(--ann-chevron);
+  margin-top: 0.12rem;
+}
+
+.annotations-page-list .lesson-tree__section--nested,
+.annotations-page-list .lesson-tree__section--dense.lesson-tree__section--nested {
+  margin: 0.04rem 0 0 var(--ann-indent);
+  padding: 0;
+  border-left: 0;
+}
+
+.annotations-page-list .lesson-tree__section--nested > .lesson-tree__section-head .lesson-tree__section-toggle {
+  margin-bottom: 0;
+  padding: 0.16rem var(--ann-pad-x);
+  color: var(--clr-ink-soft);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.annotations-page-list .lesson-tree__section--nested .lesson-tree__section-meta {
+  background: transparent;
+  padding-right: 0;
 }
 
 .annotations-page-list__group {
@@ -7782,39 +7909,78 @@ button.annotations-doc__save-status {
   color: var(--clr-ink-soft);
 }
 
+.annotations-page-list .lesson-tree__section--dense:not(.lesson-tree__section--nested) > .lesson-tree__section-head .lesson-tree__section-toggle {
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--clr-ink);
+}
+
 .annotations-page-list__item {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.1rem;
-  width: 100%;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.55rem;
+  box-sizing: border-box;
+  width: calc(100% - var(--ann-indent));
+  min-width: 0;
+  margin: 0.02rem 0 0.02rem var(--ann-indent);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   background: transparent;
   color: var(--clr-ink);
   font: inherit;
   text-align: left;
-  padding: 0.4rem 0.5rem;
+  padding: 0.2rem var(--ann-pad-x);
   cursor: pointer;
 }
 
-.annotations-page-list__item span {
-  font-size: 0.86rem;
-  font-weight: 600;
+.annotations-page-list__label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+}
+
+.annotations-page-list__name {
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotations-page-list__time {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--clr-ink-soft);
 }
 
 .annotations-page-list__item small {
-  color: var(--clr-ink-soft);
-  font-size: 0.72rem;
+  color: var(--clr-coral-deep);
+  font-size: 0.68rem;
+}
+
+.annotations-page-list__item:hover {
+  background: rgba(42, 36, 56, 0.045);
 }
 
 .annotations-page-list__item.is-active,
-.annotations-page-list__item:hover {
-  background: var(--clr-surface);
+.annotations-page-list__item.is-active:hover {
+  background: rgba(42, 36, 56, 0.08);
+  box-shadow: none;
 }
 
-.annotations-page-list__item.is-active {
-  box-shadow: inset 2px 0 0 var(--clr-coral);
+.annotations-page-list__item.is-active .annotations-page-list__name {
+  font-weight: 650;
 }
 
 .annotations-page-list__empty {

@@ -73,7 +73,14 @@ export function buildAnnotationTree(groups, { groupMode, courseColumn, titles } 
       items: group.items
     })
   }
-  return [...courses.values()].map(collapseDuplicateLevel)
+  return [...courses.values()]
+    .sort((a, b) => {
+      const aLoose = String(a.id).endsWith('__loose__')
+      const bLoose = String(b.id).endsWith('__loose__')
+      if (aLoose !== bLoose) return aLoose ? 1 : -1
+      return String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' })
+    })
+    .map(collapseDuplicateLevel)
 }
 
 export function openIdsForItem(nodes, match, trail = []) {

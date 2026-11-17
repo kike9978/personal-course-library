@@ -21,6 +21,7 @@ import {
   resolveCourseTitle,
   topicKey,
   noteDisplayTitles,
+  formatNoteTimestamp,
   visibleGraph
 } from '../../../shared/knowledgeGraph.js'
 
@@ -45,6 +46,24 @@ function topicTitlesOf(item, topics = []) {
     .filter(Boolean)
 }
 
+function countNotes(node) {
+  const own = node.items?.length || 0
+  const nested = (node.children || []).reduce((sum, child) => sum + countNotes(child), 0)
+  return own + nested
+}
+
+const DEFAULT_TITLE_PARTS = /^new note(?: (\d+:\d{2}(?::\d{2})?))?(?: (\d+))?$/i
+
+function noteListParts(item, fullTitle) {
+  const fromClock = typeof item?.timeSec === 'number' ? formatNoteTimestamp(item.timeSec) : ''
+  const match = String(fullTitle || '').trim().match(DEFAULT_TITLE_PARTS)
+  if (match) {
+    const serial = match[2] ? ` ${match[2]}` : ''
+    return { name: `new note${serial}`, time: match[1] || fromClock }
+  }
+  return { name: fullTitle, time: fromClock }
+}
+
 function AnnotationBranch({
   node,
   nested,
@@ -55,14 +74,18 @@ function AnnotationBranch({
   onOpen
 }) {
   const open = !collapsedIds.has(node.id)
+  const count = countNotes(node)
+  const loose = String(node.id).endsWith('__loose__')
   return (
     <TreeSection
       id={node.id}
       idPrefix="ann-section"
       title={node.title}
+      meta={count ? String(count) : null}
       open={open}
       nested={nested}
       dense
+      className={loose ? 'is-loose' : undefined}
       onToggle={() => onToggle(node.id)}
     >
       {node.children?.map((child) => (
@@ -77,17 +100,25 @@ function AnnotationBranch({
           onOpen={onOpen}
         />
       ))}
-      {node.items?.map((item) => (
-        <button
-          key={`${node.id}-${item.coursePath || 'local'}-${item.id}`}
-          type="button"
-          className={`annotations-page-list__item${isRowActive(item) ? ' is-active' : ''}`}
-          onClick={() => onOpen(item)}
-        >
-          <span>{displayName(item)}</span>
-          {item.notion?.conflict ? <small>Conflicto con Notion</small> : null}
-        </button>
-      ))}
+      {node.items?.map((item) => {
+        const parts = noteListParts(item, displayName(item))
+        return (
+          <button
+            key={`${node.id}-${item.coursePath || 'local'}-${item.id}`}
+            type="button"
+            className={`annotations-page-list__item${isRowActive(item) ? ' is-active' : ''}`}
+            onClick={() => onOpen(item)}
+          >
+            <span className="annotations-page-list__label">
+              <span className="annotations-page-list__name">{parts.name}</span>
+              {item.notion?.conflict ? <small>Conflicto con Notion</small> : null}
+            </span>
+            {parts.time ? (
+              <span className="annotations-page-list__time">{parts.time}</span>
+            ) : null}
+          </button>
+        )
+      })}
     </TreeSection>
   )
 }

@@ -6,6 +6,23 @@ import { InstitutionMark } from './InstitutionMark'
 import CourseDescription from './CourseDescription'
 import brandMark from '../assets/img/brand-mark.svg'
 
+function formatDuration(sec) {
+  const total = Math.round(Number(sec) || 0)
+  if (total <= 0) return ''
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.round((total % 3600) / 60)
+  if (hours > 0 && minutes > 0) return `${hours} h ${minutes} min`
+  if (hours > 0) return `${hours} h`
+  if (minutes > 0) return `${minutes} min`
+  return `${total} s`
+}
+
+function lessonSeconds(lesson, course) {
+  const probed = Number(lesson?.durationSec) || 0
+  const played = Number(course.learning?.lessons?.[lesson.relativePath]?.durationSec) || 0
+  return Math.max(probed, played)
+}
+
 function OutlineSections({
   sections,
   depth,
@@ -35,7 +52,8 @@ function OutlineSections({
             {lessons.map((lesson, index) => {
               const done = Boolean(course.learning?.lessons?.[lesson.relativePath]?.completed)
               const current = lesson.relativePath === currentPath
-              const status = [done ? 'completada' : '', current ? 'última' : '']
+              const length = formatDuration(lessonSeconds(lesson, course))
+              const status = [done ? 'completada' : '', current ? 'última' : '', length]
                 .filter(Boolean)
                 .join(', ')
               return (
@@ -55,6 +73,7 @@ function OutlineSections({
                       {done ? '✓' : index + 1}
                     </span>
                     <span className="detail-outline__label">{lesson.title}</span>
+                    {length ? <span className="detail-outline__duration">{length}</span> : null}
                   </button>
                 </li>
               )
@@ -79,8 +98,14 @@ function CourseOutline({ course, onOpenLesson }) {
   const [outline, setOutline] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [open, setOpen] = useState(true)
   const currentRef = useRef(null)
   const currentPath = course.learning?.lastLessonRelativePath || ''
+  const panelId = 'detail-outline-panel'
+
+  useEffect(() => {
+    setOpen(true)
+  }, [course.path])
 
   useEffect(() => {
     let cancelled = false
@@ -110,30 +135,63 @@ function CourseOutline({ course, onOpenLesson }) {
   }, [outline, currentPath])
 
   const sections = outline?.sections || []
-  const lessonCount = flattenLessons(sections).length
+  const lessons = flattenLessons(sections)
+  const lessonCount = lessons.length
+  const totalLength = formatDuration(
+    lessons.reduce((sum, lesson) => sum + lessonSeconds(lesson, course), 0)
+  )
   const showSectionTitles =
     sections.length > 1 || (sections.length === 1 && sections[0].id !== '__root__')
 
   return (
     <section className="detail-outline" aria-label="Temario">
       <div className="detail-outline__head">
-        <h3>Temario</h3>
-        {lessonCount > 0 ? <span>{lessonCount}</span> : null}
+        <h3>
+          <button
+            type="button"
+            className="detail-outline__toggle"
+            aria-expanded={open}
+            aria-controls={panelId}
+            onClick={() => setOpen((current) => !current)}
+          >
+            Temario
+            <svg
+              className="detail-outline__chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </button>
+        </h3>
+        {lessonCount > 0 ? (
+          <span>
+            {lessonCount}
+            {totalLength ? ` · ${totalLength}` : ''}
+          </span>
+        ) : null}
       </div>
-      {loading ? <p className="detail-outline__note">Cargando temario…</p> : null}
-      {!loading && error ? <p className="detail-outline__note">{error}</p> : null}
-      {!loading && !error && lessonCount === 0 ? (
-        <p className="detail-outline__note">Este curso no tiene lecciones.</p>
-      ) : null}
-      <OutlineSections
-        sections={sections}
-        depth={0}
-        showSectionTitles={showSectionTitles}
-        course={course}
-        currentPath={currentPath}
-        currentRef={currentRef}
-        onOpenLesson={onOpenLesson}
-      />
+      <div id={panelId} hidden={!open}>
+        {loading ? <p className="detail-outline__note">Cargando temario…</p> : null}
+        {!loading && error ? <p className="detail-outline__note">{error}</p> : null}
+        {!loading && !error && lessonCount === 0 ? (
+          <p className="detail-outline__note">Este curso no tiene lecciones.</p>
+        ) : null}
+        <OutlineSections
+          sections={sections}
+          depth={0}
+          showSectionTitles={showSectionTitles}
+          course={course}
+          currentPath={currentPath}
+          currentRef={currentRef}
+          onOpenLesson={onOpenLesson}
+        />
+      </div>
     </section>
   )
 }
