@@ -332,7 +332,7 @@ function noteConflictView(finding) {
   const hasMeta = Array.isArray(conflict.remoteAnchors)
   return {
     findingId: finding.id,
-    title: finding.title || 'Sin título',
+    title: noteWire(finding).title || 'Sin título',
     body: finding.body || '',
     remoteTitle: conflict.remoteTitle || '',
     remoteBody: conflict.remoteBody || '',
@@ -777,6 +777,7 @@ async function saveNotePage(client, finding, remote) {
   if (rowsReady()) return saveNoteRow(client, finding, remote)
   const parentId = await ensurePlace(client, finding)
   const timeSec = noteVideoTime(finding)
+  const title = noteWire(finding).title
   let page = remote
   if (page?.pageId) {
     const parent = await client.pageParent(page.pageId)
@@ -784,7 +785,7 @@ async function saveNotePage(client, finding, remote) {
       page = await client.updatePage(
         page.pageId,
         finding.id,
-        finding.title,
+        title,
         finding.body,
         PAGE_ICONS.note,
         'finding',
@@ -792,7 +793,6 @@ async function saveNotePage(client, finding, remote) {
         timeSec
       )
     } else {
-      const title = finding.title
       const body = finding.body
       page = await client.createPage(
         finding.id,
@@ -810,7 +810,7 @@ async function saveNotePage(client, finding, remote) {
   } else {
     page = await client.createPage(
       finding.id,
-      finding.title,
+      title,
       finding.body,
       parentId,
       PAGE_ICONS.note,
@@ -1052,7 +1052,7 @@ function noteSyncAction(finding, remote) {
   if (rowsReady() && (finding.notion?.wire || 0) < 2) {
     const bodyAction = decideSync({
       hasRemote: Boolean(remote),
-      localHash: wireHash(finding.title, finding.body),
+      localHash: wireHash(noteWire(finding).title, finding.body),
       remoteHash: remote ? wireHash(remote.title, remote.body) : null,
       ackedHash: finding.notion?.ackedHash || null
     })
@@ -1060,7 +1060,7 @@ function noteSyncAction(finding, remote) {
     if (bodyAction === 'pull') return 'pull'
     return remote ? 'push' : 'create'
   }
-  const localHash = rowsReady() ? localNoteHash(finding) : wireHash(finding.title, finding.body)
+  const localHash = rowsReady() ? localNoteHash(finding) : wireHash(noteWire(finding).title, finding.body)
   return decideSync({
     hasRemote: Boolean(remote),
     localHash,
@@ -1076,7 +1076,7 @@ function noteSyncAction(finding, remote) {
 async function writeLocal(client, finding) {
   const remote = await loadRemote(client, finding)
   const page = await saveNotePage(client, finding, remote)
-  const localHash = rowsReady() ? localNoteHash(finding) : wireHash(finding.title, finding.body)
+  const localHash = rowsReady() ? localNoteHash(finding) : wireHash(noteWire(finding).title, finding.body)
   finishWrite(finding.id, page, localHash, noteVideoTime(finding))
   recordNoteFiles(finding.id, page?.fileFetch)
 }
@@ -1108,7 +1108,7 @@ async function reconcileUpsert(client, id, job = {}) {
   }
   if (!finding || finding.notion?.conflict) return
 
-  const localHash = rowsReady() ? localNoteHash(finding) : wireHash(finding.title, finding.body)
+  const localHash = rowsReady() ? localNoteHash(finding) : wireHash(noteWire(finding).title, finding.body)
   if (
     !job.remote &&
     (finding.notion?.wire || 0) >= 2 &&
@@ -1727,7 +1727,7 @@ async function migrateToRows(client) {
       notePrepare(label, migrationDone, migrationTotal)
     }
     for (const finding of notes) {
-      migrationStep(`Nota · ${finding.title || finding.id}`)
+      migrationStep(`Nota · ${noteWire(finding).title || finding.id}`)
       const legacyId = finding.notion?.pageId || null
       const page = await client.saveRow(buildNoteRow(finding))
       const fileFetch = await reconcileNoteFiles(client, page?.pageId, finding.body, {
@@ -2622,7 +2622,7 @@ async function queuePending() {
   }
   const rowIds = new Set((remotePages || []).map((page) => page.pageId))
   for (const finding of findings) {
-    const localHash = wireHash(finding.title, finding.body)
+    const localHash = wireHash(noteWire(finding).title, finding.body)
     const row = (remotePages || []).find((page) => page.pageId === finding.notion?.pageId)
     const remote =
       row ||
@@ -3665,7 +3665,7 @@ export function notionDebugReport() {
   )
   for (const finding of pendingNotes.slice(0, 40)) {
     lines.push(
-      `- ${clipDebug(finding.title || finding.id)} | página ${finding.notion?.pageId || 'no'} | cursor ${finding.notion?.ackedHash ? 'sí' : 'no'} | editada ${finding.notion?.remoteEditedAt || '—'} | conflicto ${finding.notion?.conflict ? 'sí' : 'no'}`
+      `- ${clipDebug(noteWire(finding).title || finding.id)} | página ${finding.notion?.pageId || 'no'} | cursor ${finding.notion?.ackedHash ? 'sí' : 'no'} | editada ${finding.notion?.remoteEditedAt || '—'} | conflicto ${finding.notion?.conflict ? 'sí' : 'no'}`
     )
   }
   if (pendingNotes.length > 40)

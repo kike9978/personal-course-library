@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { collectTreeResources, flattenLessons } from '../../../shared/courseTree.js'
-import { noteDisplayTitles, playbackMarkLabel } from '../../../shared/knowledgeGraph.js'
+import { noteDisplayTitles, noteTextTitle, playbackMarkLabel } from '../../../shared/knowledgeGraph.js'
 import LessonTree from './LessonTree'
 import LessonPlayer from './LessonPlayer'
 import ResourceViewer, { ResourceGroupView } from './ResourceViewer'
@@ -258,14 +258,12 @@ function CourseRoom({
         subtitle: 'Tema'
       })
     }
-    const noteLabels = noteDisplayTitles(annotations)
     for (const note of annotations) {
       if (!note?.id || note.id === editingId) continue
-      const explicit = String(note.title || '').trim()
       items.push({
         type: 'note',
         id: note.id,
-        title: explicit || noteLabels.get(note.id) || 'new note',
+        title: noteTextTitle(note) || 'Nota',
         subtitle: 'Nota'
       })
     }

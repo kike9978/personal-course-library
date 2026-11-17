@@ -9,8 +9,9 @@ import {
   findingFromLegacyNote,
   findingsForCourse,
   groupFindingsByTopic,
-  nextDefaultNoteTitle,
+  clearDefaultNoteTitles,
   noteDisplayTitles,
+  noteTextTitle,
   playbackMarkLabel,
   plainNoteText,
   parseMentions,
@@ -359,43 +360,59 @@ describe('knowledge graph', () => {
     assert.equal(graph.edges[0].edgeType, 'shared-topic')
   })
 
-  it('names untitled notes new note, then new note 2', () => {
-    assert.equal(nextDefaultNoteTitle([]), 'new note')
-    assert.equal(
-      nextDefaultNoteTitle([{ title: 'new note' }, { title: 'New Note 2' }, { title: 'Other' }]),
-      'new note 3'
-    )
-    assert.equal(nextDefaultNoteTitle([{ title: 'new note 2' }]), 'new note')
-    assert.equal(nextDefaultNoteTitle([], 83), 'new note 1:23')
-    assert.equal(nextDefaultNoteTitle([{ title: 'new note' }], 83), 'new note 1:23')
-    assert.equal(nextDefaultNoteTitle([{ title: 'new note 1:23' }], 65), 'new note 1:05')
-    assert.equal(nextDefaultNoteTitle([{ title: 'new note 1:23' }], 83), 'new note 1:23 2')
-    assert.equal(nextDefaultNoteTitle([{ title: 'new note 1:23 2' }], 83), 'new note 1:23')
-    assert.equal(nextDefaultNoteTitle([], 3661), 'new note 1:01:01')
-    const timed = noteDisplayTitles([
-      { id: 'pin', title: '', createdAt: 1, timeSec: 83 },
-      { id: 'again', title: '', createdAt: 2, timeSec: 83 },
-      { id: 'plain', title: '', createdAt: 3 }
-    ])
-    assert.equal(timed.get('pin'), 'new note 1:23')
-    assert.equal(timed.get('again'), 'new note 1:23 2')
-    assert.equal(timed.get('plain'), 'new note')
+  it('names a note from the words in it, not a placeholder', () => {
+    const image = '![Captura en 2:42](course-media://note/?file=mw2pazt9-4b174209be23.jpg)'
+    assert.equal(noteTextTitle({ title: '', body: 'First line title' }), 'First line title')
+    assert.equal(noteTextTitle({ title: 'new note 1:23', body: 'kept' }), 'kept')
+    assert.equal(noteTextTitle({ title: 'Terminología', body: image }), 'Terminología')
+    assert.equal(noteTextTitle({ title: 'new note 0:04', body: image }), '')
+    assert.equal(noteTextTitle({ title: '', body: `${image}\n\nbuenas noches` }), 'buenas noches')
     const labels = noteDisplayTitles([
-      { id: 'b', title: '', createdAt: 2, body: 'Second line title' },
-      { id: 'a', title: null, createdAt: 1, body: 'First line title' },
-      { id: 'kept', title: 'new note', createdAt: 0, body: 'kept' }
+      { id: 'b', title: '', body: 'Second line title' },
+      { id: 'a', title: null, body: 'First line title' },
+      { id: 'kept', title: 'new note', body: 'kept' },
+      { id: 'shot', title: 'new note 0:04', body: image }
     ])
-    assert.equal(labels.get('a'), 'new note 2')
-    assert.equal(labels.get('b'), 'new note 3')
-    assert.equal(labels.has('kept'), false)
+    assert.equal(labels.get('a'), 'First line title')
+    assert.equal(labels.get('b'), 'Second line title')
+    assert.equal(labels.get('kept'), 'kept')
+    assert.equal(labels.has('shot'), false)
 
     const graph = buildGlobalGraph({
       viewMode: 'topics',
       topics: [{ id: 't', title: 'Topic' }],
-      findings: [{ id: 'n', title: '', body: 'Opening line', topicIds: ['t'] }]
+      findings: [{ id: 'n', title: 'new note', body: 'Opening line', topicIds: ['t'] }]
     })
     const note = graph.nodes.find((node) => node.data.kind === 'finding')
-    assert.equal(note.data.fullLabel, 'new note')
+    assert.equal(note.data.fullLabel, 'Opening line')
+  })
+
+  it('clears placeholder titles and keeps a clock that lived only in the title', () => {
+    const notes = [
+      {
+        id: 'words',
+        title: 'new note 2',
+        body: 'Es hora',
+        updatedAt: 1,
+        anchors: [{ timeSec: 12 }]
+      },
+      {
+        id: 'clock',
+        title: 'new note 0:04',
+        body: '',
+        updatedAt: 1,
+        anchors: [{ projectId: null, timeSec: null }]
+      },
+      { id: 'named', title: 'Terminología', body: 'queda', updatedAt: 1 }
+    ]
+    assert.equal(clearDefaultNoteTitles(notes, 50), 2)
+    assert.equal(notes[0].title, null)
+    assert.equal(notes[0].anchors[0].timeSec, 12)
+    assert.equal(notes[0].updatedAt, 50)
+    assert.equal(notes[1].title, null)
+    assert.equal(notes[1].anchors[0].timeSec, 4)
+    assert.equal(notes[2].title, 'Terminología')
+    assert.equal(notes[2].updatedAt, 1)
   })
 
   it('labels a playback mark with written text, not an image source', () => {

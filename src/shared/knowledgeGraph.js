@@ -268,6 +268,16 @@ export function isDefaultNoteTitle(title) {
   return DEFAULT_NOTE_TITLE_RE.test(String(title || '').trim())
 }
 
+/** Seconds encoded in a placeholder title such as "new note 1:23". */
+export function defaultTitleTimeSec(title) {
+  const match = String(title || '').trim().match(DEFAULT_NOTE_TITLE_RE)
+  if (!match?.[1]) return null
+  const parts = match[1].split(':').map((part) => Number(part))
+  if (parts.some((part) => !Number.isInteger(part) || part < 0)) return null
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  return parts[0] * 60 + parts[1]
+}
+
 /**
  * Words a person wrote. Images, embeds, and bare media urls are removed so a
  * playback mark never shows a file path.
@@ -299,12 +309,22 @@ export function plainNoteText(markdown) {
   return text
 }
 
-/** Mark label: custom title, otherwise the note's text, otherwise the default name. */
-export function playbackMarkLabel(note, defaultName, max = 72) {
-  const title = String(note?.title || '').trim()
-  const custom = title && !isDefaultNoteTitle(title) ? title : ''
+/**
+ * Name shown for a note. A title the person typed wins. Otherwise the words
+ * in the body, with images and media paths left out. Empty when there is neither.
+ */
+export function noteTextTitle(note, max = 72) {
+  const stored = String(note?.title || '').trim()
+  const custom = stored && !isDefaultNoteTitle(stored) ? stored : ''
   const text = custom || plainNoteText(note?.body)
-  const label = text || String(defaultName || title || '').trim()
+  if (!text) return ''
+  if (!max || text.length <= max) return text
+  return `${text.slice(0, max - 1)}…`
+}
+
+/** Mark label: the note's name, otherwise the caller's fallback. */
+export function playbackMarkLabel(note, defaultName, max = 72) {
+  const label = noteTextTitle(note, 0) || String(defaultName || '').trim()
   if (!label) return ''
   return label.length > max ? `${label.slice(0, max - 1)}…` : label
 }
@@ -322,81 +342,48 @@ export function formatNoteTimestamp(sec) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
-function noteTimeSec(note) {
-  if (typeof note?.timeSec === 'number') return note.timeSec
-  const anchor = (note?.anchors || []).find((item) => typeof item.timeSec === 'number')
-  return typeof anchor?.timeSec === 'number' ? anchor.timeSec : null
+function noteHasTime(note) {
+  if (typeof note?.timeSec === 'number') return true
+  return (note?.anchors || []).some((anchor) => typeof anchor.timeSec === 'number')
 }
 
-/** Serial at the end of a default title. "new note" and "new note 1:23" are 1. */
-export function defaultNoteSerial(title) {
-  const match = String(title || '')
-    .trim()
-    .match(DEFAULT_NOTE_TITLE_RE)
-  if (!match) return null
-  const serial = match[2] ? Number(match[2]) : 1
-  if (!Number.isInteger(serial) || serial < 1) return null
-  return serial
-}
-
-function storedNoteTitle(note) {
-  return String(typeof note === 'string' ? note : note?.title || '')
-    .trim()
-    .toLowerCase()
-}
-
-function formatDefaultNoteTitle(serial, timeSec) {
-  const stamp = formatNoteTimestamp(timeSec)
-  const base = stamp ? `${DEFAULT_NOTE_TITLE} ${stamp}` : DEFAULT_NOTE_TITLE
-  return serial > 1 ? `${base} ${serial}` : base
-}
-
-function nextFreeDefaultTitle(used, timeSec) {
-  let serial = 1
-  let title = formatDefaultNoteTitle(serial, timeSec)
-  while (used.has(title.toLowerCase())) {
-    serial += 1
-    title = formatDefaultNoteTitle(serial, timeSec)
+/**
+ * Remove stored "new note" placeholders so the name can come from the body.
+ * When the only copy of a video position is the clock in that placeholder,
+ * it is written onto the first anchor that can hold it.
+ * Returns how many notes changed.
+ */
+export function clearDefaultNoteTitles(notes, now = Date.now()) {
+  let changed = 0
+  for (const note of notes || []) {
+    const title = String(note?.title || '').trim()
+    if (!note || !isDefaultNoteTitle(title)) continue
+    const sec = defaultTitleTimeSec(title)
+    if (sec != null && !noteHasTime(note)) {
+      const anchors = Array.isArray(note.anchors) ? note.anchors : []
+      const anchor = anchors.find((item) => item && !item.projectId) || anchors[0]
+      if (anchor) anchor.timeSec = sec
+    }
+    note.title = null
+    note.updatedAt = now
+    changed += 1
   }
-  return title
+  return changed
 }
 
-/**
- * Next free default title.
- * A timestamp is appended to "new note". A number follows that time only when
- * another note already uses the same default name.
- */
-export function nextDefaultNoteTitle(notes, timeSec) {
-  const used = new Set((notes || []).map(storedNoteTitle).filter(Boolean))
-  return nextFreeDefaultTitle(used, timeSec)
-}
-
-/**
- * Stable display titles for notes that have no stored title.
- * A number is added only when that exact default name is already taken.
- */
+/** Display names for notes that have a typed title or written text. */
 export function noteDisplayTitles(notes) {
   const labels = new Map()
-  const used = new Set((notes || []).map(storedNoteTitle).filter(Boolean))
-  const untitled = (notes || [])
-    .filter((note) => note?.id && !String(note.title || '').trim())
-    .slice()
-    .sort(
-      (a, b) =>
-        (a.createdAt || 0) - (b.createdAt || 0) || String(a.id).localeCompare(String(b.id))
-    )
-  for (const note of untitled) {
-    const title = nextFreeDefaultTitle(used, noteTimeSec(note))
-    used.add(title.toLowerCase())
-    labels.set(note.id, title)
+  for (const note of notes || []) {
+    if (!note?.id) continue
+    const title = noteTextTitle(note)
+    if (title) labels.set(note.id, title)
   }
   return labels
 }
 
-function findingLabel(finding, labels) {
-  const explicit = String(finding?.title || '').trim()
-  if (explicit) return explicit
-  return labels?.get(finding?.id) || DEFAULT_NOTE_TITLE
+function findingLabel(finding) {
+  return noteTextTitle(finding, 0)
 }
 
 function clip(text, max = 24) {
@@ -524,7 +511,6 @@ function addEdge(edges, seen, source, target, edgeType, label) {
 }
 
 function buildTopicsGraph(findings, topics, courseTitles = {}) {
-  const labels = noteDisplayTitles(findings)
   const topicById = new Map(topics.map((topic) => [topic.id, topic]))
   const used = new Map()
   for (const finding of findings) {
@@ -562,7 +548,7 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
     group.forEach((finding, index) => {
       const angle = (2 * Math.PI * index) / group.length
       nodes.push(
-        nodeRecord('finding', finding.id, findingLabel(finding, labels), {
+        nodeRecord('finding', finding.id, findingLabel(finding), {
           x: origin.x + Math.cos(angle) * 46,
           y: origin.y + Math.sin(angle) * 46
         })
@@ -608,7 +594,7 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
         x: origin.x / neighbors.length + 28,
         y: origin.y / neighbors.length + 18
       }
-      const node = nodeRecord('finding', finding.id, findingLabel(finding, labels), spot)
+      const node = nodeRecord('finding', finding.id, findingLabel(finding), spot)
       node.data.orphan = true
       nodes.push(node)
       placedPoints.set(finding.id, node)
@@ -619,7 +605,7 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
   if (pending.length) {
     const clusterRadius = topicList.length ? Math.max(200, (topicList.length > 1 ? Math.max(180, topicList.length * 36) : 0) + 140) : 140
     ringPositions(pending.length, clusterRadius).forEach((point, index) => {
-      const node = nodeRecord('finding', pending[index].id, findingLabel(pending[index], labels), point)
+      const node = nodeRecord('finding', pending[index].id, findingLabel(pending[index]), point)
       node.data.orphan = true
       nodes.push(node)
       placedPoints.set(pending[index].id, node)
@@ -634,7 +620,7 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
       ? [{ x: 0, y: 0 }]
       : ringPositions(orphans.length, orphanRadius)
   orphans.forEach((finding, index) => {
-    const node = nodeRecord('finding', finding.id, findingLabel(finding, labels), orphanPoints[index])
+    const node = nodeRecord('finding', finding.id, findingLabel(finding), orphanPoints[index])
     node.data.orphan = true
     nodes.push(node)
   })

@@ -3751,6 +3751,7 @@ select {
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
+  isolation: isolate;
   background: #0c0a10;
 }
 
@@ -3769,6 +3770,7 @@ select {
 .lesson-player__stage {
   position: absolute;
   inset: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4350,7 +4352,7 @@ kbd {
   align-items: center;
   gap: 0.4rem 0.5rem;
   padding: 0.55rem 0.85rem 0.7rem;
-  overflow-x: auto;
+  overflow: visible;
   background: linear-gradient(180deg, transparent, rgba(12, 10, 16, 0.94) 28%);
   border-top: none;
 }
@@ -4501,7 +4503,7 @@ kbd {
   position: absolute;
   bottom: calc(100% + 6px);
   transform: translateX(-50%);
-  z-index: 5;
+  z-index: 8;
   min-width: 8rem;
   max-width: 14rem;
   padding: 0.4rem 0.55rem;
@@ -7840,17 +7842,24 @@ button.annotations-doc__save-status {
   border-style: dashed;
 }
 
+.annotations-page-list .lesson-tree__section-head,
+.annotations-page-list .lesson-tree__section-copy {
+  min-width: 0;
+}
+
 .annotations-page-list .lesson-tree__section-copy {
   flex-direction: row;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.45rem;
+  overflow: hidden;
 }
 
 .annotations-page-list .lesson-tree__section-title {
   flex: 1;
-  white-space: normal;
-  overflow: visible;
-  text-overflow: unset;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .annotations-page-list .lesson-tree__section-meta {
@@ -7868,14 +7877,19 @@ button.annotations-doc__save-status {
 
 .annotations-page-list .lesson-tree__section-toggle {
   gap: var(--ann-chevron-gap);
+  min-width: 0;
   margin-bottom: 0;
   padding: 0.22rem var(--ann-pad-x);
+}
+
+.annotations-page-list .lesson-tree__section--dense > .lesson-tree__section-head .lesson-tree__section-toggle {
+  align-items: center;
 }
 
 .annotations-page-list .lesson-tree__section--dense .lesson-tree__section-chevron {
   width: var(--ann-chevron);
   height: var(--ann-chevron);
-  margin-top: 0.12rem;
+  margin-top: 0;
 }
 
 .annotations-page-list .lesson-tree__section--nested,
@@ -7940,14 +7954,19 @@ button.annotations-doc__save-status {
 }
 
 .annotations-page-list__label {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 0.05rem;
+  overflow: hidden;
 }
 
 .annotations-page-list__name {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
   font-size: 0.8rem;
   font-weight: 500;
   line-height: 1.3;

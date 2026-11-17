@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { resolveCourseTitle } from './knowledgeGraph.js'
+import { noteTextTitle, resolveCourseTitle } from './knowledgeGraph.js'
 import { courseMediaNoteFile, markdownImageDestination } from './noteMedia.js'
 
 export { courseMediaNoteFile, markdownImageDestination }
@@ -419,7 +419,7 @@ export function topicIdsFromText(text) {
 /** Note fields that participate in the sync hash. */
 export function noteWire(finding) {
   return {
-    title: normalizeTitle(finding?.title),
+    title: normalizeTitle(noteTextTitle(finding, 0)),
     body: normalizeBody(finding?.body),
     color: String(finding?.color || '').trim(),
     anchors: noteAnchorsWire(finding?.anchors),

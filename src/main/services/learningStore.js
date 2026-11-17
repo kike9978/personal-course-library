@@ -14,7 +14,8 @@ import {
   findingsForCourse,
   normalizeAnchor,
   hashtagTitlesFromBody,
-  nextDefaultNoteTitle,
+  clearDefaultNoteTitles,
+  isDefaultNoteTitle,
   normalizeTopicTitle,
   parseMentions,
   projectFinding,
@@ -288,6 +289,7 @@ function loadStoreFromDisk() {
     }
     for (const course of Object.values(data.courses || {})) ensureArrays(course)
     if (ensureKnowledge(data)) dirty = true
+    if (clearDefaultNoteTitles(data.findings)) dirty = true
     if (dirty) {
       storeCache = data
       reindexFindings(data)
@@ -699,15 +701,6 @@ function anchorFromPayload(payload, coursePath, base = {}) {
   return normalizeAnchor(next, coursePath)
 }
 
-function createdNoteTimeSec(payload) {
-  if (payload.projectId) return null
-  if (Array.isArray(payload.anchors)) {
-    const anchor = payload.anchors.find((item) => typeof item.timeSec === 'number' && !item.projectId)
-    return typeof anchor?.timeSec === 'number' ? anchor.timeSec : null
-  }
-  return typeof payload.timeSec === 'number' ? payload.timeSec : null
-}
-
 function targetsTouched(payload) {
   return (
     payload.anchors !== undefined ||
@@ -794,7 +787,9 @@ export function upsertNote(coursePath, payload) {
   if (key) getMutableCourse(store, coursePath)
   const now = Date.now()
   const body = String(payload.body ?? '').trim()
-  const title = payload.title === undefined ? undefined : String(payload.title ?? '').trim() || null
+  const rawTitle = payload.title === undefined ? undefined : String(payload.title ?? '').trim()
+  const title =
+    rawTitle === undefined ? undefined : !rawTitle || isDefaultNoteTitle(rawTitle) ? null : rawTitle
   const bodyHtml =
     payload.bodyHtml === undefined ? undefined : payload.bodyHtml ? String(payload.bodyHtml) : null
   const bodyJson =
@@ -840,7 +835,7 @@ export function upsertNote(coursePath, payload) {
   } else {
     const finding = {
       id: makeId(),
-      title: title || nextDefaultNoteTitle(store.findings, createdNoteTimeSec(payload)),
+      title: title ?? null,
       body,
       bodyHtml: bodyHtml ?? null,
       bodyJson: bodyJson ?? null,

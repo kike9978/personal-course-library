@@ -20,7 +20,8 @@ import {
   hashtagTitlesFromBody,
   resolveCourseTitle,
   topicKey,
-  noteDisplayTitles,
+  noteTextTitle,
+  isDefaultNoteTitle,
   formatNoteTimestamp,
   visibleGraph
 } from '../../../shared/knowledgeGraph.js'
@@ -31,10 +32,13 @@ function clipTitle(value) {
   return text.length > 72 ? `${text.slice(0, 72)}…` : text
 }
 
-function noteTitle(item, labels) {
-  const explicit = String(item?.title || '').trim()
-  if (explicit) return clipTitle(explicit)
-  return clipTitle(labels?.get?.(item?.id) || 'new note')
+function noteTitle(item) {
+  return clipTitle(noteTextTitle(item))
+}
+
+function editableTitle(value) {
+  const text = String(value || '').trim()
+  return isDefaultNoteTitle(text) ? '' : text
 }
 
 function topicTitlesOf(item, topics = []) {
@@ -52,15 +56,8 @@ function countNotes(node) {
   return own + nested
 }
 
-const DEFAULT_TITLE_PARTS = /^new note(?: (\d+:\d{2}(?::\d{2})?))?(?: (\d+))?$/i
-
 function noteListParts(item, fullTitle) {
   const fromClock = typeof item?.timeSec === 'number' ? formatNoteTimestamp(item.timeSec) : ''
-  const match = String(fullTitle || '').trim().match(DEFAULT_TITLE_PARTS)
-  if (match) {
-    const serial = match[2] ? ` ${match[2]}` : ''
-    return { name: `new note${serial}`, time: match[1] || fromClock }
-  }
   return { name: fullTitle, time: fromClock }
 }
 
@@ -107,6 +104,7 @@ function AnnotationBranch({
             key={`${node.id}-${item.coursePath || 'local'}-${item.id}`}
             type="button"
             className={`annotations-page-list__item${isRowActive(item) ? ' is-active' : ''}`}
+            title={parts.name}
             onClick={() => onOpen(item)}
           >
             <span className="annotations-page-list__label">
@@ -422,7 +420,6 @@ function AnnotationsWorkspace({
   }, [applyGraphWidth])
 
   const libraryFindings = corpus || annotations
-  const titleLabels = useMemo(() => noteDisplayTitles(libraryFindings), [libraryFindings])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -436,14 +433,14 @@ function AnnotationsWorkspace({
         item.projectTitle,
         course,
         ...(item.topics || []).map((topic) => topic.title),
-        noteTitle(item, titleLabels)
+        noteTitle(item)
       ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
       return hay.includes(q)
     })
-  }, [annotations, query, titleLabels, titles])
+  }, [annotations, query, titles])
 
   useEffect(() => {
     const pending = []
@@ -611,7 +608,7 @@ function AnnotationsWorkspace({
       map.set(`note:${item.id}`, {
         type: 'note',
         id: item.id,
-        title: noteTitle(item, titleLabels),
+        title: noteTitle(item),
         subtitle: 'Nota'
       })
     }
@@ -640,7 +637,7 @@ function AnnotationsWorkspace({
       }
     }
     return [...map.values()]
-  }, [annotations, libraryFindings, selected?.id, titleLabels, topics])
+  }, [annotations, libraryFindings, selected?.id, topics])
 
   const persistNote = useCallback(
     async (item, incoming, { silent = true } = {}) => {
@@ -744,7 +741,7 @@ function AnnotationsWorkspace({
       setSaveStatus('idle')
       return
     }
-    setDraftTitle(next.title || '')
+    setDraftTitle(editableTitle(next.title))
     setDraftTopics(topicTitlesOf(next, topics))
     setTopicQuery('')
     setDraft({
@@ -764,7 +761,7 @@ function AnnotationsWorkspace({
     if (!stamp || stamp === appliedPullRef.current) return
     appliedPullRef.current = stamp
     if (dirtyRef.current) return
-    const title = selected.title || ''
+    const title = editableTitle(selected.title)
     draftTitleRef.current = title
     setDraftTitle(title)
     setDraftTopics(topicTitlesOf(selected, topics))
@@ -827,7 +824,7 @@ function AnnotationsWorkspace({
       const typed = draftTitle.trim()
       if (typed) return typed.length > 72 ? `${typed.slice(0, 72)}…` : typed
     }
-    return noteTitle(item, titleLabels)
+    return noteTitle(item)
   }
 
   const handleSave = () => {
@@ -846,7 +843,7 @@ function AnnotationsWorkspace({
         rewriteMarkdownAssetLinks
       } = await import('../utils/exportHelpers')
 
-      const titleText = draftTitle.trim() || noteTitle(selected, titleLabels)
+      const titleText = draftTitle.trim() || noteTitle(selected)
       const bodyMarkdown = draft.text || selected.body || ''
       const base = noteExportBasename(titleText)
       const assetDirName = `${base}.assets`
@@ -986,11 +983,11 @@ function AnnotationsWorkspace({
     return libraryFindings
       .filter((finding) => (finding.topicIds || []).includes(tagViewId))
       .sort((a, b) =>
-        noteTitle(a, titleLabels).localeCompare(noteTitle(b, titleLabels), undefined, {
+        noteTitle(a).localeCompare(noteTitle(b), undefined, {
           sensitivity: 'base'
         })
       )
-  }, [tagViewId, libraryFindings, titleLabels])
+  }, [tagViewId, libraryFindings])
 
   const tagViewTitle = topics.find((topic) => topic.id === tagViewId)?.title || 'Tag'
 
@@ -1270,7 +1267,7 @@ function AnnotationsWorkspace({
                 className="annotations-doc__title-input"
                 value={draftTitle}
                 onChange={(e) => handleTitleChange(e.target.value)}
-                placeholder={noteTitle(selected, titleLabels)}
+                placeholder={noteTitle(selected) || 'Título'}
                 aria-label="Título de la anotación"
                 autoFocus
               />
@@ -1403,7 +1400,7 @@ function AnnotationsWorkspace({
                     {related.map((finding) => (
                       <li key={finding.id}>
                         <button type="button" onClick={() => onSelect?.(finding)}>
-                          <strong>{noteTitle(finding, titleLabels)}</strong>
+                          <strong>{noteTitle(finding)}</strong>
                           <span>
                             {(finding.anchors || [])
                               .map((anchor) => resolveCourseTitle(anchor.coursePath, titles))
