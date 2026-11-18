@@ -51,7 +51,8 @@ function CourseRoom({
   onOpenAnnotations,
   onProgressChange,
   resumeTarget = null,
-  liveJump = null
+  liveJump = null,
+  backLabel = 'Biblioteca'
 }) {
   const coursePath = course.path
   const [tree, setTree] = useState(null)
@@ -623,7 +624,6 @@ function CourseRoom({
 
   useEffect(() => {
     if (!liveJump || liveJump.coursePath !== coursePath || !tree) return
-    setShowCourseAnnotations(false)
     setStudyOpen(false)
     jumpTo(liveJump)
   }, [liveJump, coursePath, tree, jumpTo])
@@ -877,7 +877,6 @@ function CourseRoom({
       return
     }
     flashNote(null)
-    setShowCourseAnnotations(false)
     setStudyOpen(true)
     if (
       (panelMode === 'project' && selectedProject) ||
@@ -973,7 +972,6 @@ function CourseRoom({
       return
     }
     if (guardNewNote()) return
-    setShowCourseAnnotations(false)
     flashNote(null)
     setStudyOpen(true)
     setPanelMode('lesson')
@@ -1040,7 +1038,6 @@ function CourseRoom({
       if (!saved?.ok || !saved.url) {
         throw new Error(saved?.error || 'No se pudo guardar la captura')
       }
-      setShowCourseAnnotations(false)
       setStudyOpen(true)
       const api = await waitForEditorApi(noteEditorApiRef)
       api.insertImage({
@@ -1206,7 +1203,7 @@ function CourseRoom({
     <div className="course-room">
       <header className="course-room__header">
         <button type="button" className="icon-btn icon-btn--ghost" onClick={onBack}>
-          ← Biblioteca
+          ← {backLabel}
         </button>
         <div className="course-room__heading">
           <h1 title={[course.title, course.instructor].filter(Boolean).join(' ')}>
@@ -1393,7 +1390,6 @@ function CourseRoom({
                 timelineMarks={timelineMarks}
                 onTimeTick={setCurrentTimeSec}
                 onMarkClick={(mark) => {
-                  setShowCourseAnnotations(false)
                   setStudyOpen(true)
                   if (mark.noteId) flashNote(mark.noteId)
                   jumpTo(mark)

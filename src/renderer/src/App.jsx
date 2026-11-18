@@ -819,7 +819,7 @@ function App() {
   const [libraryStudyMode, setLibraryStudyMode] = useState(null)
   const [annotationsCoursePath, setAnnotationsCoursePath] = useState('')
   const libraryStudyModeRef = useRef(null)
-  const returnStudyRef = useRef(null)
+  const [returnStudy, setReturnStudy] = useState(null)
   libraryStudyModeRef.current = libraryStudyMode
   const zipExport = useCourseZipExport()
   const loadingRef = useRef(false)
@@ -937,12 +937,15 @@ function App() {
   }, [])
 
   const openCourse = useCallback(
-    (course, target = null) => {
+    (course, target = null, origin = null) => {
       if (!course?.path) return
       setResumeTarget(target)
       const from = libraryStudyModeRef.current
-      returnStudyRef.current =
-        from === 'projects' || from === 'annotations' || from === 'playlists' ? from : null
+      setReturnStudy(
+        from === 'annotations' || from === 'projects' || from === 'playlists'
+          ? { mode: from, ...(from === 'annotations' ? origin : null) }
+          : null
+      )
       setLibraryStudyMode(null)
       setActiveCoursePath(course.path)
       recordView(course.path)
@@ -1022,7 +1025,7 @@ function App() {
       : window.api.onAnnotationsJump?.((payload) => {
           if (!payload?.coursePath) return
           if (!coursesRef.current.some((course) => course.path === payload.coursePath)) return
-          returnStudyRef.current = null
+          setReturnStudy(null)
           setLibraryStudyMode(null)
           const target = {
             lessonRelativePath: payload.lessonRelativePath || null,
@@ -1074,6 +1077,7 @@ function App() {
   const navigateApp = useCallback((section) => {
     setActiveCoursePath(null)
     setResumeTarget(null)
+    setReturnStudy(null)
     setAnnotationsCoursePath('')
     if (section === 'projects' || section === 'annotations' || section === 'playlists') {
       setLibraryStudyMode(section)
@@ -1087,12 +1091,14 @@ function App() {
     setActiveCoursePath(null)
     setResumeTarget(null)
     setLiveJump(null)
+    setReturnStudy(null)
     setLibraryStudyMode('annotations')
   }, [])
 
   const backFromAnnotations = useCallback(() => {
     const coursePath = annotationsCoursePath
     setAnnotationsCoursePath('')
+    setReturnStudy(null)
     setLibraryStudyMode(null)
     if (!coursePath) return
     if (!courses.some((course) => course.path === coursePath && !isCourseHidden(course))) return
@@ -1139,7 +1145,12 @@ function App() {
       ) : libraryStudyMode === 'annotations' ? (
         <LibraryStudyView
           courses={courses}
-          initialCoursePath={annotationsCoursePath}
+          initialCoursePath={
+            returnStudy?.mode === 'annotations'
+              ? returnStudy.courseFilter || ''
+              : annotationsCoursePath
+          }
+          initialSelectedId={returnStudy?.mode === 'annotations' ? returnStudy.note || null : null}
           onNavigate={navigateApp}
           onOpenCourse={openCourse}
           onBack={annotationsCoursePath ? backFromAnnotations : null}
@@ -1159,13 +1170,18 @@ function App() {
           courses={courses}
           resumeTarget={resumeTarget}
           liveJump={liveJump}
+          backLabel={returnStudy?.mode === 'annotations' ? 'Anotaciones' : 'Biblioteca'}
           onBack={() => {
-            const back = returnStudyRef.current
-            returnStudyRef.current = null
+            const back = returnStudy
             setActiveCoursePath(null)
             setResumeTarget(null)
             setLiveJump(null)
-            if (back) setLibraryStudyMode(back)
+            if (back?.mode === 'annotations') {
+              setLibraryStudyMode('annotations')
+              return
+            }
+            setReturnStudy(null)
+            if (back?.mode) setLibraryStudyMode(back.mode)
           }}
           onOpenExplorer={(c) => window.api.openCourseFolder(c.path)}
           onOpenAnnotations={openCourseAnnotations}

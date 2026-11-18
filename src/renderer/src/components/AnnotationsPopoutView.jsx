@@ -205,7 +205,6 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
           if (still) setSelectedId({ id: still.id, coursePath: still.coursePath })
         }}
         onDelete={async (item) => {
-          if (!window.confirm('¿Borrar esta anotación?')) return
           try {
             await window.api.deleteNote(item.coursePath, item.id)
             const all = await refreshLibraryNotes()

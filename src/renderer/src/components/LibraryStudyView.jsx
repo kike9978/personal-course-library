@@ -17,11 +17,12 @@ function LibraryStudyView({
   onNavigate,
   onOpenCourse,
   onBack = null,
-  initialCoursePath = ''
+  initialCoursePath = '',
+  initialSelectedId = null
 }) {
   const [items, setItems] = useState([])
   const [topics, setTopics] = useState([])
-  const [selectedId, setSelectedId] = useState(null)
+  const [selectedId, setSelectedId] = useState(initialSelectedId)
   const [courseFilter, setCourseFilter] = useState(initialCoursePath || '')
   const [loading, setLoading] = useState(true)
 
@@ -58,6 +59,17 @@ function LibraryStudyView({
     refresh()
       .then((list) => {
         if (cancelled) return
+        if (initialSelectedId) {
+          const match = list.find(
+            (item) =>
+              item.id === initialSelectedId.id &&
+              (item.coursePath || null) === (initialSelectedId.coursePath || null)
+          )
+          if (match) {
+            setSelectedId({ id: match.id, coursePath: match.coursePath || null })
+            return
+          }
+        }
         const scoped = scopedTo ? list.filter((item) => noteInCourse(item, scopedTo)) : list
         if (scoped[0]) {
           setSelectedId({ id: scoped[0].id, coursePath: scoped[0].coursePath })
@@ -72,6 +84,8 @@ function LibraryStudyView({
     return () => {
       cancelled = true
     }
+    // Restore the note from this visit only. A later open starts a new mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -112,7 +126,7 @@ function LibraryStudyView({
   }, [items, courseFilter])
 
   useEffect(() => {
-    if (!selectedId) return
+    if (loading || !selectedId) return
     const stillVisible = visibleItems.some(
       (a) => a.id === selectedId.id && a.coursePath === selectedId.coursePath
     )
@@ -121,7 +135,7 @@ function LibraryStudyView({
         visibleItems[0] ? { id: visibleItems[0].id, coursePath: visibleItems[0].coursePath } : null
       )
     }
-  }, [visibleItems, selectedId])
+  }, [visibleItems, selectedId, loading])
 
   const handleCreate = async () => {
     setCourseFilter('')
@@ -142,7 +156,6 @@ function LibraryStudyView({
   }
 
   const handleDelete = async (item) => {
-    if (!window.confirm('¿Borrar esta anotación?')) return
     try {
       await window.api.deleteNote(item.coursePath, item.id)
       const all = await refresh()
@@ -160,11 +173,20 @@ function LibraryStudyView({
       toast.error('Curso no encontrado en la biblioteca')
       return
     }
-    onOpenCourse(course, {
-      lessonRelativePath: item.lessonRelativePath || null,
-      timeSec: item.timeSec ?? null,
-      projectId: item.projectId || null
-    })
+    onOpenCourse(
+      course,
+      {
+        lessonRelativePath: item.lessonRelativePath || null,
+        timeSec: item.timeSec ?? null,
+        projectId: item.projectId || null
+      },
+      {
+        note:
+          selectedId ||
+          (item?.id ? { id: item.id, coursePath: item.coursePath || null } : null),
+        courseFilter
+      }
+    )
   }
 
   return (

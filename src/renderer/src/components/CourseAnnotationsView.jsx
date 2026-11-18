@@ -105,7 +105,6 @@ function CourseAnnotationsView({
   }
 
   const handleDelete = async (item) => {
-    if (!window.confirm('¿Borrar esta anotación?')) return
     try {
       const list = await window.api.deleteNote(coursePath, item.id)
       onChange?.(list)
