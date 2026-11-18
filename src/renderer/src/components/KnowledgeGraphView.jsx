@@ -114,7 +114,7 @@ function KnowledgeGraphView({
   const layoutKey = [
     viewMode,
     clampLinkDistance(linkDistance),
-    nodes.map((node) => `${node.id}@${node.x},${node.y}`).join(';'),
+    nodes.map((node) => node.id).join(';'),
     edges.map((edge) => edge.id).join(';')
   ].join('|')
 

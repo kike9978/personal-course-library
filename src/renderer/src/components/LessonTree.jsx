@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Captions,
   Check,
@@ -102,6 +102,25 @@ function visibleResources(resources) {
 
 function panelIdFor(id, prefix = 'lesson-section') {
   return `${prefix}-${String(id).replace(/[^a-zA-Z0-9_-]/g, '_')}`
+}
+
+function collapsedIdsForTree(sections, projects, courseResources, selectedPath, selectedProjectId) {
+  const next = new Set(nestedSectionIds(sections))
+  const activeId = sectionIdForSelection({
+    sections,
+    projects,
+    courseResources,
+    selectedPath,
+    selectedProjectId
+  })
+  const openIds =
+    !activeId || activeId === '__projects__' || activeId === '__course_resources__'
+      ? activeId
+        ? [activeId]
+        : []
+      : ancestorIds(sections, activeId)
+  for (const id of openIds) next.delete(id)
+  return next
 }
 
 function sectionIdForSelection({
@@ -338,35 +357,23 @@ function LessonTree({
 }) {
   const resourceNav = resourceNavSection(courseResources, courseResourceSections)
   const navSections = resourceNav ? [...sections, resourceNav] : sections
-  const [collapsedIds, setCollapsedIds] = useState(() => new Set(nestedSectionIds(navSections)))
+  const [collapsedIds, setCollapsedIds] = useState(() =>
+    collapsedIdsForTree(navSections, projects, courseResources, selectedPath, selectedProjectId)
+  )
   const sectionKey = nestedSectionIds(navSections)
     .concat(navSections.map((section) => section.id))
     .join('\0')
   const selectionSource = useRef({ sections: navSections, projects, courseResources })
   selectionSource.current = { sections: navSections, projects, courseResources }
   const seenSectionKey = useRef(sectionKey)
-
-  useEffect(() => {
-    if (seenSectionKey.current === sectionKey) return
+  if (seenSectionKey.current !== sectionKey) {
     seenSectionKey.current = sectionKey
-    const source = selectionSource.current
-    const next = new Set(nestedSectionIds(source.sections))
-    const activeId = sectionIdForSelection({
-      ...source,
-      selectedPath,
-      selectedProjectId
-    })
-    const openIds =
-      !activeId || activeId === '__projects__' || activeId === '__course_resources__'
-        ? activeId
-          ? [activeId]
-          : []
-        : ancestorIds(source.sections, activeId)
-    for (const id of openIds) next.delete(id)
-    setCollapsedIds(next)
-  }, [sectionKey, selectedPath, selectedProjectId])
+    setCollapsedIds(
+      collapsedIdsForTree(navSections, projects, courseResources, selectedPath, selectedProjectId)
+    )
+  }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const source = selectionSource.current
     const activeId = sectionIdForSelection({
       ...source,
@@ -386,6 +393,16 @@ function LessonTree({
       return next
     })
   }, [selectedPath, selectedProjectId, sectionKey])
+
+  const treeRef = useRef(null)
+  const scrolledSectionKey = useRef(null)
+  useLayoutEffect(() => {
+    if (collapsed || scrolledSectionKey.current === sectionKey) return
+    const active = treeRef.current?.querySelector('.lesson-tree__item.is-active')
+    if (!active) return
+    active.scrollIntoView({ block: 'center', inline: 'nearest' })
+    scrolledSectionKey.current = sectionKey
+  }, [sectionKey, selectedPath, selectedProjectId, collapsed, collapsedIds])
 
   const toggleSection = (id) => {
     setCollapsedIds((prev) => {
@@ -461,7 +478,12 @@ function LessonTree({
         <PanelLeftOpen size={16} strokeWidth={2} aria-hidden="true" />
       </button>
     ) : null}
-    <nav className="lesson-tree" aria-label="Contenido del curso" hidden={collapsed}>
+    <nav
+      className="lesson-tree"
+      aria-label="Contenido del curso"
+      hidden={collapsed}
+      ref={treeRef}
+    >
       <div className="lesson-tree__sticky">
         <div className="lesson-tree__header">
           <div className="lesson-tree__header-copy">

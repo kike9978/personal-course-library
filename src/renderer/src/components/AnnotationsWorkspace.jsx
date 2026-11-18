@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import {
   AppWindow,
@@ -371,7 +371,8 @@ function AnnotationsWorkspace({
   topics = [],
   programs = [],
   corpus = null,
-  onUpsertTopic
+  onUpsertTopic,
+  onDeleteTopic
 }) {
   const [query, setQuery] = useState('')
   const [outlineTool, setOutlineTool] = useState(null)
@@ -781,7 +782,7 @@ function AnnotationsWorkspace({
     [groups, groupMode, courseColumn, titles]
   )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!selectedId) return
     const openIds = openIdsForItem(listTree, (item) => sameSelection(item, selectedId))
     if (!openIds?.length) return
@@ -792,6 +793,16 @@ function AnnotationsWorkspace({
       return next
     })
   }, [selectedId, listTree])
+
+  const listItemsRef = useRef(null)
+  const didScrollActive = useRef(false)
+  useLayoutEffect(() => {
+    if (didScrollActive.current || loading) return
+    const active = listItemsRef.current?.querySelector('.annotations-page-list__item.is-active')
+    if (!active) return
+    active.scrollIntoView({ block: 'center', inline: 'nearest' })
+    didScrollActive.current = true
+  }, [loading, selectedId, listTree, collapsedIds])
 
   const toggleTreeNode = (id) => {
     setCollapsedIds((prev) => {
@@ -841,20 +852,10 @@ function AnnotationsWorkspace({
     return updated
   }
 
-  const flushPendingTopic = () => {
-    const pending = String(topicQueryRef.current || '').trim()
-    if (pending) {
-      commitTopicTitle(pending)
-      topicQueryRef.current = ''
-      setTopicQuery('')
-    }
-    return draftTopicsRef.current || []
-  }
-
   const currentSnapshot = () => ({
     title: draftTitleRef.current,
     draft: draftRef.current,
-    topics: flushPendingTopic()
+    topics: draftTopicsRef.current || []
   })
 
   const scheduleSave = () => {
@@ -1265,6 +1266,30 @@ function AnnotationsWorkspace({
 
   const tagViewTitle = topics.find((topic) => topic.id === tagViewId)?.title || 'Tag'
 
+  const handleDeleteTopic = async () => {
+    const topic = topics.find((item) => item.id === tagViewId)
+    if (!topic || !onDeleteTopic) return
+    const ok = await askConfirm({
+      title: 'Borrar tag',
+      message: `¿Borrar «${topic.title}»? Se quita de todas las notas. Si una nota lo sigue escribiendo en el texto, vuelve al guardar.`,
+      confirmLabel: 'Borrar'
+    })
+    if (!ok) return
+    try {
+      await onDeleteTopic(topic.id)
+      const key = topicKey(topic.title)
+      const remaining = (draftTopicsRef.current || []).filter((title) => topicKey(title) !== key)
+      if (remaining.length !== (draftTopicsRef.current || []).length) {
+        draftTopicsRef.current = remaining
+        setDraftTopics(remaining)
+      }
+      setTagViewId(null)
+      toast.success('Tag borrado')
+    } catch (err) {
+      toast.error(err.message || 'No se pudo borrar el tag')
+    }
+  }
+
   const openFinding = (finding) => {
     setTagViewId(null)
     if (finding) onSelect?.(finding)
@@ -1538,7 +1563,7 @@ function AnnotationsWorkspace({
                   </div>
                 ) : null}
               </div>
-              <div className="annotations-page-list__items">
+              <div className="annotations-page-list__items" ref={listItemsRef}>
                 {loading ? (
                   <p className="annotations-page-list__empty">Cargando…</p>
                 ) : filtered.length === 0 ? (
@@ -1570,7 +1595,18 @@ function AnnotationsWorkspace({
                 <button type="button" className="btn btn--ghost" onClick={() => setTagViewId(null)}>
                   Volver
                 </button>
-                <span>{tagViewNotes.length}</span>
+                <span className="annotations-tag-view__actions">
+                  <span>{tagViewNotes.length}</span>
+                  {onDeleteTopic ? (
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => void handleDeleteTopic()}
+                    >
+                      Borrar tag
+                    </button>
+                  ) : null}
+                </span>
               </div>
               <h2>{tagViewTitle}</h2>
               <p className="annotations-tag-view__meta">Notas con este tag</p>

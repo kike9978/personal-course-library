@@ -239,6 +239,9 @@ function LibraryStudyView({
           setTopics(await window.api.listTopics())
           return saved
         }}
+        onDeleteTopic={async (topicId) => {
+          setTopics(await window.api.deleteTopic(topicId))
+        }}
       />
     </div>
   )
