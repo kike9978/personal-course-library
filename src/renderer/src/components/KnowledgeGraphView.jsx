@@ -510,7 +510,7 @@ function KnowledgeGraphView({
           className={`knowledge-graph__svg${showLabels ? ' is-labels' : ''}`}
           viewBox={`0 0 ${size.width} ${size.height}`}
           role="application"
-          aria-label="Grafo de la biblioteca"
+          aria-label="Gráfica de la biblioteca"
           onPointerDown={onBackgroundDown}
         >
           <defs>

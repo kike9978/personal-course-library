@@ -158,34 +158,27 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
       )
     : items
 
+  const courseOptions = courses
+    .filter((c) =>
+      items.some(
+        (note) =>
+          note.coursePath === c.path ||
+          (note.anchors || []).some((anchor) => anchor.coursePath === c.path)
+      )
+    )
+    .map((c) => ({ value: c.path, label: c.title || c.path }))
+
   return (
     <div className="annotations-popout">
-      <div className="annotations-popout__filter">
-        <label htmlFor="popout-course-filter">Curso</label>
-        <select
-          id="popout-course-filter"
-          value={courseFilter}
-          onChange={(e) => setCourseFilter(e.target.value)}
-        >
-          <option value="">Todos</option>
-          {courses
-            .filter((c) =>
-              items.some(
-                (note) =>
-                  note.coursePath === c.path ||
-                  (note.anchors || []).some((anchor) => anchor.coursePath === c.path)
-              )
-            )
-            .map((c) => (
-              <option key={c.path} value={c.path}>
-                {c.title || c.path}
-              </option>
-            ))}
-        </select>
-      </div>
       <AnnotationsWorkspace
         title="Anotaciones"
         subtitle={courseFilter ? titleByPath[courseFilter] || courseFilter : 'Toda la biblioteca'}
+        courseFilter={{
+          id: 'popout-course-filter',
+          value: courseFilter,
+          onChange: setCourseFilter,
+          options: courseOptions
+        }}
         annotations={visibleItems}
         selectedId={selectedId}
         onSelect={(item) => {

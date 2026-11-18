@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
+import { useNoteEditorContext } from './NoteEditorContext'
+import { formatTimestampLabel } from './TimestampNode'
 import {
   $applyNodeReplacement,
   $createParagraphNode,
@@ -21,15 +23,16 @@ export class ImageNode extends DecoratorNode {
   }
 
   static clone(node) {
-    return new ImageNode(node.__src, node.__altText, node.__caption, node.__key)
+    return new ImageNode(node.__src, node.__altText, node.__caption, node.__timeSec, node.__key)
   }
 
   static importJSON(serializedNode) {
-    const { src, altText, caption } = serializedNode
+    const { src, altText, caption, timeSec } = serializedNode
     return $createImageNode({
       src: typeof src === 'string' ? src : '',
       altText: typeof altText === 'string' ? altText : '',
-      caption: typeof caption === 'string' ? caption : ''
+      caption: typeof caption === 'string' ? caption : '',
+      timeSec: typeof timeSec === 'number' ? timeSec : null
     })
   }
 
@@ -51,11 +54,12 @@ export class ImageNode extends DecoratorNode {
     }
   }
 
-  constructor(src = '', altText = '', caption = '', key) {
+  constructor(src = '', altText = '', caption = '', timeSec = null, key) {
     super(key)
     this.__src = src
     this.__altText = altText
     this.__caption = caption
+    this.__timeSec = typeof timeSec === 'number' && Number.isFinite(timeSec) ? timeSec : null
   }
 
   exportJSON() {
@@ -65,7 +69,8 @@ export class ImageNode extends DecoratorNode {
       version: 1,
       src: this.getSrc(),
       altText: this.getAltText(),
-      caption: this.getCaption()
+      caption: this.getCaption(),
+      timeSec: this.getTimeSec()
     }
   }
 
@@ -105,6 +110,11 @@ export class ImageNode extends DecoratorNode {
     return this.getLatest().__caption || ''
   }
 
+  getTimeSec() {
+    const value = this.getLatest().__timeSec
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
   setAltText(altText) {
     const self = this.getWritable()
     self.__altText = altText
@@ -130,6 +140,7 @@ export class ImageNode extends DecoratorNode {
         src={this.__src}
         altText={this.__altText}
         caption={this.__caption || ''}
+        timeSec={this.__timeSec}
       />
     )
   }
@@ -160,8 +171,10 @@ function focusLineBelow(editor, nodeKey) {
   editor.focus()
 }
 
-function ImageBlock({ nodeKey, src, altText, caption }) {
+function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
   const [editor] = useLexicalComposerContext()
+  const { onSeekTimestamp } = useNoteEditorContext()
+  const timed = typeof timeSec === 'number' && Number.isFinite(timeSec)
   const [open, setOpen] = useState(false)
   const [alt, setAlt] = useState(altText || '')
   const [footer, setFooter] = useState(caption || '')
@@ -199,11 +212,32 @@ function ImageBlock({ nodeKey, src, altText, caption }) {
         type="button"
         className="note-editor__image-hit"
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          if (timed) onSeekTimestamp?.(timeSec)
+          else setOpen(true)
+        }}
         aria-expanded={open}
-        aria-label={altText ? `Imagen: ${altText}` : 'Imagen'}
+        aria-label={
+          timed
+            ? `Ir a ${formatTimestampLabel(timeSec)}`
+            : altText
+              ? `Imagen: ${altText}`
+              : 'Imagen'
+        }
+        title={timed ? `Ir a ${formatTimestampLabel(timeSec)}` : undefined}
       >
         <img src={src} alt={altText || ''} className="note-editor__img" draggable={false} />
+      </button>
+      <button
+        type="button"
+        className="note-editor__image-edit"
+        aria-expanded={open}
+        aria-label="Editar imagen"
+        title="Editar imagen"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => setOpen((value) => !value)}
+      >
+        Editar
       </button>
       {footer ? <figcaption className="note-editor__caption">{footer}</figcaption> : null}
       {open ? (
@@ -277,8 +311,8 @@ function ImageBlock({ nodeKey, src, altText, caption }) {
   )
 }
 
-export function $createImageNode({ src, altText = '', caption = '' }) {
-  return $applyNodeReplacement(new ImageNode(src, altText, caption))
+export function $createImageNode({ src, altText = '', caption = '', timeSec = null } = {}) {
+  return $applyNodeReplacement(new ImageNode(src, altText, caption, timeSec))
 }
 
 export function $isImageNode(node) {

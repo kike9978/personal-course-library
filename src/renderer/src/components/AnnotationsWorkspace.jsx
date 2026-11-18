@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
+import { AppWindow, ArrowUpRight, EllipsisVertical, Group, Library, Plus, Search, Settings } from 'lucide-react'
 import NoteEditor from './NoteEditor'
 import { NotionSyncConflict, NotionSyncNoteButton } from './NotionSyncControl'
 import { TreeSection } from './LessonTree'
 import KnowledgeGraphView from './KnowledgeGraphView'
 import { formatTime } from './StudySidePanel'
-import { groupAnnotationsByTarget } from '../utils/annotationGroups'
+import { groupAnnotationsByTarget, groupAnnotationsByWeek } from '../utils/annotationGroups'
 import { buildAnnotationTree, openIdsForItem } from '../utils/annotationTree'
 import {
   buildGlobalGraph,
@@ -172,10 +173,21 @@ function formatDateTime(ts) {
 /**
  * Page list, note, and the connections beside the note.
  */
+const GROUP_MODES = [
+  { id: 'target', label: 'Por archivo' },
+  { id: 'topic', label: 'Por tema' },
+  { id: 'week', label: 'Por semana' }
+]
+
 const GRAPH_SETTINGS_KEY = 'pcl.graph.node-visibility'
 const GRAPH_WIDTH_KEY = 'pcl.graph.pane-width'
 const GRAPH_PANE_MIN = 280
 const GRAPH_PANE_DEFAULT = 420
+const LIST_WIDTH_KEY = 'pcl.annotations.list-width'
+const LIST_PANE_MIN = 200
+const LIST_PANE_DEFAULT = 268
+const LIST_COLLAPSED = 48
+const DOC_PANE_MIN = 280
 const NODE_SCALE_MIN = 0.6
 const NODE_SCALE_MAX = 2
 
@@ -189,6 +201,21 @@ function clampNodeScale(scale) {
 function clampGraphWidth(width, maxAvailable = 1400) {
   const max = Math.max(GRAPH_PANE_MIN, maxAvailable)
   return Math.min(max, Math.max(GRAPH_PANE_MIN, Math.round(width)))
+}
+
+function clampListWidth(width, maxAvailable = 640) {
+  const max = Math.max(LIST_PANE_MIN, maxAvailable)
+  return Math.min(max, Math.max(LIST_PANE_MIN, Math.round(width)))
+}
+
+function readStoredListWidth() {
+  try {
+    const stored = Number(localStorage.getItem(LIST_WIDTH_KEY))
+    if (Number.isFinite(stored) && stored >= LIST_PANE_MIN) return Math.round(stored)
+  } catch {
+    // Width is only a layout preference.
+  }
+  return null
 }
 
 function readStoredGraphWidth() {
@@ -232,9 +259,81 @@ function readGraphSettings() {
   }
 }
 
+function MoreMenu({ label, children }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      event.stopPropagation()
+      event.preventDefault()
+      setOpen(false)
+    }
+    const onPointerDown = (event) => {
+      if (ref.current && !ref.current.contains(event.target)) setOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    document.addEventListener('mousedown', onPointerDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      document.removeEventListener('mousedown', onPointerDown)
+    }
+  }, [open])
+
+  return (
+    <div className="header-menu" ref={ref}>
+      <button
+        type="button"
+        className="header-icon"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={label}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <EllipsisVertical size={20} />
+      </button>
+      {open ? (
+        <div className="header-popover" role="menu" aria-label={label}>
+          {typeof children === 'function' ? children(() => setOpen(false)) : children}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function AnnotationTitleField({ value, onChange, placeholder }) {
+  const shown = String(value || '')
+  const hint = placeholder || 'Título'
+  return (
+    <div className="annotations-doc__title-wrap">
+      <div
+        className={`annotations-doc__title-mirror${shown ? '' : ' is-placeholder'}`}
+        aria-hidden="true"
+      >
+        {shown || hint}
+      </div>
+      <textarea
+        className="annotations-doc__title-input"
+        value={shown}
+        rows={1}
+        autoFocus
+        aria-label="Título de la anotación"
+        onChange={(event) => onChange(event.target.value.replace(/\r?\n/g, ' '))}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.preventDefault()
+        }}
+      />
+    </div>
+  )
+}
+
 function AnnotationsWorkspace({
   title = 'Anotaciones',
   subtitle,
+  nav = null,
   annotations = [],
   selectedId,
   onSelect,
@@ -245,6 +344,7 @@ function AnnotationsWorkspace({
   onJump,
   onOpenPopOut,
   courseColumn = false,
+  courseFilter = null,
   courseTitleByPath = {},
   preferGroupPath = null,
   preferGroupProjectId = null,
@@ -255,7 +355,12 @@ function AnnotationsWorkspace({
   onUpsertTopic
 }) {
   const [query, setQuery] = useState('')
+  const [outlineTool, setOutlineTool] = useState(null)
+  const searchInputRef = useRef(null)
+  const outlineToolsRef = useRef(null)
   const [listCollapsed, setListCollapsed] = useState(false)
+  const [listWidth, setListWidth] = useState(() => readStoredListWidth() ?? LIST_PANE_DEFAULT)
+  const [listResizing, setListResizing] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   const [draftTopics, setDraftTopics] = useState([])
   const [topicQuery, setTopicQuery] = useState('')
@@ -280,18 +385,80 @@ function AnnotationsWorkspace({
   const [graphReset, setGraphReset] = useState(0)
   const [graphWidth, setGraphWidth] = useState(() => readStoredGraphWidth() ?? GRAPH_PANE_DEFAULT)
   const [graphResizing, setGraphResizing] = useState(false)
+  const [graphSettingsOpen, setGraphSettingsOpen] = useState(false)
+  const graphSettingsRef = useRef(null)
   const bodyRef = useRef(null)
   const graphWidthRef = useRef(graphWidth)
   const graphPreferredRef = useRef(readStoredGraphWidth())
   const listCollapsedRef = useRef(listCollapsed)
+  const listWidthRef = useRef(listWidth)
+  const listPreferredRef = useRef(readStoredListWidth())
   graphWidthRef.current = graphWidth
   listCollapsedRef.current = listCollapsed
+  listWidthRef.current = listWidth
+
+  useEffect(() => {
+    if (outlineTool !== 'search') return
+    searchInputRef.current?.focus()
+  }, [outlineTool])
+
+  useEffect(() => {
+    if (outlineTool !== 'course' && outlineTool !== 'group') return undefined
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      setOutlineTool(null)
+    }
+    const onPointerDown = (event) => {
+      if (outlineToolsRef.current?.contains(event.target)) return
+      setOutlineTool(null)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    document.addEventListener('mousedown', onPointerDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      document.removeEventListener('mousedown', onPointerDown)
+    }
+  }, [outlineTool])
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.defaultPrevented || event.altKey || event.shiftKey || event.isComposing) return
+      if (!(event.ctrlKey || event.metaKey) || event.repeat) return
+      if (event.code !== 'KeyF' && String(event.key || '').toLowerCase() !== 'f') return
+      if (document.querySelector('dialog[open]')) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (listCollapsedRef.current) setListCollapsed(false)
+      setOutlineTool('search')
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
   const [tagViewId, setTagViewId] = useState(null)
   const [jsonTitles, setJsonTitles] = useState({})
   const titles = useMemo(
     () => ({ ...courseTitleByPath, ...jsonTitles }),
     [courseTitleByPath, jsonTitles]
   )
+
+  useEffect(() => {
+    if (!graphSettingsOpen) return undefined
+    const onPointerDown = (event) => {
+      if (graphSettingsRef.current?.contains(event.target)) return
+      setGraphSettingsOpen(false)
+    }
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setGraphSettingsOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [graphSettingsOpen])
 
   useEffect(() => {
     try {
@@ -324,18 +491,30 @@ function AnnotationsWorkspace({
     showOrphans
   ])
 
+  const listRoomMax = useCallback((body = bodyRef.current) => {
+    const graph = graphWidthRef.current || GRAPH_PANE_MIN
+    return Math.max(
+      LIST_PANE_MIN,
+      (body?.clientWidth || LIST_PANE_DEFAULT + graph + DOC_PANE_MIN) - graph - DOC_PANE_MIN
+    )
+  }, [])
+
   const graphRoomMax = useCallback((body = bodyRef.current) => {
-    const list = listCollapsedRef.current ? 48 : 220
+    const list = listCollapsedRef.current
+      ? LIST_COLLAPSED
+      : listWidthRef.current || LIST_PANE_DEFAULT
     return Math.max(
       GRAPH_PANE_MIN,
-      (body?.clientWidth || GRAPH_PANE_DEFAULT + list + 320) - list - 280
+      (body?.clientWidth || GRAPH_PANE_DEFAULT + list + DOC_PANE_MIN) - list - DOC_PANE_MIN
     )
   }, [])
 
   const applyGraphWidth = useCallback(() => {
     const body = bodyRef.current
     const max = graphRoomMax(body)
-    const list = listCollapsedRef.current ? 48 : 220
+    const list = listCollapsedRef.current
+      ? LIST_COLLAPSED
+      : listWidthRef.current || LIST_PANE_DEFAULT
     const preferred = graphPreferredRef.current
     const base =
       preferred == null
@@ -351,7 +530,74 @@ function AnnotationsWorkspace({
     const observer = new ResizeObserver(() => applyGraphWidth())
     observer.observe(body)
     return () => observer.disconnect()
-  }, [applyGraphWidth, listCollapsed])
+  }, [applyGraphWidth, listCollapsed, listWidth])
+
+  const onListResizeStart = useCallback(
+    (event) => {
+      if (event.button != null && event.button !== 0) return
+      if (listCollapsedRef.current) return
+      if (window.matchMedia('(max-width: 900px)').matches) return
+      event.preventDefault()
+      const handle = event.currentTarget
+      handle.setPointerCapture(event.pointerId)
+      const startX = event.clientX
+      const startWidth = listWidthRef.current
+      const max = listRoomMax()
+      setListResizing(true)
+
+      const onMove = (moveEvent) => {
+        const next = clampListWidth(startWidth + moveEvent.clientX - startX, max)
+        listPreferredRef.current = next
+        setListWidth(next)
+      }
+      const onUp = () => {
+        setListResizing(false)
+        const next = listPreferredRef.current
+        if (next != null) {
+          try {
+            localStorage.setItem(LIST_WIDTH_KEY, String(next))
+          } catch {
+            // The width still applies for this session.
+          }
+        }
+        handle.removeEventListener('pointermove', onMove)
+        handle.removeEventListener('pointerup', onUp)
+        handle.removeEventListener('pointercancel', onUp)
+      }
+      handle.addEventListener('pointermove', onMove)
+      handle.addEventListener('pointerup', onUp)
+      handle.addEventListener('pointercancel', onUp)
+    },
+    [listRoomMax]
+  )
+
+  const onListResizeKey = useCallback(
+    (event) => {
+      const step = event.shiftKey ? 48 : 16
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      event.preventDefault()
+      const delta = event.key === 'ArrowRight' ? step : -step
+      const next = clampListWidth(listWidthRef.current + delta, listRoomMax())
+      listPreferredRef.current = next
+      setListWidth(next)
+      try {
+        localStorage.setItem(LIST_WIDTH_KEY, String(next))
+      } catch {
+        // The width still applies for this session.
+      }
+    },
+    [listRoomMax]
+  )
+
+  const resetListWidth = useCallback(() => {
+    listPreferredRef.current = null
+    try {
+      localStorage.removeItem(LIST_WIDTH_KEY)
+    } catch {
+      // The default width still applies for this session.
+    }
+    setListWidth(LIST_PANE_DEFAULT)
+  }, [])
 
   const onGraphResizeStart = useCallback(
     (event) => {
@@ -487,6 +733,7 @@ function AnnotationsWorkspace({
         corpus: libraryFindings
       })
     }
+    if (groupMode === 'week') return groupAnnotationsByWeek(filtered)
     return groupAnnotationsByTarget(filtered, {
       preferPath: preferGroupPath,
       preferProjectId: preferGroupProjectId,
@@ -1030,7 +1277,7 @@ function AnnotationsWorkspace({
 
   return (
     <div
-      className={`annotations-page${listCollapsed ? ' is-list-collapsed' : ''}${graphResizing ? ' is-graph-resizing' : ''}`}
+      className={`annotations-page${listCollapsed ? ' is-list-collapsed' : ''}${listResizing ? ' is-list-resizing' : ''}${graphResizing ? ' is-graph-resizing' : ''}`}
     >
       <header className="annotations-page__top">
         <div className="annotations-page__top-left">
@@ -1043,56 +1290,68 @@ function AnnotationsWorkspace({
             <h1>{title}</h1>
             {subtitle ? <span>{subtitle}</span> : null}
           </div>
+          {nav ? <div className="annotations-page__nav">{nav}</div> : null}
         </div>
         <div className="annotations-page__top-actions">
-          <div className="search-field annotations-page__search">
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar…"
-              aria-label="Buscar anotaciones"
-              title="Buscar (Ctrl+F)"
-            />
-          </div>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            title="Mostrar learning-store.json en el explorador"
-            onClick={async () => {
-              try {
-                await window.api.revealLearningStore()
-              } catch (err) {
-                toast.error(err.message || 'No se pudo abrir la ubicación')
-              }
-            }}
-          >
-            Abrir ubicación
-          </button>
           {onOpenPopOut ? (
             <button
               type="button"
-              className="btn btn--ghost"
+              className="header-icon"
               title="Abrir anotaciones en una ventana aparte"
+              aria-label="Abrir en una ventana"
               onClick={onOpenPopOut}
             >
-              Ventana
+              <AppWindow size={20} />
             </button>
           ) : null}
-          {onCreate ? (
-            <button type="button" className="btn btn--primary" onClick={onCreate}>
-              Nueva
-            </button>
-          ) : null}
+          <MoreMenu label="Más acciones">
+            {(close) => (
+              <button
+                type="button"
+                className="header-popover__item"
+                role="menuitem"
+                title="Mostrar learning-store.json en el explorador"
+                onClick={async () => {
+                  close()
+                  try {
+                    await window.api.revealLearningStore()
+                  } catch (err) {
+                    toast.error(err.message || 'No se pudo abrir la ubicación')
+                  }
+                }}
+              >
+                <span>Abrir ubicación</span>
+              </button>
+            )}
+          </MoreMenu>
         </div>
       </header>
 
       <div
         className="annotations-page__body"
         ref={bodyRef}
-        style={{ '--annotations-graph-w': `${graphWidth}px` }}
+        style={{
+          '--annotations-graph-w': `${graphWidth}px`,
+          '--annotations-list-w': `${listWidth}px`
+        }}
       >
         <aside className="annotations-page-list" aria-label="Lista de anotaciones">
+          {!listCollapsed ? (
+            <div
+              className="annotations-page-list__resizer"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Ancho del índice"
+              aria-valuemin={LIST_PANE_MIN}
+              aria-valuemax={listRoomMax()}
+              aria-valuenow={listWidth}
+              tabIndex={0}
+              title="Arrastra para cambiar el ancho. Doble clic para restablecer."
+              onPointerDown={onListResizeStart}
+              onKeyDown={onListResizeKey}
+              onDoubleClick={resetListWidth}
+            />
+          ) : null}
           <div className="annotations-page-list__bar">
             <button
               type="button"
@@ -1103,19 +1362,154 @@ function AnnotationsWorkspace({
               {listCollapsed ? '»' : '«'}
             </button>
             {!listCollapsed ? (
-              <span className="annotations-page-list__count">{filtered.length}</span>
+              <>
+                <span className="annotations-page-list__count">{filtered.length}</span>
+                {onCreate ? (
+                  <button
+                    type="button"
+                    className="annotations-page__icon-btn annotations-page__icon-btn--create"
+                    title="Nueva anotación"
+                    aria-label="Nueva anotación"
+                    onClick={onCreate}
+                  >
+                    <Plus size={16} />
+                  </button>
+                ) : null}
+              </>
             ) : null}
           </div>
           {!listCollapsed ? (
             <>
-              <div className="annotations-table-pane__filters">
-                <label>
-                  Agrupar
-                  <select value={groupMode} onChange={(event) => setGroupMode(event.target.value)}>
-                    <option value="target">Por archivo</option>
-                    <option value="topic">Por tema</option>
-                  </select>
-                </label>
+              <div className="annotations-page-list__tools" ref={outlineToolsRef}>
+                <div className="annotations-page-list__tool-row">
+                  <button
+                    type="button"
+                    className={`annotations-page__icon-btn${outlineTool === 'search' || query.trim() ? ' is-active' : ''}`}
+                    title="Buscar"
+                    aria-label="Buscar"
+                    aria-pressed={outlineTool === 'search'}
+                    onClick={() =>
+                      setOutlineTool((current) => (current === 'search' ? null : 'search'))
+                    }
+                  >
+                    <Search size={16} />
+                  </button>
+                  {courseFilter ? (
+                    <div className="header-menu annotations-page-list__menu">
+                      <button
+                        type="button"
+                        className={`annotations-page__icon-btn${outlineTool === 'course' || courseFilter.value ? ' is-active' : ''}`}
+                        title={
+                          courseFilter.options.find((option) => option.value === courseFilter.value)
+                            ?.label || 'Curso'
+                        }
+                        aria-label="Filtrar por curso"
+                        aria-haspopup="menu"
+                        aria-expanded={outlineTool === 'course'}
+                        onClick={() =>
+                          setOutlineTool((current) => (current === 'course' ? null : 'course'))
+                        }
+                      >
+                        <Library size={16} />
+                      </button>
+                      {outlineTool === 'course' ? (
+                        <div
+                          className="header-popover header-popover--scroll"
+                          role="menu"
+                          aria-label="Curso"
+                        >
+                          <button
+                            type="button"
+                            className="header-popover__item"
+                            role="menuitemradio"
+                            aria-checked={!courseFilter.value}
+                            onClick={() => {
+                              courseFilter.onChange('')
+                              setOutlineTool(null)
+                            }}
+                          >
+                            <span>Todos</span>
+                          </button>
+                          {courseFilter.options.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              className="header-popover__item"
+                              role="menuitemradio"
+                              title={option.label}
+                              aria-checked={courseFilter.value === option.value}
+                              onClick={() => {
+                                courseFilter.onChange(option.value)
+                                setOutlineTool(null)
+                              }}
+                            >
+                              <span>{option.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <div className="header-menu annotations-page-list__menu">
+                    <button
+                      type="button"
+                      className={`annotations-page__icon-btn${outlineTool === 'group' || groupMode !== 'target' ? ' is-active' : ''}`}
+                      title={GROUP_MODES.find((mode) => mode.id === groupMode)?.label || 'Agrupar'}
+                      aria-label="Agrupar"
+                      aria-haspopup="menu"
+                      aria-expanded={outlineTool === 'group'}
+                      onClick={() =>
+                        setOutlineTool((current) => (current === 'group' ? null : 'group'))
+                      }
+                    >
+                      <Group size={16} />
+                    </button>
+                    {outlineTool === 'group' ? (
+                      <div
+                        className="header-popover header-popover--scroll"
+                        role="menu"
+                        aria-label="Agrupar"
+                      >
+                        {GROUP_MODES.map((mode) => (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            className="header-popover__item"
+                            role="menuitemradio"
+                            aria-checked={groupMode === mode.id}
+                            onClick={() => {
+                              setGroupMode(mode.id)
+                              setOutlineTool(null)
+                            }}
+                          >
+                            <span>{mode.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                {outlineTool === 'search' ? (
+                  <div className="search-field">
+                    <svg
+                      className="search-field__icon"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                    </svg>
+                    <input
+                      ref={searchInputRef}
+                      type="search"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Buscar…"
+                      aria-label="Buscar anotaciones"
+                      title="Buscar (Ctrl+F)"
+                    />
+                  </div>
+                ) : null}
               </div>
               <div className="annotations-page-list__items">
                 {loading ? (
@@ -1185,19 +1579,8 @@ function AnnotationsWorkspace({
               <p>Abre una fila de la tabla o crea una nueva para editarla aquí.</p>
             </div>
           ) : (
-            <div className="annotations-doc">
+            <>
               <div className="annotations-doc__toolbar">
-                <div className="annotations-doc__toolbar-left">
-                  {onJump && selected.coursePath ? (
-                    <button
-                      type="button"
-                      className="btn btn--ghost"
-                      onClick={() => onJump(selected)}
-                    >
-                      {jumpLabel(selected)}
-                    </button>
-                  ) : null}
-                </div>
                 <div className="annotations-doc__toolbar-right">
                   {saveStatus !== 'idle' ? (
                     saveStatus === 'error' ? (
@@ -1231,20 +1614,56 @@ function AnnotationsWorkspace({
                       Guardar
                     </button>
                   ) : null}
-                  <NotionSyncNoteButton findingId={selected.id} />
-                  <button type="button" className="btn btn--ghost" onClick={handleExport}>
-                    Exportar
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--ghost"
-                    onClick={() => onDelete?.(selected)}
-                  >
-                    Borrar
-                  </button>
+                  {onJump && selected.coursePath && typeof selected.timeSec !== 'number' ? (
+                    <button
+                      type="button"
+                      className="header-icon"
+                      title={jumpLabel(selected)}
+                      aria-label={jumpLabel(selected)}
+                      onClick={() => onJump(selected)}
+                    >
+                      <ArrowUpRight size={20} />
+                    </button>
+                  ) : null}
+                  <MoreMenu label="Más acciones de la anotación">
+                    {(close) => (
+                      <>
+                        <NotionSyncNoteButton
+                          findingId={selected.id}
+                          variant="menu"
+                          onDone={close}
+                        />
+                        <button
+                          type="button"
+                          className="header-popover__item"
+                          role="menuitem"
+                          onClick={() => {
+                            close()
+                            handleExport()
+                          }}
+                        >
+                          <span>Exportar</span>
+                        </button>
+                        {onDelete ? (
+                          <button
+                            type="button"
+                            className="header-popover__item"
+                            role="menuitem"
+                            onClick={() => {
+                              close()
+                              onDelete(selected)
+                            }}
+                          >
+                            <span>Borrar</span>
+                          </button>
+                        ) : null}
+                      </>
+                    )}
+                  </MoreMenu>
                 </div>
               </div>
 
+              <div className="annotations-doc">
               <NotionSyncConflict
                 note={selected}
                 dirty={dirty}
@@ -1262,14 +1681,11 @@ function AnnotationsWorkspace({
                 }}
               />
 
-              <input
+              <AnnotationTitleField
                 key={`title-${selected.id}`}
-                className="annotations-doc__title-input"
                 value={draftTitle}
-                onChange={(e) => handleTitleChange(e.target.value)}
+                onChange={handleTitleChange}
                 placeholder={noteTitle(selected) || 'Título'}
-                aria-label="Título de la anotación"
-                autoFocus
               />
 
               <div className="annotations-doc__props">
@@ -1296,7 +1712,18 @@ function AnnotationsWorkspace({
                 {typeof selected.timeSec === 'number' ? (
                   <div className="annotations-doc__prop">
                     <span className="annotations-doc__prop-label">Tiempo</span>
-                    <span>{formatTime(selected.timeSec)}</span>
+                    <span className="annotations-doc__prop-value">
+                      <span>{formatTime(selected.timeSec)}</span>
+                      {onJump && selected.coursePath ? (
+                        <button
+                          type="button"
+                          className="btn btn--ghost annotations-doc__jump"
+                          onClick={() => onJump(selected)}
+                        >
+                          Ir al video
+                        </button>
+                      ) : null}
+                    </span>
                   </div>
                 ) : null}
                 {selected.updatedAt && selected.updatedAt !== selected.createdAt ? (
@@ -1414,16 +1841,17 @@ function AnnotationsWorkspace({
                   </ul>
                 </div>
               ) : null}
-            </div>
+              </div>
+            </>
           )}
         </main>
 
-        <aside className="annotations-graph-pane" aria-label="Grafo de la biblioteca">
+        <aside className="annotations-graph-pane" aria-label="Gráfica de la biblioteca">
           <div
             className="annotations-graph-pane__resizer"
             role="separator"
             aria-orientation="vertical"
-            aria-label="Ancho del grafo"
+            aria-label="Ancho de la gráfica"
             aria-valuemin={GRAPH_PANE_MIN}
             aria-valuemax={graphRoomMax()}
             aria-valuenow={graphWidth}
@@ -1434,113 +1862,127 @@ function AnnotationsWorkspace({
             onDoubleClick={resetGraphWidth}
           />
           <div className="annotations-graph-pane__bar">
-            <span>Grafo</span>
-          </div>
-          <div className="annotations-graph-pane__settings">
-            <label>
-              Profundidad
-              <input
-                type="range"
-                min="1"
-                max="5"
-                step="1"
-                value={graphDepth}
-                aria-label="Profundidad del grafo"
-                onChange={(event) => setGraphDepth(clampDepth(event.target.value))}
-              />
-              <span>{graphDepth}</span>
-            </label>
-            <label>
-              Distancia
-              <input
-                type="range"
-                min="36"
-                max="180"
-                step="1"
-                value={linkDistance}
-                aria-label="Distancia de los enlaces"
-                onChange={(event) => setLinkDistance(clampLinkDistance(event.target.value))}
-              />
-            </label>
-            <label>
-              Tamaño
-              <input
-                type="range"
-                min="0.6"
-                max="2"
-                step="0.1"
-                value={nodeScale}
-                aria-label="Tamaño de los nodos"
-                onChange={(event) => setNodeScale(clampNodeScale(event.target.value))}
-              />
-            </label>
-            <label className="annotations-graph-pane__check">
-              <input
-                type="checkbox"
-                checked={showArrows}
-                onChange={(event) => setShowArrows(event.target.checked)}
-              />
-              Flechas
-            </label>
-            <label className="annotations-graph-pane__check">
-              <input
-                type="checkbox"
-                checked={showLabels}
-                onChange={(event) => setShowLabels(event.target.checked)}
-              />
-              Nombres
-            </label>
-            {showLabels ? (
-              <label>
-                Umbral
-                <input
-                  type="range"
-                  min={LABEL_ZOOM_MIN}
-                  max={LABEL_ZOOM_MAX}
-                  step="0.05"
-                  value={labelZoom}
-                  aria-label="Umbral de zoom de los nombres"
-                  onChange={(event) => setLabelZoom(clampLabelZoom(event.target.value))}
-                />
-                <span>{labelZoom.toFixed(2)}</span>
-              </label>
-            ) : null}
-            <label className="annotations-graph-pane__check">
-              <input
-                type="checkbox"
-                checked={showCourses}
-                onChange={(event) => setShowCourses(event.target.checked)}
-              />
-              Cursos
-            </label>
-            <label className="annotations-graph-pane__check">
-              <input
-                type="checkbox"
-                checked={showFiles}
-                onChange={(event) => setShowFiles(event.target.checked)}
-              />
-              Archivos
-            </label>
-            <label className="annotations-graph-pane__check">
-              <input
-                type="checkbox"
-                checked={showOrphans}
-                onChange={(event) => setShowOrphans(event.target.checked)}
-              />
-              Huérfanas
-            </label>
-            {graphSelection ? (
+            <span>Gráfica</span>
+            <div className="annotations-graph-pane__tools" ref={graphSettingsRef}>
               <button
                 type="button"
-                className="btn btn--ghost"
-                onClick={() => {
-                  setGraphSelection(null)
-                  setGraphReset((value) => value + 1)
-                }}
+                className={`annotations-graph-pane__gear${graphSettingsOpen ? ' is-open' : ''}`}
+                aria-label="Ajustes de la gráfica"
+                aria-expanded={graphSettingsOpen}
+                title="Ajustes de la gráfica"
+                onClick={() => setGraphSettingsOpen((open) => !open)}
               >
-                Reiniciar
+                <Settings size={16} />
               </button>
-            ) : null}
+              {graphSettingsOpen ? (
+                <div className="annotations-graph-pane__panel" role="dialog" aria-label="Ajustes de la gráfica">
+                  <label>
+                    Profundidad
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      step="1"
+                      value={graphDepth}
+                      aria-label="Profundidad de la gráfica"
+                      onChange={(event) => setGraphDepth(clampDepth(event.target.value))}
+                    />
+                    <span>{graphDepth}</span>
+                  </label>
+                  <label>
+                    Distancia
+                    <input
+                      type="range"
+                      min="36"
+                      max="180"
+                      step="1"
+                      value={linkDistance}
+                      aria-label="Distancia de los enlaces"
+                      onChange={(event) => setLinkDistance(clampLinkDistance(event.target.value))}
+                    />
+                  </label>
+                  <label>
+                    Tamaño
+                    <input
+                      type="range"
+                      min="0.6"
+                      max="2"
+                      step="0.1"
+                      value={nodeScale}
+                      aria-label="Tamaño de los nodos"
+                      onChange={(event) => setNodeScale(clampNodeScale(event.target.value))}
+                    />
+                  </label>
+                  <label className="annotations-graph-pane__check">
+                    <input
+                      type="checkbox"
+                      checked={showArrows}
+                      onChange={(event) => setShowArrows(event.target.checked)}
+                    />
+                    Flechas
+                  </label>
+                  <label className="annotations-graph-pane__check">
+                    <input
+                      type="checkbox"
+                      checked={showLabels}
+                      onChange={(event) => setShowLabels(event.target.checked)}
+                    />
+                    Nombres
+                  </label>
+                  {showLabels ? (
+                    <label>
+                      Umbral
+                      <input
+                        type="range"
+                        min={LABEL_ZOOM_MIN}
+                        max={LABEL_ZOOM_MAX}
+                        step="0.05"
+                        value={labelZoom}
+                        aria-label="Umbral de zoom de los nombres"
+                        onChange={(event) => setLabelZoom(clampLabelZoom(event.target.value))}
+                      />
+                      <span>{labelZoom.toFixed(2)}</span>
+                    </label>
+                  ) : null}
+                  <label className="annotations-graph-pane__check">
+                    <input
+                      type="checkbox"
+                      checked={showCourses}
+                      onChange={(event) => setShowCourses(event.target.checked)}
+                    />
+                    Cursos
+                  </label>
+                  <label className="annotations-graph-pane__check">
+                    <input
+                      type="checkbox"
+                      checked={showFiles}
+                      onChange={(event) => setShowFiles(event.target.checked)}
+                    />
+                    Archivos
+                  </label>
+                  <label className="annotations-graph-pane__check">
+                    <input
+                      type="checkbox"
+                      checked={showOrphans}
+                      onChange={(event) => setShowOrphans(event.target.checked)}
+                    />
+                    Huérfanas
+                  </label>
+                  {graphSelection ? (
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => {
+                        setGraphSelection(null)
+                        setGraphReset((value) => value + 1)
+                      }}
+                    >
+                      Reiniciar
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
           {graph.nodes.length ? (
             <ul className="knowledge-graph__legend">
@@ -1589,5 +2031,4 @@ function AnnotationsWorkspace({
   )
 }
 
-export { noteTitle, formatDateTime }
 export default AnnotationsWorkspace

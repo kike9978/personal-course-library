@@ -1069,21 +1069,39 @@ export function NotionSyncConflict({
   )
 }
 
-export function NotionSyncNoteButton({ findingId }) {
+export function NotionSyncNoteButton({ findingId, variant = 'button', onDone }) {
   const status = useNotionSync()
   if (!status?.enabled || !findingId) return null
   const blocked = status.conflicts?.some((item) => item.findingId === findingId)
+  const title = blocked ? 'Elige una versión antes de sincronizar' : 'Sincronizar esta anotación'
+  const run = () => {
+    onDone?.()
+    window.api.syncNotionNow(findingId).catch((error) => {
+      toast.error(notionErrorText(error, 'No se pudo sincronizar'))
+    })
+  }
+  if (variant === 'menu') {
+    return (
+      <button
+        type="button"
+        className="header-popover__item"
+        role="menuitem"
+        disabled={status.syncing || blocked}
+        title={title}
+        onClick={run}
+      >
+        <span>{status.syncing ? 'Sincronizando…' : 'Sincronizar'}</span>
+        {blocked ? <small>Elige una versión antes de sincronizar</small> : null}
+      </button>
+    )
+  }
   return (
     <button
       type="button"
       className="btn btn--ghost"
       disabled={status.syncing || blocked}
-      title={blocked ? 'Elige una versión antes de sincronizar' : 'Sincronizar esta anotación'}
-      onClick={() => {
-        window.api.syncNotionNow(findingId).catch((error) => {
-          toast.error(notionErrorText(error, 'No se pudo sincronizar'))
-        })
-      }}
+      title={title}
+      onClick={run}
     >
       Sincronizar
     </button>

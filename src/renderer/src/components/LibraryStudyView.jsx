@@ -4,11 +4,25 @@ import AnnotationsWorkspace from './AnnotationsWorkspace'
 import AppNav from './AppNav'
 import { collectCourseFacets } from '../utils/courseFilters'
 
-function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
+function noteInCourse(item, coursePath) {
+  if (!coursePath) return true
+  return (
+    item.coursePath === coursePath ||
+    (item.anchors || []).some((anchor) => anchor.coursePath === coursePath)
+  )
+}
+
+function LibraryStudyView({
+  courses,
+  onNavigate,
+  onOpenCourse,
+  onBack = null,
+  initialCoursePath = ''
+}) {
   const [items, setItems] = useState([])
   const [topics, setTopics] = useState([])
   const [selectedId, setSelectedId] = useState(null)
-  const [courseFilter, setCourseFilter] = useState('')
+  const [courseFilter, setCourseFilter] = useState(initialCoursePath || '')
   const [loading, setLoading] = useState(true)
 
   const catalogKey = useMemo(
@@ -40,10 +54,13 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
+    const scopedTo = courseFilter
     refresh()
       .then((list) => {
-        if (!cancelled && list[0]) {
-          setSelectedId({ id: list[0].id, coursePath: list[0].coursePath })
+        if (cancelled) return
+        const scoped = scopedTo ? list.filter((item) => noteInCourse(item, scopedTo)) : list
+        if (scoped[0]) {
+          setSelectedId({ id: scoped[0].id, coursePath: scoped[0].coursePath })
         }
       })
       .catch((err) => {
@@ -91,11 +108,7 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
 
   const visibleItems = useMemo(() => {
     if (!courseFilter) return items
-    return items.filter(
-      (item) =>
-        item.coursePath === courseFilter ||
-        (item.anchors || []).some((anchor) => anchor.coursePath === courseFilter)
-    )
+    return items.filter((item) => noteInCourse(item, courseFilter))
   }, [items, courseFilter])
 
   useEffect(() => {
@@ -156,27 +169,20 @@ function LibraryStudyView({ courses, onNavigate, onOpenCourse }) {
 
   return (
     <div className="library-study library-study--workspace">
-      <div className="library-study__nav-strip">
-        <AppNav active="annotations" onSelect={onNavigate} />
-        <div className="chip-select library-study__course-filter">
-          <label htmlFor="annotations-course-filter">Curso</label>
-          <select
-            id="annotations-course-filter"
-            value={courseFilter}
-            onChange={(e) => setCourseFilter(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {coursesWithNotes.map((course) => (
-              <option key={course.path} value={course.path}>
-                {course.title || course.path}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
       <AnnotationsWorkspace
         title="Anotaciones"
         subtitle={courseFilter ? titleByPath[courseFilter] || courseFilter : 'Toda la biblioteca'}
+        nav={<AppNav active="annotations" onSelect={onNavigate} />}
+        onBack={onBack}
+        courseFilter={{
+          id: 'annotations-course-filter',
+          value: courseFilter,
+          onChange: setCourseFilter,
+          options: coursesWithNotes.map((course) => ({
+            value: course.path,
+            label: course.title || course.path
+          }))
+        }}
         annotations={visibleItems}
         selectedId={selectedId}
         onSelect={(item) => {

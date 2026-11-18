@@ -89,16 +89,21 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       if (!el || !Number.isFinite(el.currentTime)) return 0
       return el.currentTime
     },
-    seekTo: (sec) => {
+    seekTo: (sec, opts = {}) => {
       const el = videoRef.current
       const target = Math.max(0, Number(sec) || 0)
+      const resume = opts.resume !== false
       if (el && Number.isFinite(el.duration) && el.duration > 0) {
         el.currentTime = Math.min(target, Math.max(0, el.duration - 0.25))
         setCurrentTime(el.currentTime)
-        el.play?.().catch(() => {})
+        if (resume) el.play?.().catch(() => {})
+        else el.pause()
       } else {
         seekOverride.current = target
       }
+    },
+    pause: () => {
+      videoRef.current?.pause()
     },
     getVideoElement: () => videoRef.current,
     captureCurrentFrame: async () => {
@@ -106,27 +111,38 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       if (!el || el.readyState < 2 || !el.videoWidth || !el.videoHeight) {
         throw new Error('El video aún no está listo')
       }
+      const wasPlaying = !el.paused
       const timeSec = el.currentTime
       try {
-        return frameFromVideo(el)
-      } catch {
-        const rect = el.getBoundingClientRect()
-        if (!window.api?.captureWindowRegion || rect.width < 2 || rect.height < 2) {
-          throw new Error('No se pudo capturar el fotograma')
+        try {
+          return frameFromVideo(el)
+        } catch {
+          const rect = el.getBoundingClientRect()
+          if (!window.api?.captureWindowRegion || rect.width < 2 || rect.height < 2) {
+            throw new Error('No se pudo capturar el fotograma')
+          }
+          const shot = await window.api.captureWindowRegion({
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height
+          })
+          if (!shot?.ok || !shot.dataBase64) {
+            throw new Error(shot?.error || 'No se pudo capturar el fotograma')
+          }
+          return {
+            dataBase64: shot.dataBase64,
+            mimeType: shot.mimeType || 'image/png',
+            timeSec
+          }
         }
-        const shot = await window.api.captureWindowRegion({
-          x: rect.x,
-          y: rect.y,
-          width: rect.width,
-          height: rect.height
-        })
-        if (!shot?.ok || !shot.dataBase64) {
-          throw new Error(shot?.error || 'No se pudo capturar el fotograma')
-        }
-        return {
-          dataBase64: shot.dataBase64,
-          mimeType: shot.mimeType || 'image/png',
-          timeSec
+      } finally {
+        if (wasPlaying) {
+          const resume = () => {
+            if (el.paused) el.play?.().catch(() => {})
+          }
+          resume()
+          requestAnimationFrame(resume)
         }
       }
     }
@@ -547,7 +563,23 @@ const LessonPlayer = forwardRef(function LessonPlayer(
         ...m,
         pct: Math.min(100, Math.max(0, (m.timeSec / duration) * 100))
       }))
+      .sort((a, b) => a.pct - b.pct || a.timeSec - b.timeSec)
   }, [timelineMarks, lesson?.relativePath, duration])
+
+  const stackedMarks = useMemo(() => {
+    const out = []
+    let cluster = []
+    const flush = () => {
+      cluster.forEach((mark, index) => out.push({ ...mark, stack: index }))
+      cluster = []
+    }
+    for (const mark of marksOnLesson) {
+      if (cluster.length && mark.pct - cluster[0].pct > 1.5) flush()
+      cluster.push(mark)
+    }
+    flush()
+    return out
+  }, [marksOnLesson])
 
   if (!lesson) {
     return (
@@ -562,24 +594,23 @@ const LessonPlayer = forwardRef(function LessonPlayer(
 
   return (
     <div className="lesson-player">
-      <div className="lesson-player__header">
-        <h2 className="lesson-player__title" title={lesson.relativePath}>
-          {lesson.title}
-        </h2>
-        {onToggleProjectLink ? (
-          <LinkProjectMenu
-            projects={projects}
-            activePath={lesson.relativePath}
-            sectionId={linkSectionId}
-            sectionTitle={linkSectionTitle}
-            onToggleFile={onToggleProjectLink}
-            onToggleSection={onToggleSectionLink}
-            onCreate={onCreateProject}
-          />
-        ) : null}
-      </div>
-
       <div className={`lesson-player__media${isFullscreen ? ' is-fullscreen' : ''}`} ref={stageRef}>
+        <div className="lesson-player__header">
+          <h2 className="lesson-player__title" title={lesson.relativePath}>
+            {lesson.title}
+          </h2>
+          {onToggleProjectLink ? (
+            <LinkProjectMenu
+              projects={projects}
+              activePath={lesson.relativePath}
+              sectionId={linkSectionId}
+              sectionTitle={linkSectionTitle}
+              onToggleFile={onToggleProjectLink}
+              onToggleSection={onToggleSectionLink}
+              onCreate={onCreateProject}
+            />
+          ) : null}
+        </div>
         <div className="lesson-player__stage">
           {loading ? <div className="lesson-player__status">Cargando…</div> : null}
           {error ? (
@@ -679,12 +710,16 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             <div className="playhead__fill" style={{ width: `${progressPct}%` }} />
             <div className="playhead__thumb" style={{ left: `${progressPct}%` }} />
 
-            {marksOnLesson.map((mark) => (
+            {stackedMarks.map((mark) => (
               <button
                 key={`${mark.kind}-${mark.id}`}
                 type="button"
                 className={`playhead__mark playhead__mark--${mark.kind} is-${mark.color || 'coral'}`}
-                style={{ left: `${mark.pct}%` }}
+                style={{
+                  left: `${mark.pct}%`,
+                  transform: `translateY(${mark.stack * -8}px) rotate(45deg)`,
+                  zIndex: 2 + mark.stack
+                }}
                 title={mark.title || formatTime(mark.timeSec)}
                 onClick={(e) => {
                   e.stopPropagation()

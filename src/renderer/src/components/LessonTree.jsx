@@ -11,9 +11,9 @@ import {
   FolderKanban,
   Image,
   Music,
-  PanelLeftClose,
   PanelLeftOpen,
-  Play
+  Play,
+  X
 } from 'lucide-react'
 import {
   ancestorIds,
@@ -333,7 +333,8 @@ function LessonTree({
   collapsed = false,
   progressByLesson = {},
   completedCount = 0,
-  playableCount = 0
+  playableCount = 0,
+  courseTitle = 'Contenido'
 }) {
   const resourceNav = resourceNavSection(courseResources, courseResourceSections)
   const navSections = resourceNav ? [...sections, resourceNav] : sections
@@ -461,37 +462,51 @@ function LessonTree({
       </button>
     ) : null}
     <nav className="lesson-tree" aria-label="Contenido del curso" hidden={collapsed}>
-      <div className="lesson-tree__header">
-        <div className="lesson-tree__header-copy">
-          <h2>Contenido</h2>
-          {playableCount > 0 ? (
-            <p>
-              {completedCount} / {playableCount}
-            </p>
-          ) : null}
-        </div>
-        <div className="lesson-tree__header-actions">
-          {onToggleCollapsed ? (
+      <div className="lesson-tree__sticky">
+        <div className="lesson-tree__header">
+          <div className="lesson-tree__header-copy">
+            <h2 title={courseTitle}>{courseTitle}</h2>
+          </div>
+          <div className="lesson-tree__header-actions">
             <button
               type="button"
-              className="lesson-tree__collapse"
-              onClick={onToggleCollapsed}
-              title="Ocultar contenido"
-              aria-expanded={!collapsed}
-              aria-label="Ocultar contenido"
+              className="lesson-tree__add-project"
+              onClick={() => onAddProject?.()}
+              title="Añadir proyecto virtual"
             >
-              <PanelLeftClose size={16} strokeWidth={2} aria-hidden="true" />
+              + Proyecto
             </button>
-          ) : null}
-          <button
-            type="button"
-            className="lesson-tree__add-project"
-            onClick={() => onAddProject?.()}
-            title="Añadir proyecto virtual"
-          >
-            + Proyecto
-          </button>
+            {onToggleCollapsed ? (
+              <button
+                type="button"
+                className="lesson-tree__collapse"
+                onClick={onToggleCollapsed}
+                title="Cerrar panel"
+                aria-expanded={!collapsed}
+                aria-label="Cerrar panel"
+              >
+                <X size={16} strokeWidth={2} aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
         </div>
+        {playableCount > 0 ? (
+          <div
+            className="course-goal"
+            style={{ '--goal': `${Math.round((completedCount / playableCount) * 100)}%` }}
+          >
+            <div className="course-goal__copy">
+              <strong>
+                Progreso · {completedCount}/{playableCount}
+              </strong>
+              <p>
+                {completedCount} de {playableCount}{' '}
+                {playableCount === 1 ? 'lección completada' : 'lecciones completadas'}.
+              </p>
+            </div>
+            <div className="course-goal__ring" aria-hidden="true" />
+          </div>
+        ) : null}
       </div>
 
       {unanchored.length > 0 ? (

@@ -817,6 +817,7 @@ function App() {
   const [resumeTarget, setResumeTarget] = useState(null)
   const [liveJump, setLiveJump] = useState(null)
   const [libraryStudyMode, setLibraryStudyMode] = useState(null)
+  const [annotationsCoursePath, setAnnotationsCoursePath] = useState('')
   const libraryStudyModeRef = useRef(null)
   const returnStudyRef = useRef(null)
   libraryStudyModeRef.current = libraryStudyMode
@@ -1073,12 +1074,31 @@ function App() {
   const navigateApp = useCallback((section) => {
     setActiveCoursePath(null)
     setResumeTarget(null)
+    setAnnotationsCoursePath('')
     if (section === 'projects' || section === 'annotations' || section === 'playlists') {
       setLibraryStudyMode(section)
       return
     }
     setLibraryStudyMode(null)
   }, [])
+
+  const openCourseAnnotations = useCallback((coursePath) => {
+    setAnnotationsCoursePath(coursePath || '')
+    setActiveCoursePath(null)
+    setResumeTarget(null)
+    setLiveJump(null)
+    setLibraryStudyMode('annotations')
+  }, [])
+
+  const backFromAnnotations = useCallback(() => {
+    const coursePath = annotationsCoursePath
+    setAnnotationsCoursePath('')
+    setLibraryStudyMode(null)
+    if (!coursePath) return
+    if (!courses.some((course) => course.path === coursePath && !isCourseHidden(course))) return
+    setActiveCoursePath(coursePath)
+    recordView(coursePath)
+  }, [annotationsCoursePath, courses, recordView])
 
   return (
     <ErrorBoundary>
@@ -1117,7 +1137,13 @@ function App() {
           }}
         />
       ) : libraryStudyMode === 'annotations' ? (
-        <LibraryStudyView courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
+        <LibraryStudyView
+          courses={courses}
+          initialCoursePath={annotationsCoursePath}
+          onNavigate={navigateApp}
+          onOpenCourse={openCourse}
+          onBack={annotationsCoursePath ? backFromAnnotations : null}
+        />
       ) : libraryStudyMode === 'projects' ? (
         <ProjectsKanban courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'playlists' ? (
@@ -1142,6 +1168,7 @@ function App() {
             if (back) setLibraryStudyMode(back)
           }}
           onOpenExplorer={(c) => window.api.openCourseFolder(c.path)}
+          onOpenAnnotations={openCourseAnnotations}
           onProgressChange={handleLearningProgressChange}
         />
       ) : (

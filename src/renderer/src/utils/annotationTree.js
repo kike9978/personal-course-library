@@ -33,11 +33,13 @@ function collapseDuplicateLevel(node) {
 }
 
 export function buildAnnotationTree(groups, { groupMode, courseColumn, titles } = {}) {
-  if (groupMode === 'topic') {
+  if (groupMode === 'topic' || groupMode === 'week') {
     return groups.map((group) => {
       if (!courseColumn) {
         const title =
-          group.courseCount > 1 ? `${group.title} · ${group.courseCount} cursos` : group.title
+          groupMode === 'topic' && group.courseCount > 1
+            ? `${group.title} · ${group.courseCount} cursos`
+            : group.title
         return { id: group.key, title, items: group.items }
       }
       return collapseDuplicateLevel({

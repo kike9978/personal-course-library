@@ -349,7 +349,9 @@ function ImagesPlugin() {
           $insertBlock(
             $createImageNode({
               src,
-              altText: payload.altText || ''
+              altText: payload.altText || '',
+              caption: payload.caption || '',
+              timeSec: typeof payload.timeSec === 'number' ? payload.timeSec : null
             })
           )
           return true
@@ -450,8 +452,18 @@ function EditorApiPlugin({ apiRef }) {
         })
         editor.dispatchCommand(INSERT_IMAGE_COMMAND, {
           src,
-          altText: payload.altText || ''
+          altText: payload.altText || '',
+          timeSec: typeof payload.timeSec === 'number' ? payload.timeSec : null
         })
+      },
+      insertTimestamp: (payload) => {
+        const timeSec = typeof payload?.timeSec === 'number' ? payload.timeSec : 0
+        editor.focus()
+        editor.update(() => {
+          const selection = $getSelection()
+          if (!$isRangeSelection(selection)) $getRoot().selectEnd()
+        })
+        editor.dispatchCommand(INSERT_TIMESTAMP_COMMAND, { timeSec })
       }
     }
     return () => {
@@ -462,12 +474,7 @@ function EditorApiPlugin({ apiRef }) {
   return null
 }
 
-function ToolbarPlugin({
-  enableTimestamp = false,
-  currentTimeSec = 0,
-  compact = false,
-  onCaptureFrame = null
-}) {
+function ToolbarPlugin({ compact = false }) {
   const [editor] = useLexicalComposerContext()
   const [formats, setFormats] = useState(emptyToolbarState)
   const [linkOpen, setLinkOpen] = useState(false)
@@ -628,10 +635,6 @@ function ToolbarPlugin({
       columns: '3',
       includeHeaders: true
     })
-  }
-
-  const insertTimestamp = () => {
-    editor.dispatchCommand(INSERT_TIMESTAMP_COMMAND, { timeSec: currentTimeSec })
   }
 
   return (
@@ -822,26 +825,6 @@ function ToolbarPlugin({
       >
         Tabla
       </button>
-      {enableTimestamp ? (
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={insertTimestamp}
-          title="Marca de tiempo del video"
-        >
-          Tiempo
-        </button>
-      ) : null}
-      {onCaptureFrame ? (
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={onCaptureFrame}
-          title="Captura del video en este momento"
-        >
-          Captura
-        </button>
-      ) : null}
         </>
       )}
       {linkOpen && (!compact || toolsOpen) ? (
@@ -1017,7 +1000,8 @@ function NoteEditor({
   onCaptureFrame = null,
   editorApiRef = null,
   onFocus = null,
-  onBlur = null
+  onBlur = null,
+  focusSignal = 0
 }) {
   const [anchorElem, setAnchorElem] = useState(null)
 
@@ -1054,12 +1038,7 @@ function NoteEditor({
     <NoteEditorContext.Provider value={editorContext}>
       <div className={`note-editor${variant === 'document' ? ' note-editor--document' : ''}`}>
         <LexicalComposer initialConfig={initialConfig}>
-          <ToolbarPlugin
-            enableTimestamp={enableTimestamp}
-            currentTimeSec={currentTimeSec}
-            compact={compactToolbar}
-            onCaptureFrame={onCaptureFrame}
-          />
+          <ToolbarPlugin compact={compactToolbar} />
           <div className="note-editor__shell">
             <div
               className="note-editor__anchor"
@@ -1112,15 +1091,30 @@ function NoteEditor({
           <PrepareNotePlugin />
           <BlockCaretPlugin />
           {autofocus ? <AutoFocusPlugin /> : null}
+          <FocusSignalPlugin signal={focusSignal} />
         </LexicalComposer>
       </div>
     </NoteEditorContext.Provider>
   )
 }
 
+function FocusSignalPlugin({ signal }) {
+  const [editor] = useLexicalComposerContext()
+  useEffect(() => {
+    if (!signal) return
+    editor.focus()
+  }, [editor, signal])
+  return null
+}
+
+/** Drop the seek suffix so read-only markdown still renders the image. */
+function stripImageTime(markdown) {
+  return markdown.replace(/(!\[[^\][]*\]\([^)\n]*\))\{t:[0-9]+(?:\.[0-9]+)?\}/g, '$1')
+}
+
 /** Read-only markdown rendering for annotation lists / previews. */
 function NoteBody({ body }) {
-  const markdown = String(body || '').trim()
+  const markdown = stripImageTime(String(body || '').trim())
   if (!markdown) {
     return <p className="note-body note-body--muted">Sin texto</p>
   }

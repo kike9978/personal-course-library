@@ -116,3 +116,87 @@ export function groupAnnotationsByTarget(annotations, opts = {}) {
 
   return groups
 }
+
+function startOfWeek(value) {
+  const date = new Date(value)
+  date.setHours(0, 0, 0, 0)
+  const day = date.getDay()
+  date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day))
+  return date
+}
+
+function weekKey(start) {
+  const month = String(start.getMonth() + 1).padStart(2, '0')
+  const day = String(start.getDate()).padStart(2, '0')
+  return `${start.getFullYear()}-${month}-${day}`
+}
+
+function shortMonth(date) {
+  return new Intl.DateTimeFormat('es', { month: 'short' }).format(date).replace(/\./g, '').trim()
+}
+
+function weekRangeTitle(start) {
+  const end = new Date(start)
+  end.setDate(end.getDate() + 6)
+  const sameYear = start.getFullYear() === end.getFullYear()
+  const sameMonth = sameYear && start.getMonth() === end.getMonth()
+  if (sameMonth) {
+    return `${start.getDate()}–${end.getDate()} ${shortMonth(start)} ${start.getFullYear()}`
+  }
+  if (sameYear) {
+    return `${start.getDate()} ${shortMonth(start)} – ${end.getDate()} ${shortMonth(end)} ${end.getFullYear()}`
+  }
+  return `${start.getDate()} ${shortMonth(start)} ${start.getFullYear()} – ${end.getDate()} ${shortMonth(end)} ${end.getFullYear()}`
+}
+
+function weekTitle(start, now) {
+  const current = startOfWeek(now)
+  const previous = new Date(current)
+  previous.setDate(previous.getDate() - 7)
+  if (start.getTime() === current.getTime()) return 'Esta semana'
+  if (start.getTime() === previous.getTime()) return 'Semana pasada'
+  return weekRangeTitle(start)
+}
+
+/**
+ * Group annotations by the calendar week they were created (Monday start).
+ * Newest week first. Notes without a date sit in Sin fecha.
+ *
+ * @param {Array} annotations
+ * @param {{ now?: number }} [opts]
+ * @returns {{ key: string, title: string, start: number|null, items: Array }[]}
+ */
+export function groupAnnotationsByWeek(annotations, opts = {}) {
+  const now = opts.now ?? Date.now()
+  const byKey = new Map()
+
+  for (const item of annotations || []) {
+    const created = Number(item?.createdAt)
+    const known = Number.isFinite(created) && created > 0
+    const start = known ? startOfWeek(created) : null
+    const key = start ? `week:${weekKey(start)}` : 'week:__none__'
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        key,
+        title: start ? weekTitle(start, now) : 'Sin fecha',
+        start: start ? start.getTime() : null,
+        items: []
+      })
+    }
+    byKey.get(key).items.push(item)
+  }
+
+  return [...byKey.values()]
+    .map((group) => ({
+      ...group,
+      items: [...group.items].sort(
+        (a, b) =>
+          (b.createdAt || 0) - (a.createdAt || 0) || String(a.id).localeCompare(String(b.id))
+      )
+    }))
+    .sort((a, b) => {
+      if (a.start == null) return 1
+      if (b.start == null) return -1
+      return b.start - a.start
+    })
+}

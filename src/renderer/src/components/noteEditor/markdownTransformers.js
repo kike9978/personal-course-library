@@ -142,7 +142,14 @@ function parseImageDestination(raw) {
   }
 }
 
-/** Image: ![alt](src) or ![alt](src "pie de foto"). Root block. */
+function imageTimeSuffix(node) {
+  const time = node.getTimeSec()
+  if (typeof time !== 'number' || !Number.isFinite(time)) return ''
+  const rounded = Math.round(time * 1000) / 1000
+  return `{t:${rounded}}`
+}
+
+/** Image: ![alt](src), optional caption, optional `{t:seconds}` seek target. Root block. */
 const IMAGE = {
   dependencies: [ImageNode],
   export: (node) => {
@@ -150,18 +157,25 @@ const IMAGE = {
     const alt = node.getAltText() || ''
     const src = node.getSrc() || ''
     const caption = node.getCaption() || ''
-    if (!caption) return `![${alt}](${src})`
-    return `![${alt}](${src} "${caption.replace(/"/g, '\\"')}")`
+    const suffix = imageTimeSuffix(node)
+    if (!caption) return `![${alt}](${src})${suffix}`
+    return `![${alt}](${src} "${caption.replace(/"/g, '\\"')}")${suffix}`
   },
-  regExp: /^!\[([^\][]*)\]\((.*)\)\s*$/,
+  regExp: /^!\[([^\][]*)\]\((.*)\)(?:\{t:([0-9]+(?:\.[0-9]+)?)\})?\s*$/,
   replace: (parentNode, _children, match, isImport) => {
-    const [, altText, dest] = match
+    const [, altText, dest, timeRaw] = match
     if (String(altText || '').startsWith('excalidraw:')) return false
     const { src, caption } = parseImageDestination(dest)
     if (!src) return false
+    const timeSec = timeRaw == null || timeRaw === '' ? null : Number(timeRaw)
     replaceWithBlock(
       parentNode,
-      $createImageNode({ src, altText: altText || '', caption }),
+      $createImageNode({
+        src,
+        altText: altText || '',
+        caption,
+        timeSec: Number.isFinite(timeSec) ? timeSec : null
+      }),
       isImport
     )
   },

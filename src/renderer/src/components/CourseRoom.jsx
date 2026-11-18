@@ -7,7 +7,6 @@ import LessonPlayer from './LessonPlayer'
 import ResourceViewer, { ResourceGroupView } from './ResourceViewer'
 import ProjectPanel, { placementForFile, sectionForPath } from './ProjectPanel'
 import StudySidePanel, { formatTime } from './StudySidePanel'
-import CourseAnnotationsView from './CourseAnnotationsView'
 import { InstitutionMark } from './InstitutionMark'
 import { collectCourseFacets } from '../utils/courseFilters'
 import Loader from './Loader'
@@ -49,6 +48,7 @@ function CourseRoom({
   courses = [],
   onBack,
   onOpenExplorer,
+  onOpenAnnotations,
   onProgressChange,
   resumeTarget = null,
   liveJump = null
@@ -66,9 +66,8 @@ function CourseRoom({
   const [projects, setProjects] = useState([])
   const [panelMode, setPanelMode] = useState('lesson') // 'lesson' | 'resource' | 'resources' | 'project'
   const [resourceGroup, setResourceGroup] = useState(null)
-  const [studyOpen, setStudyOpen] = useState(false)
+  const [studyOpen, setStudyOpen] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen)
-  const [showCourseAnnotations, setShowCourseAnnotations] = useState(false)
   const [annotations, setAnnotations] = useState([])
   const [topics, setTopics] = useState([])
   const [draft, setDraft] = useState({ text: '', markdown: '', json: null })
@@ -77,13 +76,25 @@ function CourseRoom({
   const [noteScope, setNoteScope] = useState('moment')
   const [currentTimeSec, setCurrentTimeSec] = useState(0)
   const [pinnedTimeSec, setPinnedTimeSec] = useState(null)
+  const [pinReleased, setPinReleased] = useState(false)
+  const [composerFocusTick, setComposerFocusTick] = useState(0)
+  const [highlightNoteId, setHighlightNoteId] = useState(null)
   const [pendingSeek, setPendingSeek] = useState(null)
   const playerRef = useRef(null)
   const currentTimeRef = useRef(0)
   const draftRef = useRef({ text: '', markdown: '', json: null })
   const pinnedTimeRef = useRef(null)
   const pinnedLessonRef = useRef(null)
+  const pinReleasedRef = useRef(false)
   const composerFocusedRef = useRef(false)
+  const highlightTimerRef = useRef(null)
+
+  useEffect(
+    () => () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current)
+    },
+    []
+  )
   currentTimeRef.current = currentTimeSec
   const noteEditorApiRef = useRef(null)
   const capturingFrameRef = useRef(false)
@@ -625,19 +636,53 @@ function CourseRoom({
   }
 
   useEffect(() => {
-    if (pinnedTimeRef.current == null && pinnedLessonRef.current == null) return
+    if (pinnedTimeRef.current == null && pinnedLessonRef.current == null && !pinReleasedRef.current) {
+      return
+    }
     pinnedTimeRef.current = null
     pinnedLessonRef.current = null
+    pinReleasedRef.current = false
     setPinnedTimeSec(null)
+    setPinReleased(false)
   }, [selectedPath])
 
-  const pinComposerMoment = (scope = noteScope) => {
-    if (editingId || scope !== 'moment' || panelMode !== 'lesson' || !selectedPath) return
-    if (pinnedTimeRef.current != null && pinnedLessonRef.current === selectedPath) return
+  const setReleased = (value) => {
+    pinReleasedRef.current = value
+    setPinReleased(value)
+  }
+
+  const pinComposerMoment = (scope = noteScope, { force = false } = {}) => {
+    if (pinReleasedRef.current && !force) return
+    if (force) setReleased(false)
+    if (!force && editingId) return
+    if (scope !== 'moment' || panelMode !== 'lesson' || !selectedPath) return
+    if (!force && pinnedTimeRef.current != null && pinnedLessonRef.current === selectedPath) return
     const time = playerRef.current?.getCurrentTime?.() ?? currentTimeRef.current
     pinnedLessonRef.current = selectedPath
     pinnedTimeRef.current = time
     setPinnedTimeSec(time)
+  }
+
+  const draftTextNow = () => (draftRef.current.markdown || draftRef.current.text || '').trim()
+
+  const guardOpenEdit = () => {
+    if (!editingId) return false
+    toast('Termina o cancela la edición')
+    return true
+  }
+
+  const guardNewNote = () => {
+    if (guardOpenEdit()) return true
+    if (!draftTextNow()) return false
+    toast.error('Guarda o borra la nota nueva antes de continuar')
+    return true
+  }
+
+  const flashNote = (id) => {
+    setHighlightNoteId(id || null)
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current)
+    if (!id) return
+    highlightTimerRef.current = setTimeout(() => setHighlightNoteId(null), 1800)
   }
 
   const clearDraft = () => {
@@ -646,7 +691,9 @@ function CourseRoom({
     setDraft(empty)
     setEditingId(null)
     setEditorKey((k) => k + 1)
+    setReleased(false)
     clearPinnedMoment()
+    flashNote(null)
   }
 
   const loadDraftForEdit = (item) => {
@@ -660,6 +707,7 @@ function CourseRoom({
     setDraft(nextDraft)
     clearPinnedMoment()
     setEditorKey((k) => k + 1)
+    setReleased(false)
     setNoteScope(
       typeof item.timeSec === 'number'
         ? 'moment'
@@ -675,13 +723,14 @@ function CourseRoom({
     draftRef.current = nextDraft
     setDraft(nextDraft)
     if (editingId) return
-    if (markdown.trim()) pinComposerMoment()
-    else if (!composerFocusedRef.current) clearPinnedMoment()
+    if (markdown.trim()) {
+      // First character locks the playhead, including after Soltar.
+      pinComposerMoment(noteScope, { force: pinReleasedRef.current })
+    } else if (!composerFocusedRef.current) clearPinnedMoment()
   }
 
   const handleComposerFocus = () => {
     composerFocusedRef.current = true
-    pinComposerMoment()
   }
 
   const handleComposerBlur = () => {
@@ -694,12 +743,56 @@ function CourseRoom({
     const body = (draft.markdown || draft.text || '').trim()
     try {
       if (editingId) {
-        const list = await window.api.upsertNote(coursePath, {
+        const editing = annotations.find((item) => item.id === editingId)
+        const payload = {
           id: editingId,
           body,
           bodyHtml: null,
           bodyJson: null
-        })
+        }
+        if (noteScope === 'moment') {
+          if (!selectedLesson || panelMode !== 'lesson') {
+            toast.error('Selecciona una lección para anotar el video')
+            return
+          }
+          payload.lessonRelativePath = selectedLesson.relativePath
+          payload.lessonTitle = selectedLesson.title
+          payload.projectId = null
+          payload.projectTitle = null
+          payload.timeSec =
+            pinnedTimeRef.current != null &&
+            pinnedLessonRef.current === selectedLesson.relativePath &&
+            !pinReleasedRef.current
+              ? pinnedTimeRef.current
+              : typeof editing?.timeSec === 'number'
+                ? editing.timeSec
+                : (playerRef.current?.getCurrentTime?.() ?? currentTimeSec)
+        } else if (noteScope === 'file') {
+          if (!activeTarget) {
+            toast.error('Selecciona un archivo o proyecto para anotar')
+            return
+          }
+          if (activeTarget.kind === 'project') {
+            payload.projectId = activeTarget.projectId
+            payload.projectTitle = activeTarget.title
+            payload.lessonRelativePath = null
+            payload.lessonTitle = null
+            payload.timeSec = null
+          } else {
+            payload.lessonRelativePath = activeTarget.path
+            payload.lessonTitle = activeTarget.title
+            payload.projectId = null
+            payload.projectTitle = null
+            payload.timeSec = null
+          }
+        } else {
+          payload.lessonRelativePath = null
+          payload.lessonTitle = null
+          payload.projectId = null
+          payload.projectTitle = null
+          payload.timeSec = null
+        }
+        const list = await window.api.upsertNote(coursePath, payload)
         setAnnotations(list)
       } else if (noteScope === 'moment') {
         if (!selectedLesson || panelMode !== 'lesson') {
@@ -779,31 +872,83 @@ function CourseRoom({
   }
 
   const focusMomentNote = () => {
-    setShowCourseAnnotations(false)
-    setStudyOpen(true)
-    setEditingId(null)
-    if (panelMode === 'project' && selectedProject) {
-      setNoteScope('file')
-      toast('Escribe y pulsa Guardar — se guarda en este proyecto')
+    if (guardOpenEdit()) {
+      setStudyOpen(true)
       return
     }
-    if (panelMode === 'resource' && selectedResource) {
+    flashNote(null)
+    setShowCourseAnnotations(false)
+    setStudyOpen(true)
+    if (
+      (panelMode === 'project' && selectedProject) ||
+      (panelMode === 'resource' && selectedResource)
+    ) {
       setNoteScope('file')
-      toast('Escribe y pulsa Guardar — se guarda en este archivo')
+      setComposerFocusTick((tick) => tick + 1)
       return
     }
     setNoteScope('moment')
-    toast('Escribe y pulsa Guardar — se guarda en el tiempo actual')
+    if (draftTextNow()) pinComposerMoment('moment')
+    playerRef.current?.pause?.()
+    setComposerFocusTick((tick) => tick + 1)
+  }
+
+  const refreshMoment = async () => {
+    let time = playerRef.current?.getCurrentTime?.() ?? currentTimeRef.current
+    if (editingId) {
+      const item = annotations.find((note) => note.id === editingId)
+      if (!item) return
+      const saved = await updateNoteTime(item)
+      if (saved === false) return
+      time = saved
+    }
+    setReleased(false)
+    if (panelMode !== 'lesson' || !selectedPath) return
+    pinnedLessonRef.current = selectedPath
+    pinnedTimeRef.current = time
+    setPinnedTimeSec(time)
+  }
+
+  const releaseMoment = () => {
+    if (editingId) {
+      setNoteScope('file')
+      return
+    }
+    setReleased(true)
+    clearPinnedMoment()
+  }
+
+  const insertTimestamp = async () => {
+    const live = playerRef.current?.getCurrentTime?.() ?? currentTimeRef.current
+    const editing = editingId ? annotations.find((note) => note.id === editingId) : null
+    const pinMatches =
+      pinnedTimeRef.current != null &&
+      pinnedLessonRef.current === selectedPath &&
+      !pinReleasedRef.current
+    const timeSec =
+      noteScope === 'moment'
+        ? pinMatches
+          ? pinnedTimeRef.current
+          : typeof editing?.timeSec === 'number'
+            ? editing.timeSec
+            : live
+        : live
+    try {
+      const api = await waitForEditorApi(noteEditorApiRef)
+      api.insertTimestamp?.({ timeSec })
+    } catch (err) {
+      toast.error(err.message || 'El editor de notas no está listo')
+    }
   }
 
   const updateNoteTime = async (item) => {
     if (!selectedLesson || panelMode !== 'lesson') {
       toast.error('Reproduce la lección para actualizar el tiempo')
-      return
+      return false
     }
     if (item.lessonRelativePath && item.lessonRelativePath !== selectedLesson.relativePath) {
       toast.error('Esta nota pertenece a otra lección')
-      return
+      return false
     }
     const timeSec = playerRef.current?.getCurrentTime?.() ?? currentTimeRef.current
     try {
@@ -815,8 +960,10 @@ function CourseRoom({
       })
       setAnnotations(list)
       toast.success(`Tiempo actualizado · ${formatTime(timeSec)}`)
+      return timeSec
     } catch (err) {
       toast.error(err.message || 'No se pudo actualizar el tiempo')
+      return false
     }
   }
 
@@ -825,7 +972,9 @@ function CourseRoom({
       toast.error('Selecciona una lección primero')
       return
     }
+    if (guardNewNote()) return
     setShowCourseAnnotations(false)
+    flashNote(null)
     setStudyOpen(true)
     setPanelMode('lesson')
     const timeSec = playerRef.current?.getCurrentTime?.() ?? currentTimeSec
@@ -838,13 +987,15 @@ function CourseRoom({
       })
       .then((list) => {
         setAnnotations(list)
-        const created = list.find(
-          (n) =>
-            n.lessonRelativePath === selectedLesson.relativePath &&
-            typeof n.timeSec === 'number' &&
-            Math.abs(n.timeSec - timeSec) < 0.75 &&
-            !n.body
-        )
+        const created = list
+          .filter(
+            (n) =>
+              n.lessonRelativePath === selectedLesson.relativePath &&
+              typeof n.timeSec === 'number' &&
+              Math.abs(n.timeSec - timeSec) < 0.75 &&
+              !String(n.body || '').trim()
+          )
+          .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0]
         if (created) {
           const empty = { text: '', markdown: '', json: null }
           draftRef.current = empty
@@ -852,9 +1003,10 @@ function CourseRoom({
           setDraft(empty)
           setEditorKey((k) => k + 1)
           setNoteScope('moment')
+          setReleased(false)
           clearPinnedMoment()
         }
-        toast.success('Pin creado — puedes añadir texto')
+        toast.success('Marca creada')
       })
       .catch((err) => toast.error(err.message || 'Error'))
   }
@@ -869,6 +1021,15 @@ function CourseRoom({
     capturingFrameRef.current = true
     setCapturingFrame(true)
     try {
+      const timeSec = playerRef.current?.getCurrentTime?.() ?? currentTimeRef.current
+      if (
+        noteScope === 'moment' &&
+        (pinnedTimeRef.current == null ||
+          pinnedLessonRef.current !== selectedLesson.relativePath ||
+          pinReleasedRef.current)
+      ) {
+        pinComposerMoment('moment', { force: true })
+      }
       const frame = await capture()
       const ext = frame.mimeType === 'image/png' ? 'png' : 'jpg'
       const saved = await window.api.saveNoteImage({
@@ -884,9 +1045,9 @@ function CourseRoom({
       const api = await waitForEditorApi(noteEditorApiRef)
       api.insertImage({
         src: saved.url,
-        altText: `Captura en ${formatTime(frame.timeSec)}`
+        altText: `Captura en ${formatTime(timeSec)}`,
+        timeSec
       })
-      toast.success('Captura añadida — pulsa Guardar')
     } catch (err) {
       toast.error(err.message || 'No se pudo capturar el video')
     } finally {
@@ -910,6 +1071,7 @@ function CourseRoom({
       for (const anchor of source) {
         marks.push({
           id: `${note.id}:${anchor.lessonRelativePath}:${anchor.timeSec}`,
+          noteId: note.id,
           kind: 'annotation',
           lessonRelativePath: anchor.lessonRelativePath,
           timeSec: anchor.timeSec,
@@ -960,13 +1122,6 @@ function CourseRoom({
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       // Lexical uses contenteditable DIVs — never steal keys while typing notes
       if (t?.isContentEditable || t?.closest?.('[contenteditable="true"], .note-editor')) return
-      if (showCourseAnnotations) {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          setShowCourseAnnotations(false)
-        }
-        return
-      }
       if (e.key === 'Escape') {
         if (document.fullscreenElement) return
         e.preventDefault()
@@ -1002,8 +1157,7 @@ function CourseRoom({
     selectedLesson,
     selectedCompleted,
     noteScope,
-    studyOpen,
-    showCourseAnnotations
+    studyOpen
   ])
 
   useEffect(() => {
@@ -1024,6 +1178,22 @@ function CourseRoom({
     }
   }, [moreOpen])
 
+  const editingNote = editingId ? annotations.find((item) => item.id === editingId) : null
+  const pinMatches =
+    !pinReleased && pinnedTimeSec != null && pinnedLessonRef.current === selectedPath
+  const momentChipSec =
+    noteScope !== 'moment'
+      ? currentTimeSec
+      : pinMatches
+        ? pinnedTimeSec
+        : typeof editingNote?.timeSec === 'number'
+          ? editingNote.timeSec
+          : currentTimeSec
+  const momentChipFrozen =
+    noteScope === 'moment' &&
+    (pinMatches ||
+      (Boolean(editingNote) && typeof editingNote.timeSec === 'number' && !pinReleased))
+
   const emptyContent =
     !loading &&
     tree &&
@@ -1031,7 +1201,6 @@ function CourseRoom({
     (tree.summary?.resourceCount || 0) === 0 &&
     projects.length === 0 &&
     !creatingProject
-  const percent = progress?.percent ?? 0
 
   return (
     <div className="course-room">
@@ -1040,22 +1209,16 @@ function CourseRoom({
           ← Biblioteca
         </button>
         <div className="course-room__heading">
-          <h1 title={course.title}>{course.title}</h1>
-          <InstitutionMark institution={course.institution} />
+          <h1 title={[course.title, course.instructor].filter(Boolean).join(' ')}>
+            {course.title || 'Curso'}
+            {course.instructor ? <span>{course.instructor}</span> : null}
+          </h1>
+          <InstitutionMark
+            institution={course.institution}
+            nameClassName="course-room__institution"
+          />
         </div>
         <div className="course-room__actions">
-          <button
-            type="button"
-            className="icon-btn icon-btn--ghost"
-            onClick={() => {
-              setStudyOpen(false)
-              setShowCourseAnnotations(true)
-            }}
-            title="Todas las anotaciones del curso"
-          >
-            Anotaciones
-            {annotations.length ? ` (${annotations.length})` : ''}
-          </button>
           <div className="header-menu" ref={moreMenuRef}>
             <button
               type="button"
@@ -1100,12 +1263,6 @@ function CourseRoom({
         </div>
       </header>
 
-      {progress && progress.playableCount > 0 ? (
-        <div className="course-room__progress" aria-hidden="true">
-          <div className="course-room__progress-bar" style={{ width: `${percent}%` }} />
-        </div>
-      ) : null}
-
       {loading && !tree ? (
         <div className="loader-container">
           <Loader />
@@ -1134,28 +1291,6 @@ function CourseRoom({
             </button>
           </div>
         </div>
-      ) : showCourseAnnotations ? (
-        <CourseAnnotationsView
-          coursePath={coursePath}
-          courseTitle={course.title}
-          courses={courses}
-          annotations={annotations}
-          currentTargetPath={activeTarget?.path}
-          currentTargetTitle={activeTarget?.title}
-          currentProjectId={activeTarget?.projectId || null}
-          onBack={() => setShowCourseAnnotations(false)}
-          onChange={setAnnotations}
-          onOpenPopOut={() => {
-            window.api.openAnnotationsWindow({ coursePath }).catch((err) => {
-              toast.error(err.message || 'No se pudo abrir la ventana')
-            })
-          }}
-          onJump={(item) => {
-            setShowCourseAnnotations(false)
-            setStudyOpen(false)
-            jumpTo(item)
-          }}
-        />
       ) : (
         <div
           className={`course-room__body course-room__body--study${
@@ -1197,6 +1332,7 @@ function CourseRoom({
               playableCount={progress?.playableCount ?? 0}
             />
           </aside>
+          <div className="course-room__stage">
           <main className="course-room__main">
             {panelMode === 'project' ? (
               <ProjectPanel
@@ -1257,7 +1393,9 @@ function CourseRoom({
                 timelineMarks={timelineMarks}
                 onTimeTick={setCurrentTimeSec}
                 onMarkClick={(mark) => {
+                  setShowCourseAnnotations(false)
                   setStudyOpen(true)
+                  if (mark.noteId) flashNote(mark.noteId)
                   jumpTo(mark)
                 }}
                 onProgress={handleProgress}
@@ -1291,28 +1429,21 @@ function CourseRoom({
             noteScope={noteScope}
             onNoteScopeChange={(scope) => {
               setNoteScope(scope)
-              const text = (draftRef.current.markdown || draftRef.current.text || '').trim()
+              flashNote(null)
               if (scope === 'moment') {
-                if (text || composerFocusedRef.current) pinComposerMoment('moment')
-              } else if (!text) {
+                if (draftTextNow()) pinComposerMoment('moment', { force: true })
+              } else if (!editingId && !draftTextNow()) {
                 clearPinnedMoment()
               }
             }}
             currentTimeSec={currentTimeSec}
-            momentTimeSec={
-              !editingId &&
-              noteScope === 'moment' &&
-              pinnedTimeSec != null &&
-              pinnedLessonRef.current === selectedPath
-                ? pinnedTimeSec
-                : currentTimeSec
-            }
-            momentFrozen={
-              !editingId &&
-              noteScope === 'moment' &&
-              pinnedTimeSec != null &&
-              pinnedLessonRef.current === selectedPath
-            }
+            momentTimeSec={momentChipSec}
+            momentFrozen={momentChipFrozen}
+            onUpdateMoment={refreshMoment}
+            onReleaseMoment={releaseMoment}
+            onInsertTimestamp={insertTimestamp}
+            focusSignal={composerFocusTick}
+            highlightNoteId={highlightNoteId}
             onComposerFocus={handleComposerFocus}
             onComposerBlur={handleComposerBlur}
             onSeekTimestamp={handleSeekTimestamp}
@@ -1322,7 +1453,10 @@ function CourseRoom({
             onOpenMention={(mention) => {
               if (mention?.type !== 'note') return
               const note = annotations.find((item) => item.id === mention.id)
-              if (note) loadDraftForEdit(note)
+              if (!note || editingId === note.id) return
+              if (guardNewNote()) return
+              flashNote(null)
+              loadDraftForEdit(note)
             }}
             onCreateTopic={async (title) => {
               const saved = await window.api.upsertTopic({ title })
@@ -1333,11 +1467,17 @@ function CourseRoom({
             editingId={editingId}
             onCancelEdit={clearDraft}
             onEdit={(item) => {
+              if (editingId === item.id) return
+              if (guardNewNote()) return
               setStudyOpen(true)
+              flashNote(null)
               loadDraftForEdit(item)
             }}
             onDelete={async (id) => {
+              if (editingId && editingId !== id && guardOpenEdit()) return
               try {
+                flashNote(null)
+                if (editingId === id) clearDraft()
                 setAnnotations(await window.api.deleteNote(coursePath, id))
               } catch (err) {
                 toast.error(err.message || 'Error')
@@ -1348,7 +1488,6 @@ function CourseRoom({
             capturingFrame={capturingFrame}
             editorApiRef={noteEditorApiRef}
             onJump={jumpTo}
-            onUpdateTime={Boolean(selectedLesson) && panelMode === 'lesson' ? updateNoteTime : null}
             onExpand={() => setStudyOpen(true)}
             onCollapse={() => setStudyOpen(false)}
             currentTargetPath={activeTarget?.path}
@@ -1357,7 +1496,10 @@ function CourseRoom({
             hasLesson={Boolean(selectedLesson) && panelMode === 'lesson'}
             hasTarget={Boolean(activeTarget)}
             targetKind={activeTarget?.kind || null}
+            annotationCount={annotations.length}
+            onOpenAnnotations={onOpenAnnotations ? () => onOpenAnnotations(coursePath) : null}
           />
+          </div>
         </div>
       )}
     </div>
