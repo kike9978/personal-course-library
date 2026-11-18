@@ -6,9 +6,11 @@ import {
   EllipsisVertical,
   Group,
   Library,
+  Locate,
   Plus,
   Search,
-  Settings
+  Settings,
+  Tags
 } from 'lucide-react'
 import NoteEditor from './NoteEditor'
 import { NotionSyncConflict, NotionSyncNoteButton } from './NotionSyncControl'
@@ -29,13 +31,22 @@ import {
   groupFindingsByTopic,
   backlinksTo,
   hashtagTitlesFromBody,
+  stripTopicFromMarkdown,
   resolveCourseTitle,
   topicKey,
   noteTextTitle,
+  outlineNoteTitle,
   isDefaultNoteTitle,
   formatNoteTimestamp,
   visibleGraph
 } from '../../../shared/knowledgeGraph.js'
+
+function foldSearch(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+}
 
 function clipTitle(value) {
   const text = String(value || '').trim()
@@ -69,7 +80,8 @@ function countNotes(node) {
 
 function noteListParts(item, fullTitle) {
   const fromClock = typeof item?.timeSec === 'number' ? formatNoteTimestamp(item.timeSec) : ''
-  return { name: fullTitle, time: fromClock }
+  const name = fullTitle || ''
+  return { name, time: name && name === fromClock ? '' : fromClock }
 }
 
 function AnnotationBranch({
@@ -143,16 +155,6 @@ function sameSelection(item, selectedId) {
 function noteKey(item) {
   if (!item) return null
   return `${item.coursePath || ''}::${item.id}`
-}
-
-function snapshotMatchesCurrent(snapshot, draft, draftTitle, draftTopics) {
-  const snapBody = String(snapshot?.draft?.markdown || snapshot?.draft?.text || '').trim()
-  const curBody = String(draft?.markdown || draft?.text || '').trim()
-  const snapTitle = String(snapshot?.title || '').trim()
-  const curTitle = String(draftTitle || '').trim()
-  const snapTopics = JSON.stringify(snapshot?.topics || [])
-  const curTopics = JSON.stringify(draftTopics || [])
-  return snapBody === curBody && snapTitle === curTitle && snapTopics === curTopics
 }
 
 function saveStatusLabel(status) {
@@ -257,6 +259,7 @@ function readGraphSettings() {
     labelZoom: LABEL_ZOOM,
     showCourses: true,
     showFiles: true,
+    showTags: true,
     showOrphans: true
   }
   try {
@@ -271,6 +274,7 @@ function readGraphSettings() {
       labelZoom: clampLabelZoom(stored.labelZoom),
       showCourses: stored.showCourses !== false,
       showFiles: stored.showFiles !== false,
+      showTags: stored.showTags !== false,
       showOrphans: stored.showOrphans !== false
     }
   } catch {
@@ -400,8 +404,12 @@ function AnnotationsWorkspace({
   const [labelZoom, setLabelZoom] = useState(graphPrefs.labelZoom)
   const [showCourses, setShowCourses] = useState(graphPrefs.showCourses)
   const [showFiles, setShowFiles] = useState(graphPrefs.showFiles)
+  const [showTags, setShowTags] = useState(graphPrefs.showTags)
   const [showOrphans, setShowOrphans] = useState(graphPrefs.showOrphans)
   const [graphSelection, setGraphSelection] = useState(null)
+  const [graphFocus, setGraphFocus] = useState({ id: null, token: 0 })
+  const [graphQuery, setGraphQuery] = useState('')
+  const [graphQueryIndex, setGraphQueryIndex] = useState(0)
   const [graphReset, setGraphReset] = useState(0)
   const [graphWidth, setGraphWidth] = useState(() => readStoredGraphWidth() ?? GRAPH_PANE_DEFAULT)
   const [graphResizing, setGraphResizing] = useState(false)
@@ -457,6 +465,7 @@ function AnnotationsWorkspace({
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
   const [tagViewId, setTagViewId] = useState(null)
+  const [tagsManageOpen, setTagsManageOpen] = useState(false)
   const [jsonTitles, setJsonTitles] = useState({})
   const titles = useMemo(
     () => ({ ...courseTitleByPath, ...jsonTitles }),
@@ -470,6 +479,17 @@ function AnnotationsWorkspace({
       // Grouping is only a list preference.
     }
   }, [groupMode])
+
+  useEffect(() => {
+    if (!graphQuery.trim()) return undefined
+    const onPointerDown = (event) => {
+      if (event.target.closest?.('.annotations-graph-pane__finder')) return
+      setGraphQuery('')
+      setGraphQueryIndex(0)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [graphQuery])
 
   useEffect(() => {
     if (!graphSettingsOpen) return undefined
@@ -501,6 +521,7 @@ function AnnotationsWorkspace({
           labelZoom,
           showCourses,
           showFiles,
+          showTags,
           showOrphans
         })
       )
@@ -516,6 +537,7 @@ function AnnotationsWorkspace({
     labelZoom,
     showCourses,
     showFiles,
+    showTags,
     showOrphans
   ])
 
@@ -832,14 +854,14 @@ function AnnotationsWorkspace({
   const pendingFlushRef = useRef(null)
   const appliedPullRef = useRef(0)
   const saveTimerRef = useRef(null)
+  const persistPromiseRef = useRef(Promise.resolve())
+  const editEpochRef = useRef(0)
 
   draftRef.current = draft
   draftTitleRef.current = draftTitle
   draftTopicsRef.current = draftTopics
   topicQueryRef.current = topicQuery
   topicsRef.current = topics
-  dirtyRef.current = dirty
-  savingRef.current = saving
 
   const commitTopicTitle = (title) => {
     const next = String(title || '').trim()
@@ -850,6 +872,20 @@ function AnnotationsWorkspace({
     draftTopicsRef.current = updated
     setDraftTopics(updated)
     return updated
+  }
+
+  const dropTopicFromDraft = (topic) => {
+    const key = topicKey(topic?.title)
+    const remaining = (draftTopicsRef.current || []).filter((title) => topicKey(title) !== key)
+    draftTopicsRef.current = remaining
+    setDraftTopics(remaining)
+    const prev = draftRef.current?.markdown || draftRef.current?.text || ''
+    const markdown = stripTopicFromMarkdown(prev, { id: topic?.id, title: topic?.title })
+    if (markdown === prev) return
+    const next = { text: markdown, markdown, json: null }
+    draftRef.current = next
+    setDraft(next)
+    setEditorKey((value) => value + 1)
   }
 
   const currentSnapshot = () => ({
@@ -923,6 +959,7 @@ function AnnotationsWorkspace({
         pendingFlushRef.current = { item, snapshot, silent }
         return
       }
+      const epoch = editEpochRef.current
       savingRef.current = true
       if (noteKey(selectedRef.current) === key) {
         setSaving(true)
@@ -935,7 +972,11 @@ function AnnotationsWorkspace({
           if (!topicTitles.some((item) => topicKey(item) === topicKey(title)))
             topicTitles.push(title)
         }
-        if (noteKey(selectedRef.current) === key) {
+        const currentTopics = draftTopicsRef.current || []
+        const sameTopics =
+          topicTitles.length === currentTopics.length &&
+          topicTitles.every((title, index) => topicKey(title) === topicKey(currentTopics[index]))
+        if (!sameTopics && noteKey(selectedRef.current) === key) {
           draftTopicsRef.current = topicTitles
           setDraftTopics(topicTitles)
         }
@@ -959,14 +1000,8 @@ function AnnotationsWorkspace({
           topicIds
         })
         if (noteKey(selectedRef.current) === key) {
-          if (
-            snapshotMatchesCurrent(
-              { ...snapshot, topics: topicTitles },
-              draftRef.current,
-              draftTitleRef.current,
-              draftTopicsRef.current
-            )
-          ) {
+          if (editEpochRef.current === epoch) {
+            dirtyRef.current = false
             setDirty(false)
             setSaveStatus('saved')
           } else {
@@ -996,7 +1031,11 @@ function AnnotationsWorkspace({
     [onSave, onUpsertTopic]
   )
 
-  persistRef.current = persistNote
+  persistRef.current = (item, snapshot, options) => {
+    const job = persistNote(item, snapshot, options)
+    persistPromiseRef.current = Promise.resolve(job)
+    return job
+  }
 
   useEffect(() => {
     const prev = selectedRef.current
@@ -1009,6 +1048,10 @@ function AnnotationsWorkspace({
     appliedPullRef.current = next?.notion?.pulledAt || 0
 
     if (!next) {
+      draftTitleRef.current = ''
+      draftTopicsRef.current = []
+      draftRef.current = { text: '', markdown: '', json: null }
+      dirtyRef.current = false
       setDraftTitle('')
       setDraftTopics([])
       setDraft({ text: '', markdown: '', json: null })
@@ -1016,14 +1059,21 @@ function AnnotationsWorkspace({
       setSaveStatus('idle')
       return
     }
-    setDraftTitle(editableTitle(next.title))
-    setDraftTopics(topicTitlesOf(next, topics))
-    setTopicQuery('')
-    setDraft({
+    const loadedTitle = editableTitle(next.title)
+    const loadedTopics = topicTitlesOf(next, topics)
+    const loadedDraft = {
       text: next.body || '',
       markdown: next.body || '',
       json: next.bodyJson || null
-    })
+    }
+    draftTitleRef.current = loadedTitle
+    draftTopicsRef.current = loadedTopics
+    draftRef.current = loadedDraft
+    dirtyRef.current = false
+    setDraftTitle(loadedTitle)
+    setDraftTopics(loadedTopics)
+    setTopicQuery('')
+    setDraft(loadedDraft)
     setEditorKey((k) => k + 1)
     setDirty(false)
     setSaveStatus('idle')
@@ -1037,14 +1087,19 @@ function AnnotationsWorkspace({
     appliedPullRef.current = stamp
     if (dirtyRef.current) return
     const title = editableTitle(selected.title)
-    draftTitleRef.current = title
-    setDraftTitle(title)
-    setDraftTopics(topicTitlesOf(selected, topics))
-    setDraft({
+    const loadedTopics = topicTitlesOf(selected, topics)
+    const loadedDraft = {
       text: selected.body || '',
       markdown: selected.body || '',
       json: null
-    })
+    }
+    draftTitleRef.current = title
+    draftTopicsRef.current = loadedTopics
+    draftRef.current = loadedDraft
+    dirtyRef.current = false
+    setDraftTitle(title)
+    setDraftTopics(loadedTopics)
+    setDraft(loadedDraft)
     setEditorKey((key) => key + 1)
     setDirty(false)
     setSaveStatus('idle')
@@ -1071,6 +1126,8 @@ function AnnotationsWorkspace({
   }, [])
 
   const markDirty = () => {
+    editEpochRef.current += 1
+    dirtyRef.current = true
     setDirty(true)
     setSaveStatus('unsaved')
     scheduleSave()
@@ -1080,11 +1137,9 @@ function AnnotationsWorkspace({
     const text = next.markdown || next.text || ''
     const prev = draftRef.current?.markdown || draftRef.current?.text || ''
     if (text === prev) return
-    setDraft({
-      text,
-      markdown: text,
-      json: null
-    })
+    const loaded = { text, markdown: text, json: null }
+    draftRef.current = loaded
+    setDraft(loaded)
     markDirty()
   }
 
@@ -1096,16 +1151,19 @@ function AnnotationsWorkspace({
 
   const displayName = (item) => {
     if (selected && isRowActive(item) && dirty) {
-      const typed = draftTitle.trim()
-      if (typed) return typed.length > 72 ? `${typed.slice(0, 72)}…` : typed
+      return outlineNoteTitle({
+        title: draftTitle,
+        body: draft?.markdown || draft?.text || '',
+        timeSec: item.timeSec
+      })
     }
-    return noteTitle(item)
+    return outlineNoteTitle(item)
   }
 
   const handleSave = () => {
     if (!selected) return
     clearTimeout(saveTimerRef.current)
-    void persistNote(selected, currentSnapshot(), { silent: true })
+    void persistRef.current?.(selected, currentSnapshot(), { silent: true })
   }
 
   const handleExport = async () => {
@@ -1204,6 +1262,46 @@ function AnnotationsWorkspace({
     [libraryFindings, topics, titles]
   )
 
+  const graphMatches = useMemo(() => {
+    const q = foldSearch(graphQuery.trim())
+    if (!q) return []
+    return graph.nodes
+      .map((node) => {
+        const label = node.data?.fullLabel || node.data?.label || ''
+        const kind = node.data?.kindLabel || ''
+        if (!foldSearch(`${label} ${kind}`).includes(q)) return null
+        return { node, rank: foldSearch(label).startsWith(q) ? 0 : 1, label }
+      })
+      .filter(Boolean)
+      .sort(
+        (a, b) => a.rank - b.rank || a.label.localeCompare(b.label, 'es', { sensitivity: 'base' })
+      )
+      .slice(0, 8)
+      .map((item) => item.node)
+  }, [graph.nodes, graphQuery])
+
+  const focusGraphNode = (node) => {
+    if (!node) return
+    const kind = node.data?.kind
+    if (kind === 'topic') setShowTags(true)
+    if (kind === 'course') setShowCourses(true)
+    if (kind === 'file') setShowFiles(true)
+    if (kind === 'finding' && node.data?.orphan) setShowOrphans(true)
+    setGraphSelection(node.id)
+    setGraphFocus((current) => ({ id: node.id, token: current.token + 1 }))
+    setGraphQuery('')
+    setGraphQueryIndex(0)
+  }
+
+  const focusFindingInGraph = (finding) => {
+    const node = graph.nodes.find((item) => item.id === `finding:${finding?.id}`)
+    if (!node) {
+      toast.error('Esta nota aún no está en la gráfica')
+      return
+    }
+    focusGraphNode(node)
+  }
+
   const graphVisibility = useMemo(
     () =>
       visibleGraph({
@@ -1266,24 +1364,39 @@ function AnnotationsWorkspace({
 
   const tagViewTitle = topics.find((topic) => topic.id === tagViewId)?.title || 'Tag'
 
-  const handleDeleteTopic = async () => {
-    const topic = topics.find((item) => item.id === tagViewId)
+  const topicUsage = useMemo(() => {
+    const counts = new Map()
+    for (const finding of libraryFindings) {
+      for (const id of finding.topicIds || []) {
+        counts.set(id, (counts.get(id) || 0) + 1)
+      }
+    }
+    return counts
+  }, [libraryFindings])
+
+  const removeTopic = async (topic) => {
     if (!topic || !onDeleteTopic) return
+    const count = topicUsage.get(topic.id) || 0
+    const where = count === 1 ? '1 nota' : `${count} notas`
     const ok = await askConfirm({
       title: 'Borrar tag',
-      message: `¿Borrar «${topic.title}»? Se quita de todas las notas. Si una nota lo sigue escribiendo en el texto, vuelve al guardar.`,
+      message: count
+        ? `¿Borrar «${topic.title}»? Se quita de ${where} y de su texto.`
+        : `¿Borrar «${topic.title}»?`,
       confirmLabel: 'Borrar'
     })
     if (!ok) return
     try {
+      clearTimeout(saveTimerRef.current)
+      await persistPromiseRef.current
+      clearTimeout(saveTimerRef.current)
+      dropTopicFromDraft(topic)
       await onDeleteTopic(topic.id)
-      const key = topicKey(topic.title)
-      const remaining = (draftTopicsRef.current || []).filter((title) => topicKey(title) !== key)
-      if (remaining.length !== (draftTopicsRef.current || []).length) {
-        draftTopicsRef.current = remaining
-        setDraftTopics(remaining)
+      if (tagViewId === topic.id) setTagViewId(null)
+      if (dirtyRef.current && selectedRef.current) {
+        clearTimeout(saveTimerRef.current)
+        await persistRef.current?.(selectedRef.current, currentSnapshot(), { silent: true })
       }
-      setTagViewId(null)
       toast.success('Tag borrado')
     } catch (err) {
       toast.error(err.message || 'No se pudo borrar el tag')
@@ -1292,6 +1405,7 @@ function AnnotationsWorkspace({
 
   const openFinding = (finding) => {
     setTagViewId(null)
+    setTagsManageOpen(false)
     if (finding) onSelect?.(finding)
   }
 
@@ -1601,7 +1715,7 @@ function AnnotationsWorkspace({
                     <button
                       type="button"
                       className="btn btn--ghost"
-                      onClick={() => void handleDeleteTopic()}
+                      onClick={() => void removeTopic(topics.find((item) => item.id === tagViewId))}
                     >
                       Borrar tag
                     </button>
@@ -1634,6 +1748,50 @@ function AnnotationsWorkspace({
                 </ul>
               ) : (
                 <p className="annotations-tag-view__empty">Este tag todavía no tiene notas.</p>
+              )}
+            </div>
+          ) : tagsManageOpen ? (
+            <div className="annotations-tag-view">
+              <div className="annotations-tag-view__bar">
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => setTagsManageOpen(false)}
+                >
+                  Volver
+                </button>
+              </div>
+              <h2>Tags</h2>
+              <p className="annotations-tag-view__meta">
+                Quitar un tag lo saca de todas las notas y de su texto.
+              </p>
+              {topics.length ? (
+                <ul className="annotations-tags-manage">
+                  {topics.map((topic) => {
+                    const count = topicUsage.get(topic.id) || 0
+                    const useLabel =
+                      count === 0 ? 'Sin notas' : count === 1 ? '1 nota' : `${count} notas`
+                    return (
+                      <li key={topic.id}>
+                        <button type="button" onClick={() => setTagViewId(topic.id)}>
+                          <strong>{topic.title}</strong>
+                          <span>{useLabel}</span>
+                        </button>
+                        {onDeleteTopic ? (
+                          <button
+                            type="button"
+                            className="btn btn--ghost"
+                            onClick={() => void removeTopic(topic)}
+                          >
+                            Quitar
+                          </button>
+                        ) : null}
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
+                <p className="annotations-tag-view__empty">Todavía no hay tags.</p>
               )}
             </div>
           ) : !selected ? (
@@ -1688,6 +1846,15 @@ function AnnotationsWorkspace({
                       <ArrowUpRight size={20} />
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    className="header-icon"
+                    title="Enfocar en la gráfica"
+                    aria-label="Enfocar en la gráfica"
+                    onClick={() => focusFindingInGraph(selected)}
+                  >
+                    <Locate size={20} />
+                  </button>
                   <MoreMenu label="Más acciones de la anotación">
                     {(close) => (
                       <>
@@ -1830,11 +1997,10 @@ function AnnotationsWorkspace({
                         type="button"
                         className="annotations-topics__chip"
                         onClick={() => {
-                          const updated = (draftTopicsRef.current || []).filter(
-                            (item) => item !== title
+                          const topic = (topicsRef.current || []).find(
+                            (item) => topicKey(item.title) === topicKey(title)
                           )
-                          draftTopicsRef.current = updated
-                          setDraftTopics(updated)
+                          dropTopicFromDraft({ id: topic?.id, title })
                           markDirty()
                         }}
                         title="Quitar tema"
@@ -1940,6 +2106,20 @@ function AnnotationsWorkspace({
             <div className="annotations-graph-pane__tools" ref={graphSettingsRef}>
               <button
                 type="button"
+                className={`annotations-graph-pane__gear${tagsManageOpen ? ' is-open' : ''}`}
+                aria-label="Tags"
+                aria-pressed={tagsManageOpen}
+                title="Tags"
+                onClick={() => {
+                  setGraphSettingsOpen(false)
+                  setTagViewId(null)
+                  setTagsManageOpen((open) => !open)
+                }}
+              >
+                <Tags size={16} />
+              </button>
+              <button
+                type="button"
                 className={`annotations-graph-pane__gear${graphSettingsOpen ? ' is-open' : ''}`}
                 aria-label="Ajustes de la gráfica"
                 aria-expanded={graphSettingsOpen}
@@ -2025,6 +2205,14 @@ function AnnotationsWorkspace({
                   <label className="annotations-graph-pane__check">
                     <input
                       type="checkbox"
+                      checked={showTags}
+                      onChange={(event) => setShowTags(event.target.checked)}
+                    />
+                    Tags
+                  </label>
+                  <label className="annotations-graph-pane__check">
+                    <input
+                      type="checkbox"
                       checked={showCourses}
                       onChange={(event) => setShowCourses(event.target.checked)}
                     />
@@ -2062,14 +2250,93 @@ function AnnotationsWorkspace({
               ) : null}
             </div>
           </div>
+          <div className="annotations-graph-pane__finder">
+            <div className="search-field">
+              <svg
+                className="search-field__icon"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+              </svg>
+              <input
+                type="search"
+                value={graphQuery}
+                placeholder="Buscar y enfocar…"
+                aria-label="Buscar un nodo de la gráfica"
+                aria-autocomplete="list"
+                aria-controls="graph-node-results"
+                aria-expanded={Boolean(graphQuery.trim())}
+                onChange={(event) => {
+                  setGraphQuery(event.target.value)
+                  setGraphQueryIndex(0)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    setGraphQuery('')
+                    setGraphQueryIndex(0)
+                    return
+                  }
+                  if (!graphMatches.length) return
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault()
+                    setGraphQueryIndex((index) => (index + 1) % graphMatches.length)
+                  } else if (event.key === 'ArrowUp') {
+                    event.preventDefault()
+                    setGraphQueryIndex(
+                      (index) => (index - 1 + graphMatches.length) % graphMatches.length
+                    )
+                  } else if (event.key === 'Enter') {
+                    event.preventDefault()
+                    focusGraphNode(graphMatches[Math.min(graphQueryIndex, graphMatches.length - 1)])
+                  }
+                }}
+              />
+            </div>
+            {graphQuery.trim() ? (
+              <ul
+                id="graph-node-results"
+                className="annotations-graph-pane__results"
+                role="listbox"
+                aria-label="Nodos"
+                onMouseDown={(event) => event.preventDefault()}
+              >
+                {graphMatches.length ? (
+                  graphMatches.map((node, index) => {
+                    const active = index === Math.min(graphQueryIndex, graphMatches.length - 1)
+                    return (
+                      <li key={node.id} role="presentation">
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          className={active ? 'is-active' : undefined}
+                          onMouseEnter={() => setGraphQueryIndex(index)}
+                          onClick={() => focusGraphNode(node)}
+                        >
+                          <span>{node.data?.fullLabel || node.data?.label}</span>
+                          {node.data?.kindLabel ? <small>{node.data.kindLabel}</small> : null}
+                        </button>
+                      </li>
+                    )
+                  })
+                ) : (
+                  <li className="annotations-graph-pane__results-empty">Ningún nodo.</li>
+                )}
+              </ul>
+            ) : null}
+          </div>
           {graph.nodes.length ? (
             <ul className="knowledge-graph__legend">
               <li>
-                <i data-kind="topic" /> Tag
-              </li>
-              <li>
                 <i data-kind="finding" /> Nota
               </li>
+              {showTags ? (
+                <li>
+                  <i data-kind="topic" /> Tag
+                </li>
+              ) : null}
               {showFiles ? (
                 <li>
                   <i data-kind="file" /> Archivo
@@ -2093,9 +2360,12 @@ function AnnotationsWorkspace({
             labelZoom={labelZoom}
             showCourses={showCourses}
             showFiles={showFiles}
+            showTags={showTags}
             showOrphans={showOrphans}
             highlightIds={graphVisibility.highlightIds}
             selectedId={graphSelection}
+            focusId={graphFocus.id}
+            focusToken={graphFocus.token}
             truncated={graph.truncated || graphVisibility.truncated}
             resetToken={graphReset}
             onNodeClick={handleGraphNode}

@@ -6764,6 +6764,17 @@ kbd {
   gap: 0.45rem;
 }
 
+.annotations-tags-manage li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.annotations-tags-manage li > button:not(.btn) {
+  flex: 1;
+  min-width: 0;
+}
+
 .annotations-tag-view button[type='button']:not(.btn) {
   display: flex;
   flex-direction: column;
@@ -8247,6 +8258,9 @@ button.annotations-doc__save-status {
 .annotations-graph-pane__tools {
   position: static;
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
 }
 
 .annotations-graph-pane__gear {
@@ -8325,6 +8339,85 @@ button.annotations-doc__save-status {
   align-self: flex-start;
   padding: 0.2rem 0.55rem;
   font-size: 0.75rem;
+}
+
+.annotations-graph-pane__finder {
+  position: relative;
+  padding: 0 0.75rem 0.35rem;
+}
+
+.annotations-graph-pane__finder .search-field {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+.annotations-graph-pane__finder .search-field input {
+  height: 2rem;
+  padding: 0 0.85rem 0 2.15rem;
+  font-size: 0.82rem;
+}
+
+.annotations-graph-pane__finder .search-field__icon {
+  left: 0.7rem;
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.annotations-graph-pane__results {
+  position: absolute;
+  z-index: 5;
+  left: 0.75rem;
+  right: 0.75rem;
+  top: calc(100% - 0.2rem);
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  max-height: 14rem;
+  overflow: auto;
+  border: var(--border-thick);
+  border-radius: var(--radius-md);
+  background: var(--clr-surface);
+  box-shadow: var(--shadow-lift);
+}
+
+.annotations-graph-pane__results button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--clr-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.annotations-graph-pane__results button span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotations-graph-pane__results button small {
+  color: var(--clr-ink-soft);
+  font-size: 0.68rem;
+}
+
+.annotations-graph-pane__results button.is-active,
+.annotations-graph-pane__results button:hover {
+  background: var(--clr-cream-deep);
+}
+
+.annotations-graph-pane__results-empty {
+  padding: 0.4rem 0.5rem;
+  color: var(--clr-ink-soft);
+  font-size: 0.78rem;
 }
 
 .knowledge-graph__legend {

@@ -14,6 +14,7 @@ import {
   findingsForCourse,
   normalizeAnchor,
   hashtagTitlesFromBody,
+  stripTopicFromMarkdown,
   clearDefaultNoteTitles,
   isDefaultNoteTitle,
   normalizeTopicTitle,
@@ -980,9 +981,13 @@ export function readTopic(id) {
 
 export function deleteTopic(topicId) {
   const store = readStore()
-  store.topics = (store.topics || []).filter((topic) => topic.id !== topicId)
+  const topic = (store.topics || []).find((item) => item.id === topicId) || null
+  store.topics = (store.topics || []).filter((item) => item.id !== topicId)
   for (const finding of store.findings || []) {
     finding.topicIds = (finding.topicIds || []).filter((id) => id !== topicId)
+    if (topic && finding.body) {
+      finding.body = stripTopicFromMarkdown(finding.body, { id: topic.id, title: topic.title })
+    }
   }
   writeStore(store)
   return listTopics()

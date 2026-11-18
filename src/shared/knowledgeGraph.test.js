@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   hashtagTitlesFromBody,
+  stripTopicFromMarkdown,
   buildGlobalGraph,
   clampDepth,
   clampLabelZoom,
@@ -12,6 +13,7 @@ import {
   clearDefaultNoteTitles,
   noteDisplayTitles,
   noteTextTitle,
+  outlineNoteTitle,
   playbackMarkLabel,
   plainNoteText,
   parseMentions,
@@ -32,6 +34,18 @@ describe('knowledge graph', () => {
     assert.deepEqual(hashtagTitlesFromBody('Idea #appeal and #appeal again\n# Heading\n`#skip`'), [
       'appeal'
     ])
+  })
+
+  it('strips a used tag from note text without touching headings or code', () => {
+    const stripped = stripTopicFromMarkdown(
+      'Use #Tips and #Tipsy.\n# Heading\n`#Tips`\n```\n#Tips\n```\nSee [[topic|Tips|t1]] and @[topic|Tips](t1).',
+      { id: 't1', title: 'Tips' }
+    )
+    assert.equal(
+      stripped,
+      'Use and #Tipsy.\n# Heading\n`#Tips`\n```\n#Tips\n```\nSee and.'
+    )
+    assert.deepEqual(hashtagTitlesFromBody(stripped), ['Tipsy'])
   })
 
   it('turns a course note into a finding with one anchor', () => {
@@ -385,6 +399,20 @@ describe('knowledge graph', () => {
     })
     const note = graph.nodes.find((node) => node.data.kind === 'finding')
     assert.equal(note.data.fullLabel, 'Opening line')
+  })
+
+  it('names an empty bookmark by its clock', () => {
+    const image = '![Captura](course-media://note/?file=shot.jpg)'
+    assert.equal(outlineNoteTitle({ title: '', body: '', timeSec: 84 }), '1:24')
+    assert.equal(outlineNoteTitle({ title: 'Sin título', body: '', timeSec: 3661 }), '1:01:01')
+    assert.equal(outlineNoteTitle({ title: 'new note', body: ` \n${image}`, timeSec: 4 }), '0:04')
+    assert.equal(outlineNoteTitle({ title: '', body: 'First line', timeSec: 84 }), 'First line')
+    assert.equal(outlineNoteTitle({ title: 'Kept', body: '', timeSec: 84 }), 'Kept')
+    assert.equal(
+      outlineNoteTitle({ title: 'Sin título', body: 'Desde el cuerpo', timeSec: 84 }),
+      'Desde el cuerpo'
+    )
+    assert.equal(outlineNoteTitle({ title: 'Sin título', body: '' }), '')
   })
 
   it('clears placeholder titles and keeps a clock that lived only in the title', () => {

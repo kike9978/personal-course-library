@@ -91,6 +91,57 @@ export function hashtagTitlesFromBody(markdown) {
   return titles
 }
 
+const HASHTAG_TOKEN = /^[\p{L}\p{N}_]*\p{L}[\p{L}\p{N}_]*$/u
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function stripTopicFromPlain(text, { id, title }) {
+  let next = String(text || '')
+  if (id) {
+    const idEsc = escapeRegExp(id)
+    next = next.replace(new RegExp(`\\[\\[topic\\|[^\\]|]*\\|${idEsc}\\]\\]`, 'g'), '')
+    next = next.replace(new RegExp(`@\\[topic\\|[^\\]]*\\]\\(${idEsc}\\)`, 'g'), '')
+  }
+  const normalized = normalizeTopicTitle(title)
+  if (normalized) {
+    const titleEsc = escapeRegExp(normalized)
+    next = next.replace(new RegExp(`\\[\\[topic\\|${titleEsc}\\|[^\\]]+\\]\\]`, 'gi'), '')
+    next = next.replace(new RegExp(`@\\[topic\\|${titleEsc}\\]\\([^)]+\\)`, 'gi'), '')
+    if (HASHTAG_TOKEN.test(normalized)) {
+      const token = escapeRegExp(normalized)
+      next = next.replace(
+        new RegExp(`(^|[^\\p{L}\\p{N}_])#${token}(?![\\p{L}\\p{N}_])`, 'giu'),
+        (match, lead, offset, whole) => {
+          if (!lead) return ''
+          const after = whole[offset + match.length] || ''
+          if (/\s/.test(lead) && /[\s.,;:!?]/.test(after)) return ''
+          return lead
+        }
+      )
+    }
+  }
+  return next.replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+([.,;:!?])/g, '$1')
+}
+
+/** Remove one tag from markdown: #title, [[topic|title|id]], and the legacy mention. */
+export function stripTopicFromMarkdown(markdown, topic = {}) {
+  const source = String(markdown || '')
+  const parts = source.split(/(```[\s\S]*?```)/g)
+  return parts
+    .map((part, index) => {
+      if (index % 2 === 1) return part
+      return part
+        .split(/(`[^`\n]*`)/g)
+        .map((chunk, chunkIndex) =>
+          chunkIndex % 2 === 1 ? chunk : stripTopicFromPlain(chunk, topic)
+        )
+        .join('')
+    })
+    .join('')
+}
+
 function courseFolderName(coursePath) {
   return String(coursePath || '').split(/[\\/]/).filter(Boolean).pop() || ''
 }
@@ -320,6 +371,21 @@ export function noteTextTitle(note, max = 72) {
   if (!text) return ''
   if (!max || text.length <= max) return text
   return `${text.slice(0, max - 1)}…`
+}
+
+/** Placeholder Notion uses when a note has no name of its own. */
+const UNTITLED_PLACEHOLDER_RE = /^sin t[ií]tulo$/i
+
+/**
+ * Name shown in the outline. A typed title or the words in the body win.
+ * An empty bookmark is named by its video clock instead of "Sin título".
+ */
+export function outlineNoteTitle(note, max = 72) {
+  const stored = String(note?.title || '').trim()
+  const source = UNTITLED_PLACEHOLDER_RE.test(stored) ? { ...note, title: '' } : note
+  const text = noteTextTitle(source, max)
+  if (text) return text
+  return formatNoteTimestamp(note?.timeSec)
 }
 
 /** Mark label: the note's name, otherwise the caller's fallback. */

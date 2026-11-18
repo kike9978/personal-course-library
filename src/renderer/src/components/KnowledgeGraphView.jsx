@@ -67,9 +67,12 @@ function KnowledgeGraphView({
   labelZoom = LABEL_ZOOM,
   showCourses = true,
   showFiles = true,
+  showTags = true,
   showOrphans = true,
   highlightIds = null,
   selectedId = null,
+  focusId = null,
+  focusToken = 0,
   truncated = false,
   resetToken = 0,
   onNodeClick,
@@ -88,6 +91,8 @@ function KnowledgeGraphView({
   const cameraRef = useRef({ x: 0, y: 0, k: 1 })
   const dragRef = useRef(null)
   const clickTimerRef = useRef(0)
+  const focusAnimRef = useRef(0)
+  const focusedTokenRef = useRef(0)
   const simRef = useRef(null)
   const allowFitRef = useRef(true)
   const animatingRef = useRef(false)
@@ -128,9 +133,45 @@ function KnowledgeGraphView({
     svgRef.current?.classList.toggle('is-detailed', k >= labelZoomRef.current)
   }
 
+  const cancelFocusAnim = () => {
+    if (focusAnimRef.current) cancelAnimationFrame(focusAnimRef.current)
+    focusAnimRef.current = 0
+  }
+
+  const focusCameraOn = (id) => {
+    const point = positionsRef.current.get(id)
+    if (!point) return false
+    allowFitRef.current = false
+    cancelFocusAnim()
+    const { width, height } = sizeRef.current
+    const start = { ...cameraRef.current }
+    const k = Math.min(2.2, Math.max(1.25, start.k))
+    const target = {
+      k,
+      x: width / 2 - point.x * k,
+      y: height / 2 - point.y * k
+    }
+    const started = performance.now()
+    const step = (now) => {
+      const t = Math.min(1, (now - started) / 280)
+      const eased = 1 - (1 - t) ** 3
+      cameraRef.current = {
+        k: start.k + (target.k - start.k) * eased,
+        x: start.x + (target.x - start.x) * eased,
+        y: start.y + (target.y - start.y) * eased
+      }
+      applyCamera()
+      focusAnimRef.current = t < 1 ? requestAnimationFrame(step) : 0
+    }
+    focusAnimRef.current = requestAnimationFrame(step)
+    return true
+  }
+
   useEffect(() => {
     svgRef.current?.classList.toggle('is-detailed', cameraRef.current.k >= labelZoomRef.current)
   }, [labelZoom])
+
+  useEffect(() => () => cancelFocusAnim(), [])
 
   const paintGeometry = () => {
     const selected = selectedRef.current
@@ -275,6 +316,14 @@ function KnowledgeGraphView({
   }, [layoutKey])
 
   useEffect(() => {
+    if (!focusToken || !focusId) return undefined
+    if (focusedTokenRef.current === focusToken && !animatingRef.current) return undefined
+    if (!focusCameraOn(focusId)) return undefined
+    if (!animatingRef.current) focusedTokenRef.current = focusToken
+    return undefined
+  }, [focusToken, focusId, layoutEpoch])
+
+  useEffect(() => {
     if (!resetToken) return undefined
     allowFitRef.current = true
     animatingRef.current = false
@@ -320,6 +369,7 @@ function KnowledgeGraphView({
     if (!el) return undefined
     const wheel = (event) => {
       event.preventDefault()
+      cancelFocusAnim()
       const rect = el.getBoundingClientRect()
       const prev = cameraRef.current
       allowFitRef.current = false
@@ -380,6 +430,7 @@ function KnowledgeGraphView({
       if (Math.hypot(dx, dy) > 3) {
         drag.moved = true
         allowFitRef.current = false
+        cancelFocusAnim()
       }
       cameraRef.current = {
         ...drag.origin.cam,
@@ -393,6 +444,7 @@ function KnowledgeGraphView({
     if (!drag.moved) {
       drag.moved = true
       allowFitRef.current = false
+      cancelFocusAnim()
       simRef.current?.simulation?.alphaTarget(0.35).restart()
     }
     const point = toGraph(event)
@@ -453,23 +505,35 @@ function KnowledgeGraphView({
 
   const highlightSet = highlightIds ? new Set(highlightIds) : null
   const hiddenKind = (node) => {
+    if (node.id === selectedId || node.id === focusId) return false
     if (viewMode !== 'topics') return false
     const kind = node.data?.kind
     if (kind === 'course' && !showCourses) return true
     if (kind === 'file' && !showFiles) return true
+    if (kind === 'topic' && !showTags) return true
     if (node.data?.orphan && !showOrphans) return true
     return false
   }
   const kindShown = nodes.filter((node) => !hiddenKind(node))
   const kindShownIds = new Set(kindShown.map((node) => node.id))
+  const otherIdOf = (edge, id) =>
+    edge.source === id ? edge.target : edge.target === id ? edge.source : null
   const linkedToShown = (node) =>
     edges.some((edge) => {
-      const otherId = edge.source === node.id ? edge.target : edge.target === node.id ? edge.source : null
+      const otherId = otherIdOf(edge, node.id)
       return otherId && kindShownIds.has(otherId)
     })
+  const linkedToTopic = (node) =>
+    edges.some((edge) => {
+      const otherId = otherIdOf(edge, node.id)
+      if (!otherId) return false
+      return nodes.some((item) => item.id === otherId && item.data?.kind === 'topic')
+    })
   const shownNodes = kindShown.filter((node) => {
+    if (node.id === selectedId || node.id === focusId) return true
     if (viewMode !== 'topics' || node.data?.kind !== 'finding') return true
     if (linkedToShown(node)) return true
+    if (!showTags && linkedToTopic(node)) return true
     return showOrphans && node.data?.orphan
   })
   const shownIds = new Set(shownNodes.map((node) => node.id))
