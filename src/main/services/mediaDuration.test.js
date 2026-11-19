@@ -3,11 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import {
-  applyLessonDurations,
-  clearDurationMemoryCache,
-  probeDuration
-} from './mediaDuration.js'
+import { applyLessonDurations, clearDurationMemoryCache, probeDuration } from './mediaDuration.js'
 
 function box(type, payload) {
   const head = Buffer.alloc(8)
@@ -43,6 +39,37 @@ const ID = {
   cluster: Buffer.from([0x1f, 0x43, 0xb6, 0x75])
 }
 
+function writePcr(buf, offset, base) {
+  const value = BigInt(base)
+  buf[offset] = Number((value >> 25n) & 0xffn)
+  buf[offset + 1] = Number((value >> 17n) & 0xffn)
+  buf[offset + 2] = Number((value >> 9n) & 0xffn)
+  buf[offset + 3] = Number((value >> 1n) & 0xffn)
+  buf[offset + 4] = Number(((value & 1n) << 7n) | 0x7en)
+  buf[offset + 5] = 0
+}
+
+function pcrPacket(base) {
+  const pkt = Buffer.alloc(188, 0xff)
+  pkt[0] = 0x47
+  pkt[1] = 0x00
+  pkt[2] = 0x00
+  pkt[3] = 0x20
+  pkt[4] = 183
+  pkt[5] = 0x10
+  writePcr(pkt, 6, base)
+  return pkt
+}
+
+function nullTsPacket() {
+  const pkt = Buffer.alloc(188, 0xff)
+  pkt[0] = 0x47
+  pkt[1] = 0x1f
+  pkt[2] = 0xff
+  pkt[3] = 0x10
+  return pkt
+}
+
 function writeTemp(name, body) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pcl-duration-'))
   const file = path.join(dir, name)
@@ -67,16 +94,33 @@ describe('probeDuration', () => {
     const duration = Buffer.alloc(8)
     duration.writeDoubleBE(90_000)
     const info = Buffer.concat([element(ID.scale, scale), element(ID.duration, duration)])
-    const segment = Buffer.concat([
-      element(ID.info, info),
-      element(ID.cluster, Buffer.alloc(4096))
-    ])
+    const segment = Buffer.concat([element(ID.info, info), element(ID.cluster, Buffer.alloc(4096))])
     const body = Buffer.concat([
       element(ID.ebml, Buffer.from('matroska')),
       element(ID.segment, segment)
     ])
     const { file } = writeTemp('clip.mkv', body)
     assert.equal(await probeDuration(file), 90)
+  })
+
+  it('reads a transport stream length from the first and last PCR', async () => {
+    const { file } = writeTemp(
+      'clip.ts',
+      Buffer.concat([pcrPacket(0), nullTsPacket(), pcrPacket(125 * 90000)])
+    )
+    assert.equal(await probeDuration(file), 125)
+  })
+
+  it('reads a 192-byte transport stream length', async () => {
+    const body = Buffer.concat(
+      [pcrPacket(0), nullTsPacket(), pcrPacket(2 * 90000)].map((packet) => {
+        const wrapped = Buffer.alloc(192)
+        packet.copy(wrapped, 4)
+        return wrapped
+      })
+    )
+    const { file } = writeTemp('clip.m2ts', body)
+    assert.equal(await probeDuration(file), 2)
   })
 
   it('reads an avi length from the avih header', async () => {
@@ -98,7 +142,13 @@ describe('probeDuration', () => {
     const data = Buffer.alloc(8)
     data.write('data', 0, 4, 'ascii')
     data.writeUInt32LE(176400, 4)
-    const riff = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVE'), fmt, data])
+    const riff = Buffer.concat([
+      Buffer.from('RIFF'),
+      Buffer.alloc(4),
+      Buffer.from('WAVE'),
+      fmt,
+      data
+    ])
     const { file } = writeTemp('voice.wav', riff)
     assert.equal(await probeDuration(file), 1)
   })

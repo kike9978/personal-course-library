@@ -1,8 +1,9 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { countSections, flattenLessons } from '../../shared/courseTree.js'
+import { TS_EXTS } from './tsIndex.js'
 
-const VIDEO_EXTS = new Set(['.mp4', '.mkv', '.webm', '.mov', '.avi', '.m4v'])
+const VIDEO_EXTS = new Set(['.mp4', '.mkv', '.webm', '.mov', '.avi', '.m4v', ...TS_EXTS])
 const AUDIO_EXTS = new Set(['.mp3', '.wav', '.aac', '.m4a', '.flac', '.ogg'])
 const DOC_EXTS = new Set(['.pdf', '.html', '.htm', '.txt', '.md', '.rtf'])
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'])
@@ -94,20 +95,199 @@ function makeLesson(courseRoot, absolutePath, kind, sectionId) {
   }
 }
 
-/** Trailing language tag: `.en`, `.eng`, `.en-US`, `.pt_BR`, `.es-419`, `.zh-Hans`. */
-const LANG_SUFFIX_RE = /\.([a-z]{2,3})(?:[-_][a-z]{4})?(?:[-_](?:[a-z]{2}|\d{3}))?$/
+/** Trailing language tag: `.en`, `_en`, `-ko`, `.en-US`, `.pt_BR`, `.es-419`, `.zh-Hans`. */
+const LANG_SUFFIX_RE = /[._-]([a-z]{2,3}(?:[-_][a-z]{4})?(?:[-_](?:[a-z]{2}|\d{3}))?)$/i
+
+const PRIMARY_LANG_NAMES = {
+  ar: 'Arabic',
+  cs: 'Czech',
+  da: 'Danish',
+  de: 'German',
+  el: 'Greek',
+  en: 'English',
+  es: 'Spanish',
+  fi: 'Finnish',
+  fr: 'French',
+  he: 'Hebrew',
+  hi: 'Hindi',
+  hu: 'Hungarian',
+  id: 'Indonesian',
+  it: 'Italian',
+  ja: 'Japanese',
+  ko: 'Korean',
+  nl: 'Dutch',
+  no: 'Norwegian',
+  pl: 'Polish',
+  pt: 'Portuguese',
+  ro: 'Romanian',
+  ru: 'Russian',
+  sv: 'Swedish',
+  th: 'Thai',
+  tr: 'Turkish',
+  uk: 'Ukrainian',
+  vi: 'Vietnamese',
+  zh: 'Chinese'
+}
+
+const FOLDER_LANG_ALIASES = {
+  arabic: 'ar',
+  chinese: 'zh',
+  czech: 'cs',
+  danish: 'da',
+  dutch: 'nl',
+  english: 'en',
+  espanol: 'es',
+  español: 'es',
+  finnish: 'fi',
+  french: 'fr',
+  german: 'de',
+  greek: 'el',
+  hebrew: 'he',
+  hindi: 'hi',
+  hungarian: 'hu',
+  indonesian: 'id',
+  italian: 'it',
+  japanese: 'ja',
+  korean: 'ko',
+  korea: 'ko',
+  norwegian: 'no',
+  polish: 'pl',
+  portuguese: 'pt',
+  portugues: 'pt',
+  português: 'pt',
+  romanian: 'ro',
+  russian: 'ru',
+  spanish: 'es',
+  swedish: 'sv',
+  thai: 'th',
+  turkish: 'tr',
+  ukrainian: 'uk',
+  vietnamese: 'vi'
+}
+
+const GENERIC_SUBTITLE_DIR = /^(subtitles?|subs|captions|closed captions)$/i
 
 function fileBase(relativePath) {
   return path.basename(relativePath, path.extname(relativePath)).toLowerCase()
 }
 
-function subtitleLesson(byBase, relativePath) {
+function canonicalLang(raw) {
+  const parts = String(raw || '')
+    .split(/[-_]/)
+    .filter(Boolean)
+  if (!parts.length || !/^[a-z]{2,3}$/i.test(parts[0])) return ''
+  const primary = parts[0].toLowerCase()
+  const rest = []
+  for (const part of parts.slice(1)) {
+    if (/^\d{3}$/.test(part)) rest.push(part)
+    else if (/^[a-z]{4}$/i.test(part)) {
+      rest.push(part[0].toUpperCase() + part.slice(1).toLowerCase())
+    } else if (/^[a-z]{2}$/i.test(part)) rest.push(part.toUpperCase())
+    else return ''
+  }
+  return [primary, ...rest].join('-')
+}
+
+function langLabel(code) {
+  const primary = String(code || '').split('-')[0]
+  const name = PRIMARY_LANG_NAMES[primary]
+  if (!name) return code
+  return code === primary ? name : `${name} (${code})`
+}
+
+function langFromStem(base) {
+  const match = String(base).match(LANG_SUFFIX_RE)
+  if (!match) return null
+  const code = canonicalLang(match[1])
+  if (!code) return null
+  const stem = base.slice(0, base.length - match[0].length)
+  if (!stem) return null
+  return { code, stem, label: langLabel(code) }
+}
+
+function langFromFolderName(name) {
+  const trimmed = String(name || '').trim()
+  if (/^[a-z]{2,3}(?:[-_][a-zA-Z0-9]+)*$/i.test(trimmed)) {
+    const code = canonicalLang(trimmed)
+    if (code && PRIMARY_LANG_NAMES[code.split('-')[0]]) return { code, label: langLabel(code) }
+  }
+  const words = trimmed
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-zA-Z\u00C0-\u024f]+/g, ' ')
+    .trim()
+    .toLowerCase()
+  const alias = FOLDER_LANG_ALIASES[words.split(/\s+/)[0]]
+  if (!alias) return null
+  return { code: alias, label: trimmed }
+}
+
+function langFromPath(relativePath) {
+  const parts = String(relativePath || '')
+    .split('/')
+    .slice(0, -1)
+  for (let i = parts.length - 1; i >= 0; i -= 1) {
+    if (GENERIC_SUBTITLE_DIR.test(parts[i])) continue
+    const found = langFromFolderName(parts[i])
+    if (found) return found
+  }
+  return null
+}
+
+function describeSubtitle(resource) {
+  if (resource.kind !== 'subtitle') return resource
+  const fromFile = langFromStem(fileBase(resource.relativePath))
+  const fromFolder = langFromPath(resource.relativePath)
+  const lang = fromFile?.code || fromFolder?.code || ''
+  const samePrimary =
+    fromFile && fromFolder && fromFile.code.split('-')[0] === fromFolder.code.split('-')[0]
+  const label =
+    samePrimary || !fromFile ? fromFolder?.label || fromFile?.label || '' : fromFile.label
+  if (lang) resource.lang = lang
+  if (label) resource.label = label
+  return resource
+}
+
+function leadingLessonNumber(base) {
+  const match = String(base).match(/^(\d+)(?=$|[.\-_\s])/)
+  if (!match) return null
+  const value = Number(match[1])
+  return Number.isSafeInteger(value) ? value : null
+}
+
+function isSubtitleBucket(relativePath) {
+  return String(relativePath || '')
+    .split('/')
+    .slice(0, -1)
+    .some((part) => GENERIC_SUBTITLE_DIR.test(part))
+}
+
+/**
+ * A bare index (`01`, `01_en`) matches the only lesson with that leading number.
+ * Inside a Subtitles folder, a repeated or missing number falls back to lesson order.
+ */
+function numberedLesson(lessons, stem, relativePath) {
+  if (!/^\d+$/.test(stem)) return undefined
+  const target = Number(stem)
+  const matches = lessons.filter(
+    (lesson) => leadingLessonNumber(fileBase(lesson.relativePath)) === target
+  )
+  if (matches.length === 1) return matches[0]
+  if (!isSubtitleBucket(relativePath)) return undefined
+  if (target >= 1 && target <= lessons.length) return lessons[target - 1]
+  return undefined
+}
+
+function subtitleLesson(byBase, lessons, relativePath) {
   const base = fileBase(relativePath)
   const exact = byBase.get(base)
   if (exact) return exact
-  const stripped = base.replace(LANG_SUFFIX_RE, '')
-  if (stripped !== base) return byBase.get(stripped)
-  return undefined
+  const fromFile = langFromStem(base)
+  const stem = fromFile?.stem || base
+  if (fromFile?.stem) {
+    const stripped = byBase.get(fromFile.stem)
+    if (stripped) return stripped
+  }
+  return numberedLesson(lessons, stem, relativePath)
 }
 
 function attachSidecars(lessons, resourceFiles) {
@@ -120,12 +300,12 @@ function attachSidecars(lessons, resourceFiles) {
   for (const res of resourceFiles) {
     const lesson =
       res.kind === 'subtitle'
-        ? subtitleLesson(byBase, res.relativePath)
+        ? subtitleLesson(byBase, lessons, res.relativePath)
         : byBase.get(fileBase(res.relativePath))
     if (lesson && (res.kind === 'subtitle' || res.kind === 'doc' || res.kind === 'image')) {
-      lesson.resources.push(res)
+      lesson.resources.push(describeSubtitle(res))
     } else {
-      leftovers.push(res)
+      leftovers.push(describeSubtitle(res))
     }
   }
   return leftovers

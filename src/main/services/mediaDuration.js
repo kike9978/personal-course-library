@@ -1,5 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
+import { TS_EXTS, detectPacketSize, pcrBaseAt, tsClockDelta } from './tsIndex.js'
 
 const CONCURRENCY = 4
 const CACHE_VERSION = 1
@@ -71,6 +72,7 @@ export async function probeDuration(absolute, knownSize) {
     if (!size) return null
     if (ISO_EXTS.has(ext)) return await probeIsobmff(fh, size)
     if (MATROSKA_EXTS.has(ext)) return await probeMatroska(fh, size)
+    if (TS_EXTS.has(ext)) return await probeTs(fh, size)
     if (ext === '.avi') return await probeAvi(fh, size)
     if (ext === '.wav') return await probeWav(fh, size)
     if (ext === '.flac') return await probeFlac(fh, size)
@@ -173,6 +175,38 @@ async function walkMatroska(fh, start, end, parent, found, budget) {
   }
 }
 
+async function probeTs(fh, fileSize) {
+  const headLen = Math.min(fileSize, 256 * 1024)
+  const head = await readExact(fh, 0, headLen)
+  if (!head) return null
+  const packetSize = detectPacketSize(head)
+  if (!packetSize) return null
+  const first = scanPcr(head, packetSize, 'first')
+  if (first == null) return null
+  const tailLen = Math.min(fileSize, 256 * 1024)
+  let tailOffset = fileSize - tailLen
+  tailOffset -= tailOffset % packetSize
+  const tail = tailOffset === 0 ? head : await readExact(fh, tailOffset, fileSize - tailOffset)
+  if (!tail) return null
+  const last = scanPcr(tail, packetSize, 'last')
+  if (last == null || last === first) return null
+  const ticks = tsClockDelta(last, first)
+  if (ticks <= 0) return null
+  return ticks / 90000
+}
+
+function scanPcr(buf, packetSize, which) {
+  const sync = packetSize === 192 ? 4 : 0
+  let found = null
+  for (let i = 0; i + packetSize <= buf.length; i += packetSize) {
+    const pcr = pcrBaseAt(buf.subarray(i, i + packetSize), sync)
+    if (pcr == null) continue
+    found = pcr
+    if (which === 'first') return found
+  }
+  return found
+}
+
 async function probeAvi(fh, fileSize) {
   const len = Math.min(fileSize, 256 * 1024)
   const buf = await readExact(fh, 0, len)
@@ -187,7 +221,11 @@ async function probeAvi(fh, fileSize) {
 
 async function probeWav(fh, fileSize) {
   const header = await readExact(fh, 0, Math.min(fileSize, 12))
-  if (!header || header.toString('ascii', 0, 4) !== 'RIFF' || header.toString('ascii', 8, 12) !== 'WAVE') {
+  if (
+    !header ||
+    header.toString('ascii', 0, 4) !== 'RIFF' ||
+    header.toString('ascii', 8, 12) !== 'WAVE'
+  ) {
     return null
   }
   let offset = 12
@@ -240,10 +278,7 @@ async function probeMp3(fh, fileSize) {
   let offset = 0
   if (buf.toString('ascii', 0, 3) === 'ID3' && buf.length >= 10) {
     const tagSize =
-      ((buf[6] & 0x7f) << 21) |
-      ((buf[7] & 0x7f) << 14) |
-      ((buf[8] & 0x7f) << 7) |
-      (buf[9] & 0x7f)
+      ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) | ((buf[8] & 0x7f) << 7) | (buf[9] & 0x7f)
     offset = 10 + tagSize
   }
   const headerAt = findMp3Frame(buf, offset)

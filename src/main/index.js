@@ -33,6 +33,7 @@ import {
   saveCourseCoverBuffer
 } from './services/coverSearch.js'
 import { scanCourse, resolveCourseFile, getLessonMime, srtToWebVtt } from './services/courseScan.js'
+import { TS_EXTS, loadTsIndex, openTsSegment, renderPlaylist } from './services/tsIndex.js'
 import { getLessonMediaUrl } from './services/mediaUrls.js'
 import {
   resolveNoteAttachmentPath,
@@ -403,6 +404,40 @@ function registerCourseMediaProtocol() {
               'Cache-Control': 'no-cache'
             })
           })
+        }
+        if (TS_EXTS.has(ext) && (url.searchParams.has('hls') || url.searchParams.has('tsSeg'))) {
+          try {
+            const index = await loadTsIndex(
+              absolute,
+              join(app.getPath('userData'), 'ts-index.json')
+            )
+            if (url.searchParams.has('tsSeg')) {
+              const part = openTsSegment(absolute, index, Number(url.searchParams.get('tsSeg')))
+              if (!part) return new Response('Not Found', { status: 404 })
+              return new Response(nodeStreamToWeb(part.stream), {
+                status: 200,
+                headers: withCors({
+                  'Content-Type': 'video/mp2t',
+                  'Content-Length': String(part.length),
+                  'Cache-Control': 'no-cache'
+                })
+              })
+            }
+            const playlist = renderPlaylist(index, courseDir, decodeURIComponent(file))
+            return new Response(playlist, {
+              status: 200,
+              headers: withCors({
+                'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                'Cache-Control': 'no-cache'
+              })
+            })
+          } catch (error) {
+            console.error('Failed to prepare transport stream', error)
+            return new Response('Unsupported transport stream', {
+              status: 415,
+              headers: withCors({ 'Content-Type': 'text/plain; charset=utf-8' })
+            })
+          }
         }
         const mime = getLessonMime(absolute)
         return serveFileWithRanges(request, absolute, mime)

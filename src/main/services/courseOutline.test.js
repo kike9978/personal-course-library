@@ -109,6 +109,57 @@ describe('scanCourseAt', () => {
     fs.rmSync(root, { recursive: true, force: true })
   })
 
+  it('attaches numbered language packs and keeps folder labels', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pcl-outline-'))
+    write(root, '01. Chapter/01. Intro.mp4', 'video')
+    write(root, '02. Chapter/01. Next.mp4', 'video')
+    write(root, '03. Chapter/03. Clip.mp4', 'video')
+    write(root, '04. Outro/04.mp4', 'video')
+    write(root, '04. Outro/04-ko.srt', '1')
+    write(root, 'Subtitles/Korean (Original)/01. Intro.srt', '1')
+    write(root, 'Subtitles/Korean (Original)/01. Next.srt', '1')
+    write(root, 'Subtitles/Korean (Original)/03.srt', '1')
+    write(root, 'Subtitles/English (Machine Translated)/01_en.srt', '1')
+    write(root, 'Subtitles/English (Machine Translated)/02_en.srt', '1')
+    write(root, 'Subtitles/English (Machine Translated)/03_en.srt', '1')
+
+    const tree = await scanCourseAt(root, 'Coloso')
+    const byPath = new Map(tree.flatLessons.map((lesson) => [lesson.relativePath, lesson]))
+
+    const intro = byPath.get('01. Chapter/01. Intro.mp4').resources
+    assert.deepEqual(
+      intro.map((res) => [res.name, res.lang, res.label]).sort(),
+      [
+        ['01. Intro.srt', 'ko', 'Korean (Original)'],
+        ['01_en.srt', 'en', 'English (Machine Translated)']
+      ]
+    )
+
+    const next = byPath.get('02. Chapter/01. Next.mp4').resources
+    assert.deepEqual(
+      next.map((res) => [res.name, res.lang, res.label]).sort(),
+      [
+        ['01. Next.srt', 'ko', 'Korean (Original)'],
+        ['02_en.srt', 'en', 'English (Machine Translated)']
+      ]
+    )
+
+    const clip = byPath.get('03. Chapter/03. Clip.mp4').resources
+    assert.deepEqual(
+      clip.map((res) => res.name).sort(),
+      ['03.srt', '03_en.srt']
+    )
+    assert.equal(clip.find((res) => res.name === '03.srt').lang, 'ko')
+    assert.equal(clip.find((res) => res.name === '03_en.srt').label, 'English (Machine Translated)')
+
+    assert.deepEqual(
+      byPath.get('04. Outro/04.mp4').resources.map((res) => [res.name, res.lang, res.label]),
+      [['04-ko.srt', 'ko', 'Korean']]
+    )
+
+    fs.rmSync(root, { recursive: true, force: true })
+  })
+
   it('keeps folder names and nests resource-only folders', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pcl-outline-'))
     write(root, '1. Expressions Basics/lesson.mp4', 'video')

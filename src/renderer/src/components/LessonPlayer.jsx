@@ -9,10 +9,57 @@ import {
 } from 'react'
 import { formatTime } from './StudySidePanel'
 import LinkProjectMenu from './LinkProjectMenu'
+import { isTransportStream, transportPlaylistUrl, useTransportStream } from './useTransportStream'
 
 const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
 const COMPLETE_RATIO = 0.95
 const FRAME_MAX_EDGE = 1600
+const SUBTITLE_PREF_KEY = 'pcl-subtitle-lang'
+
+function readSubtitlePref() {
+  try {
+    const raw = localStorage.getItem(SUBTITLE_PREF_KEY)
+    if (!raw) return { enabled: true, lang: 'ko', label: '' }
+    const parsed = JSON.parse(raw)
+    return {
+      enabled: parsed.enabled !== false,
+      lang: typeof parsed.lang === 'string' ? parsed.lang : 'ko',
+      label: typeof parsed.label === 'string' ? parsed.label : ''
+    }
+  } catch {
+    return { enabled: true, lang: 'ko', label: '' }
+  }
+}
+
+function writeSubtitlePref(pref) {
+  try {
+    localStorage.setItem(SUBTITLE_PREF_KEY, JSON.stringify(pref))
+  } catch {
+    // Preference is optional when storage is blocked.
+  }
+}
+
+function pickSubtitleTrack(tracks, pref) {
+  if (!pref.enabled || !tracks.length) return null
+  if (pref.label) {
+    const byLabel = tracks.find(
+      (track) => track.label === pref.label && (!pref.lang || track.lang === pref.lang)
+    )
+    if (byLabel) return byLabel
+  }
+  if (pref.lang) {
+    const byLang = tracks.find((track) => track.lang === pref.lang)
+    if (byLang) return byLang
+  }
+  return tracks.find((track) => track.lang === 'ko') || tracks[0]
+}
+
+function subtitleOptionLabel(track, tracks) {
+  const label = track.label || track.lang || track.name
+  const key = track.label || track.lang || ''
+  const shared = tracks.filter((item) => (item.label || item.lang || '') === key).length > 1
+  return shared ? `${label} · ${track.name}` : label
+}
 
 function frameFromVideo(video) {
   const scale = Math.min(1, FRAME_MAX_EDGE / Math.max(video.videoWidth, video.videoHeight))
@@ -73,8 +120,10 @@ const LessonPlayer = forwardRef(function LessonPlayer(
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [subtitleUrl, setSubtitleUrl] = useState(null)
-  const [subsEnabled, setSubsEnabled] = useState(true)
+  const [subtitleSources, setSubtitleSources] = useState([])
+  const [subPref, setSubPref] = useState(readSubtitlePref)
+  const [subsMenuOpen, setSubsMenuOpen] = useState(false)
+  const subsMenuRef = useRef(null)
   const saveTimer = useRef(null)
   const restoredFor = useRef(null)
   const autoCompletedFor = useRef(null)
@@ -82,6 +131,10 @@ const LessonPlayer = forwardRef(function LessonPlayer(
   const volumeBeforeMute = useRef(1)
   const scrubbingRef = useRef(false)
   const [scrubbing, setScrubbing] = useState(false)
+  const scrubXRef = useRef(null)
+  const scrubDragRef = useRef(false)
+  /** Target of an in-flight media seek. Time updates behind this target are ignored. */
+  const seekHoldRef = useRef(null)
 
   useImperativeHandle(ref, () => ({
     getCurrentTime: () => {
@@ -161,6 +214,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     setCurrentTime(0)
     setDuration(0)
     setPlaying(false)
+    setSubsMenuOpen(false)
     restoredFor.current = null
     autoCompletedFor.current = null
 
@@ -169,7 +223,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       .then((url) => {
         if (!cancelled) {
           setSrc(url)
-          setLoading(false)
+          if (!isTransportStream(lesson.relativePath)) setLoading(false)
         }
       })
       .catch((err) => {
@@ -188,35 +242,79 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     return (lesson?.resources || []).filter((r) => r.kind === 'subtitle')
   }, [lesson?.resources])
 
+  const activeSubtitle = useMemo(
+    () => pickSubtitleTrack(subtitleSources, subPref),
+    [subtitleSources, subPref]
+  )
+
   useEffect(() => {
     let cancelled = false
-    setSubtitleUrl(null)
+    setSubtitleSources([])
     if (!coursePath || !subtitleTracks.length) return undefined
 
-    const preferred =
-      subtitleTracks.find((t) => /\.vtt$/i.test(t.name || t.relativePath)) || subtitleTracks[0]
-
-    window.api
-      .getLessonMediaUrl(coursePath, preferred.relativePath)
-      .then((url) => {
-        if (!cancelled) setSubtitleUrl(url)
+    Promise.all(
+      subtitleTracks.map(async (track) => {
+        try {
+          const url = await window.api.getLessonMediaUrl(coursePath, track.relativePath)
+          return { ...track, url }
+        } catch {
+          return null
+        }
       })
-      .catch(() => {
-        if (!cancelled) setSubtitleUrl(null)
-      })
+    ).then((sources) => {
+      if (!cancelled) setSubtitleSources(sources.filter(Boolean))
+    })
 
     return () => {
       cancelled = true
     }
   }, [coursePath, subtitleTracks])
 
-  useEffect(() => {
+  const syncSubtitleMode = useCallback(() => {
     const el = videoRef.current
     if (!el?.textTracks) return
     for (let i = 0; i < el.textTracks.length; i += 1) {
-      el.textTracks[i].mode = subsEnabled && subtitleUrl ? 'showing' : 'hidden'
+      const source = subtitleSources[i]
+      const show = Boolean(subPref.enabled && activeSubtitle && source?.url === activeSubtitle.url)
+      el.textTracks[i].mode = show ? 'showing' : 'disabled'
     }
-  }, [subsEnabled, subtitleUrl, src, playing])
+  }, [activeSubtitle, subPref.enabled, subtitleSources])
+
+  useEffect(() => {
+    const el = videoRef.current
+    syncSubtitleMode()
+    if (!el?.textTracks) return undefined
+    const onAdd = () => syncSubtitleMode()
+    el.textTracks.addEventListener('addtrack', onAdd)
+    return () => el.textTracks.removeEventListener('addtrack', onAdd)
+  }, [syncSubtitleMode, src, playing])
+
+  useEffect(() => {
+    if (!subsMenuOpen) return undefined
+    const onPointer = (event) => {
+      if (!subsMenuRef.current?.contains(event.target)) setSubsMenuOpen(false)
+    }
+    const onKey = (event) => {
+      if (event.key === 'Escape') setSubsMenuOpen(false)
+    }
+    window.addEventListener('pointerdown', onPointer)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointerdown', onPointer)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [subsMenuOpen])
+
+  const chooseSubtitle = useCallback((track) => {
+    setSubPref((prev) => {
+      const next = track
+        ? { enabled: true, lang: track.lang || '', label: track.label || '' }
+        : { ...prev, enabled: false }
+      writeSubtitlePref(next)
+      return next
+    })
+    setSubsMenuOpen(false)
+  }, [])
 
   const persist = useCallback(
     (positionSec, extra = {}) => {
@@ -237,6 +335,13 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     const el = videoRef.current
     if (!el || !Number.isFinite(el.currentTime)) return
     if (scrubbingRef.current) return
+    const hold = seekHoldRef.current
+    if (hold != null) {
+      // While the decoder is still catching up, currentTime can report the old
+      // position. Painting that pulls the bar back and looks like a stutter.
+      if (el.seeking && Math.abs(el.currentTime - hold) > 0.35) return
+      seekHoldRef.current = null
+    }
     setCurrentTime(el.currentTime)
     if (Number.isFinite(el.duration)) setDuration(el.duration)
     onTimeTick?.(el.currentTime)
@@ -302,43 +407,79 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     else el.pause()
   }, [])
 
-  const seekFromClientX = useCallback(
-    (clientX, { persistNow = true } = {}) => {
-      const el = videoRef.current
-      const track = trackRef.current
-      if (!el || !track || !Number.isFinite(el.duration) || el.duration <= 0) return
-      const rect = track.getBoundingClientRect()
-      if (rect.width <= 0) return
-      const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
-      const next = ratio * el.duration
-      el.currentTime = next
+  const timeFromClientX = useCallback((clientX) => {
+    const el = videoRef.current
+    const track = trackRef.current
+    if (!el || !track || !Number.isFinite(el.duration) || el.duration <= 0) return null
+    const rect = track.getBoundingClientRect()
+    if (rect.width <= 0) return null
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+    return ratio * el.duration
+  }, [])
+
+  const showTime = useCallback(
+    (next) => {
       setCurrentTime(next)
       onTimeTick?.(next)
+    },
+    [onTimeTick]
+  )
+
+  const commitSeek = useCallback(
+    (next, { persistNow = false } = {}) => {
+      const el = videoRef.current
+      if (!el || next == null) return
+      const mediaTime = Number.isFinite(el.currentTime) ? el.currentTime : next
+      const baseline = seekHoldRef.current ?? mediaTime
+      // Assigning currentTime always restarts a seek, even to the same instant.
+      // A click used to assign it on press and again on release, which hiccups playback.
+      if (Math.abs(baseline - next) >= 0.08) {
+        seekHoldRef.current = next
+        el.currentTime = next
+      }
+      showTime(next)
       if (persistNow) persist(next)
     },
-    [onTimeTick, persist]
+    [persist, showTime]
   )
 
   const onTrackPointerDown = (e) => {
     if (e.button != null && e.button !== 0) return
     if (e.target.closest?.('.playhead__mark')) return
+    const next = timeFromClientX(e.clientX)
+    if (next == null) return
     e.preventDefault()
     scrubbingRef.current = true
+    scrubDragRef.current = false
+    scrubXRef.current = e.clientX
     setScrubbing(true)
     e.currentTarget.setPointerCapture?.(e.pointerId)
-    seekFromClientX(e.clientX, { persistNow: false })
+    commitSeek(next)
   }
 
   const onTrackPointerMove = (e) => {
     if (!scrubbingRef.current) return
-    seekFromClientX(e.clientX, { persistNow: false })
+    const originX = scrubXRef.current
+    if (!scrubDragRef.current && originX != null && Math.abs(e.clientX - originX) < 6) return
+    scrubDragRef.current = true
+    const next = timeFromClientX(e.clientX)
+    if (next == null) return
+    showTime(next)
   }
 
   const finishScrub = (e) => {
     if (!scrubbingRef.current) return
+    const dragged = scrubDragRef.current
     scrubbingRef.current = false
+    scrubDragRef.current = false
     setScrubbing(false)
-    seekFromClientX(e.clientX, { persistNow: true })
+    const next = timeFromClientX(e.clientX)
+    if (next == null) return
+    if (!dragged) {
+      persist(seekHoldRef.current ?? next)
+      return
+    }
+    commitSeek(next, { persistNow: true })
   }
 
   const seekBy = useCallback((deltaSec) => {
@@ -502,7 +643,12 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       if (lower === 'c') {
         if (e.repeat || !subtitleTracks.length) return
         e.preventDefault()
-        setSubsEnabled((v) => !v)
+        setSubsMenuOpen(false)
+        setSubPref((prev) => {
+          const next = { ...prev, enabled: !prev.enabled }
+          writeSubtitlePref(next)
+          return next
+        })
         return
       }
       if (key === 'Home') {
@@ -581,6 +727,15 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     return out
   }, [marksOnLesson])
 
+  const transport = isTransportStream(lesson?.relativePath)
+  useTransportStream(videoRef, transport ? transportPlaylistUrl(src) : null, {
+    onReady: () => setLoading(false),
+    onError: (message) => {
+      setError(message)
+      setLoading(false)
+    }
+  })
+
   if (!lesson) {
     return (
       <div className="lesson-player lesson-player--empty">
@@ -621,8 +776,8 @@ const LessonPlayer = forwardRef(function LessonPlayer(
               key={src}
               ref={videoRef}
               className="lesson-player__video"
-              src={src}
-              autoPlay
+              src={transport ? undefined : src}
+              autoPlay={!transport}
               crossOrigin="anonymous"
               onLoadedMetadata={handleLoadedMetadata}
               onTimeUpdate={scheduleSave}
@@ -631,7 +786,10 @@ const LessonPlayer = forwardRef(function LessonPlayer(
                 setPlaying(false)
                 scheduleSave()
               }}
-              onSeeked={scheduleSave}
+              onSeeked={() => {
+                seekHoldRef.current = null
+                scheduleSave()
+              }}
               onClick={togglePlay}
               onDoubleClick={toggleFullscreen}
               onEnded={() => {
@@ -640,18 +798,21 @@ const LessonPlayer = forwardRef(function LessonPlayer(
                 setPlaying(false)
                 onEnded?.(lesson)
               }}
-              onError={() => setError('Error al reproducir el archivo')}
+              onError={() => {
+                if (transport) return
+                setError('Error al reproducir el archivo')
+              }}
             >
-              {subtitleUrl && subsEnabled ? (
+              {subtitleSources.map((track) => (
                 <track
-                  key={subtitleUrl}
+                  key={track.url}
                   kind="subtitles"
-                  srcLang="es"
-                  label="Subtítulos"
-                  src={subtitleUrl}
-                  default
+                  srcLang={track.lang || 'und'}
+                  label={track.label || track.name}
+                  src={track.url}
+                  default={Boolean(subPref.enabled && activeSubtitle?.url === track.url)}
                 />
-              ) : null}
+              ))}
             </video>
           ) : null}
         </div>
@@ -757,15 +918,53 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             {isCompleted ? '✓' : '○'}
           </button>
           {subtitleTracks.length > 0 ? (
-            <button
-              type="button"
-              className={`playhead__icon-btn${subsEnabled ? ' is-done' : ''}`}
-              onClick={() => setSubsEnabled((v) => !v)}
-              title={subsEnabled ? 'Ocultar subtítulos (C)' : 'Subtítulos (C)'}
-              aria-pressed={subsEnabled}
-            >
-              CC
-            </button>
+            <div className="playhead__subs" ref={subsMenuRef}>
+              <button
+                type="button"
+                className={`playhead__icon-btn${subPref.enabled && activeSubtitle ? ' is-done' : ''}`}
+                onClick={() => setSubsMenuOpen((open) => !open)}
+                title={
+                  subPref.enabled && activeSubtitle
+                    ? `${subtitleOptionLabel(activeSubtitle, subtitleSources)} (C)`
+                    : 'Subtítulos (C)'
+                }
+                aria-pressed={Boolean(subPref.enabled && activeSubtitle)}
+                aria-expanded={subsMenuOpen}
+                aria-haspopup="menu"
+              >
+                {subPref.enabled && activeSubtitle?.lang
+                  ? activeSubtitle.lang.split('-')[0].toUpperCase()
+                  : 'CC'}
+              </button>
+              {subsMenuOpen ? (
+                <div className="playhead__subs-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={!subPref.enabled}
+                    className={`playhead__subs-option${!subPref.enabled ? ' is-active' : ''}`}
+                    onClick={() => chooseSubtitle(null)}
+                  >
+                    Sin subtítulos
+                  </button>
+                  {subtitleSources.map((track) => {
+                    const selected = subPref.enabled && activeSubtitle?.url === track.url
+                    return (
+                      <button
+                        key={track.relativePath}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        className={`playhead__subs-option${selected ? ' is-active' : ''}`}
+                        onClick={() => chooseSubtitle(track)}
+                      >
+                        {subtitleOptionLabel(track, subtitleSources)}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : null}
+            </div>
           ) : null}
 
           <div className="playhead__volume">

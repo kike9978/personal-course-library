@@ -4576,6 +4576,45 @@ kbd {
   color: #d7fff4;
 }
 
+.playhead__subs {
+  position: relative;
+}
+
+.playhead__subs-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.35rem);
+  z-index: 9;
+  min-width: 12rem;
+  max-width: 18rem;
+  max-height: 14rem;
+  overflow: auto;
+  padding: 0.3rem;
+  border-radius: 8px;
+  background: #1a1423;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.playhead__subs-option {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff4e8;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 650;
+  padding: 0.4rem 0.55rem;
+  cursor: pointer;
+}
+
+.playhead__subs-option:hover,
+.playhead__subs-option.is-active {
+  background: rgba(46, 160, 140, 0.28);
+  color: #d7fff4;
+}
+
 .playhead__volume-slider {
   width: 4.5rem;
   accent-color: var(--clr-coral);
