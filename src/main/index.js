@@ -50,8 +50,10 @@ import {
   setLessonProgress,
   recordCourseView,
   getLessonProgress,
+  getActivityDates,
   setCourseCurriculum,
   getAllCourseProgress,
+  getProgressPage,
   withAddedDates,
   listNotes,
   upsertNote,
@@ -695,11 +697,24 @@ function registerIpcHandlers() {
 
   ipcMain.handle('set-lesson-progress', (_event, { coursePath, ...update }) => {
     const before = localProgressSyncKey(coursePath)
+    const prior = getLessonProgress(coursePath, update.relativePath)
+    const priorDates = getActivityDates().length
     const next = setLessonProgress(coursePath, update)
     if (localProgressSyncKey(coursePath) !== before) {
       enqueueNotionProgress(coursePath, { soon: true })
     }
+    const watchedGrew = Math.max(0, Number(update.watchedDeltaSec) || 0) > 0
+    const completedChanged =
+      Boolean(prior.completed) !== Boolean(next?.lessons?.[update.relativePath]?.completed)
+    const datesChanged = getActivityDates().length !== priorDates
+    if (watchedGrew || completedChanged || datesChanged) {
+      broadcastToWindows('progress-changed', {})
+    }
     return next
+  })
+
+  ipcMain.handle('get-progress-page', async () => {
+    return getProgressPage(await listCatalogCourses())
   })
 
   ipcMain.handle('record-course-view', (_event, coursePath) => {

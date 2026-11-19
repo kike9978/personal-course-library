@@ -11,6 +11,7 @@ import LibraryStudyView from './components/LibraryStudyView'
 import AnnotationsPopoutView from './components/AnnotationsPopoutView'
 import ProjectsKanban from './components/ProjectsKanban'
 import PlaylistCanvas from './components/PlaylistCanvas'
+import ProgressPage from './components/ProgressPage'
 import LibraryHeader from './components/LibraryHeader'
 import CourseZipBar from './components/CourseZipBar'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -942,7 +943,7 @@ function App() {
       setResumeTarget(target)
       const from = libraryStudyModeRef.current
       setReturnStudy(
-        from === 'annotations' || from === 'projects' || from === 'playlists'
+        from === 'annotations' || from === 'projects' || from === 'playlists' || from === 'progress'
           ? { mode: from, ...(from === 'annotations' ? origin : null) }
           : null
       )
@@ -1079,7 +1080,12 @@ function App() {
     setResumeTarget(null)
     setReturnStudy(null)
     setAnnotationsCoursePath('')
-    if (section === 'projects' || section === 'annotations' || section === 'playlists') {
+    if (
+      section === 'projects' ||
+      section === 'annotations' ||
+      section === 'playlists' ||
+      section === 'progress'
+    ) {
       setLibraryStudyMode(section)
       return
     }
@@ -1155,6 +1161,8 @@ function App() {
           onOpenCourse={openCourse}
           onBack={annotationsCoursePath ? backFromAnnotations : null}
         />
+      ) : libraryStudyMode === 'progress' ? (
+        <ProgressPage onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'projects' ? (
         <ProjectsKanban courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'playlists' ? (
@@ -1170,7 +1178,17 @@ function App() {
           courses={courses}
           resumeTarget={resumeTarget}
           liveJump={liveJump}
-          backLabel={returnStudy?.mode === 'annotations' ? 'Anotaciones' : 'Biblioteca'}
+          backLabel={
+            returnStudy?.mode === 'annotations'
+              ? 'Anotaciones'
+              : returnStudy?.mode === 'progress'
+                ? 'Progreso'
+                : returnStudy?.mode === 'projects'
+                  ? 'Proyectos'
+                  : returnStudy?.mode === 'playlists'
+                    ? 'Listas'
+                    : 'Biblioteca'
+          }
           onBack={() => {
             const back = returnStudy
             setActiveCoursePath(null)

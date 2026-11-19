@@ -295,7 +295,7 @@ describe('course progress wire', () => {
     const merged = mergeCourseProgress(
       {
         inProcess: false,
-        lessons: { 'a.mp4': { completed: true, positionSec: 10, durationSec: 10, lastOpenedAt: 1 } },
+        lessons: { 'a.mp4': { completed: true, positionSec: 10, durationSec: 10, lastOpenedAt: 1, watchedSec: 40 } },
         lastLessonRelativePath: 'a.mp4',
         lastLessonTitle: 'A',
         lastPositionSec: 10,
@@ -312,7 +312,9 @@ describe('course progress wire', () => {
     )
     assert.equal(merged.inProcess, false)
     assert.equal(merged.lessons['a.mp4'].completed, true)
+    assert.equal(merged.lessons['a.mp4'].watchedSec, 40)
     assert.equal(merged.lessons['b.mp4'].completed, true)
+    assert.equal(merged.lessons['b.mp4'].watchedSec, 0)
     assert.equal(merged.lastLessonRelativePath, 'b.mp4')
     assert.equal(merged.lastViewedAt, 4)
     assert.notEqual(

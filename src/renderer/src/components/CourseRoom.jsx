@@ -534,6 +534,7 @@ function CourseRoom({
           positionSec: update.positionSec,
           durationSec: update.durationSec,
           completed: update.completed,
+          watchedDeltaSec: update.watchedDeltaSec,
           setAsLast: true
         })
         applyProgress(next)

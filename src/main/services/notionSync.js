@@ -30,6 +30,7 @@ import {
   writePlaylistRecord
 } from './learningStore.js'
 import { findingFromLegacyNote } from '../../shared/knowledgeGraph.js'
+import { keepWatchedSec } from '../../shared/progress.js'
 import {
   anchorFromNotion,
   anchorsWithVideoTime,
@@ -3131,7 +3132,8 @@ function withLocalPlayback(coursePath, data) {
   for (const [key, lesson] of Object.entries(data?.lessons || {})) {
     lessons[key] = {
       ...lesson,
-      positionSec: course?.lessons?.[key]?.positionSec || lesson.positionSec || 0
+      positionSec: course?.lessons?.[key]?.positionSec || lesson.positionSec || 0,
+      watchedSec: keepWatchedSec(course?.lessons?.[key], lesson)
     }
   }
   return {

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { noteTextTitle, resolveCourseTitle } from './knowledgeGraph.js'
 import { courseMediaNoteFile, markdownImageDestination } from './noteMedia.js'
+import { keepWatchedSec } from './progress.js'
 
 export { courseMediaNoteFile, markdownImageDestination }
 
@@ -345,7 +346,7 @@ export function mergeCourseProgress(local, remote) {
   for (const [key, remoteLesson] of Object.entries(right.lessons)) {
     const current = lessons[key]
     if (!current) {
-      lessons[key] = remoteLesson
+      lessons[key] = { ...remoteLesson, watchedSec: 0 }
       continue
     }
     const completed = Boolean(current.completed || remoteLesson.completed)
@@ -355,7 +356,8 @@ export function mergeCourseProgress(local, remote) {
       durationSec,
       lastOpenedAt: Math.max(current.lastOpenedAt || 0, remoteLesson.lastOpenedAt || 0),
       positionSec:
-        completed && durationSec ? durationSec : current.positionSec || remoteLesson.positionSec || 0
+        completed && durationSec ? durationSec : current.positionSec || remoteLesson.positionSec || 0,
+      watchedSec: keepWatchedSec(current, remoteLesson)
     }
   }
   const last = viewedAtOf(right) >= viewedAtOf(left) ? right : left

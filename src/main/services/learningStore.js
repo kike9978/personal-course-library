@@ -24,6 +24,7 @@ import {
   topicKey
 } from '../../shared/knowledgeGraph.js'
 import { viewSession } from '../../shared/notionSync.js'
+import { buildProgressPage, keepWatchedSec, localDateKey } from '../../shared/progress.js'
 
 const STORE_FILE = 'learning-store.json'
 const COMPLETE_THRESHOLD = 0.95
@@ -35,11 +36,12 @@ function getStorePath() {
 
 function emptyStore() {
   return {
-    version: 6,
+    version: 7,
     courses: {},
     playlists: [],
     topics: [],
-    findings: []
+    findings: [],
+    activityDates: []
   }
 }
 
@@ -246,11 +248,40 @@ function ensureKnowledge(store) {
     course.notes = []
     dirty = true
   }
-  if (store.version !== 6) {
-    store.version = 6
+  if (normalizeActivityDates(store)) dirty = true
+  if (store.version !== 7) {
+    store.version = 7
     dirty = true
   }
   return dirty
+}
+
+function normalizeActivityDates(store) {
+  const raw = Array.isArray(store.activityDates) ? store.activityDates : []
+  const dates = []
+  const seen = new Set()
+  for (const value of raw) {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) continue
+    if (seen.has(value)) continue
+    seen.add(value)
+    dates.push(value)
+  }
+  dates.sort()
+  const changed =
+    !Array.isArray(store.activityDates) ||
+    dates.length !== raw.length ||
+    dates.some((date, index) => date !== raw[index])
+  if (changed) store.activityDates = dates
+  return changed
+}
+
+function recordActivityDate(store, date = new Date()) {
+  if (!Array.isArray(store.activityDates)) store.activityDates = []
+  const key = localDateKey(date)
+  if (store.activityDates.includes(key)) return false
+  store.activityDates.push(key)
+  store.activityDates.sort()
+  return true
 }
 
 function reindexFindings(store) {
@@ -443,7 +474,8 @@ export function writeCourseProgress(coursePath, patch = {}) {
         positionSec: Math.max(0, Number(lesson?.positionSec) || 0),
         durationSec: Math.max(0, Number(lesson?.durationSec) || 0),
         completed: Boolean(lesson?.completed),
-        lastOpenedAt: Number(lesson?.lastOpenedAt) || null
+        lastOpenedAt: Number(lesson?.lastOpenedAt) || null,
+        watchedSec: keepWatchedSec(course.lessons?.[relativePath], lesson)
       }
       if (!course.playableLessons.some((item) => item.relativePath === relativePath)) {
         course.playableLessons.push({
@@ -495,7 +527,7 @@ export function setCourseCurriculum(coursePath, playableLessons) {
 /**
  * Update progress for a lesson and optionally set as last watched.
  * @param {string} coursePath
- * @param {{ relativePath: string, title?: string, positionSec?: number, durationSec?: number, completed?: boolean, setAsLast?: boolean }} update
+ * @param {{ relativePath: string, title?: string, positionSec?: number, durationSec?: number, completed?: boolean, setAsLast?: boolean, watchedDeltaSec?: number }} update
  */
 export function setLessonProgress(coursePath, update) {
   const store = readStore()
@@ -510,7 +542,8 @@ export function setLessonProgress(coursePath, update) {
     positionSec: 0,
     durationSec: 0,
     completed: false,
-    lastOpenedAt: null
+    lastOpenedAt: null,
+    watchedSec: 0
   }
   const priorCompleted = Boolean(existing.completed)
   const priorPath = course.lastLessonRelativePath || null
@@ -545,12 +578,14 @@ export function setLessonProgress(coursePath, update) {
     course.playableLessons?.find((l) => l.relativePath === relativePath)?.title ||
     lessonTitleFromPath(relativePath)
 
+  const watchedDeltaSec = Math.max(0, Number(update.watchedDeltaSec) || 0)
   const next = {
     ...existing,
     positionSec,
     durationSec,
     completed,
-    lastOpenedAt: Date.now()
+    lastOpenedAt: Date.now(),
+    watchedSec: Math.max(0, Number(existing.watchedSec) || 0) + watchedDeltaSec
   }
 
   course.lessons[relativePath] = next
@@ -574,8 +609,11 @@ export function setLessonProgress(coursePath, update) {
   }
 
   store.courses[key] = course
+  const studied = watchedDeltaSec > 0 || (Boolean(next.completed) && !priorCompleted)
+  const activityChanged = studied ? recordActivityDate(store) : false
   const immediate =
     Boolean(next.completed) !== priorCompleted ||
+    activityChanged ||
     (course.lastLessonRelativePath || null) !== priorPath ||
     viewSession(course.lastViewedAt) !== priorSession
   writeStore(store, { debounce: !immediate })
@@ -601,7 +639,8 @@ export function getLessonProgress(coursePath, relativePath) {
       positionSec: 0,
       durationSec: 0,
       completed: false,
-      lastOpenedAt: null
+      lastOpenedAt: null,
+      watchedSec: 0
     }
   )
 }
@@ -618,6 +657,20 @@ export function getAllCourseProgress() {
     out[key] = presentCourse(store, key, value)
   }
   return out
+}
+
+export function getActivityDates() {
+  const dates = readStore().activityDates
+  return Array.isArray(dates) ? dates.slice() : []
+}
+
+export function getProgressPage(courses, now = new Date()) {
+  const map = getAllCourseProgress()
+  const joined = (courses || []).map((course) => ({
+    ...course,
+    learning: map[courseKey(course.path)] || null
+  }))
+  return buildProgressPage(joined, getActivityDates(), now)
 }
 
 function getMutableCourse(store, coursePath) {

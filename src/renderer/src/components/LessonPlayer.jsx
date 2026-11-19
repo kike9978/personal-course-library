@@ -10,6 +10,7 @@ import {
 import { formatTime } from './StudySidePanel'
 import LinkProjectMenu from './LinkProjectMenu'
 import { isTransportStream, transportPlaylistUrl, useTransportStream } from './useTransportStream'
+import { watchedDelta } from '../../../shared/progress.js'
 
 const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
 const COMPLETE_RATIO = 0.95
@@ -135,6 +136,8 @@ const LessonPlayer = forwardRef(function LessonPlayer(
   const scrubDragRef = useRef(false)
   /** Target of an in-flight media seek. Time updates behind this target are ignored. */
   const seekHoldRef = useRef(null)
+  const lastSampleRef = useRef(null)
+  const pendingWatchRef = useRef(0)
 
   useImperativeHandle(ref, () => ({
     getCurrentTime: () => {
@@ -148,6 +151,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       const resume = opts.resume !== false
       if (el && Number.isFinite(el.duration) && el.duration > 0) {
         el.currentTime = Math.min(target, Math.max(0, el.duration - 0.25))
+        lastSampleRef.current = el.currentTime
         setCurrentTime(el.currentTime)
         if (resume) el.play?.().catch(() => {})
         else el.pause()
@@ -320,16 +324,36 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     (positionSec, extra = {}) => {
       if (!lesson?.relativePath || !coursePath) return
       const el = videoRef.current
+      const watchedDeltaSec = pendingWatchRef.current
+      if (onProgress) pendingWatchRef.current = 0
       onProgress?.({
         relativePath: lesson.relativePath,
         title: lesson.title,
         positionSec,
         durationSec: el && Number.isFinite(el.duration) ? el.duration : undefined,
-        ...extra
+        ...extra,
+        watchedDeltaSec
       })
     },
     [coursePath, lesson?.relativePath, lesson?.title, onProgress]
   )
+
+  const samplePlayback = useCallback(() => {
+    const el = videoRef.current
+    if (!el || !Number.isFinite(el.currentTime)) return
+    const delta = watchedDelta(lastSampleRef.current, el.currentTime, {
+      playing: !el.paused,
+      seeking: Boolean(el.seeking) || scrubbingRef.current,
+      scrubbing: scrubbingRef.current,
+      rate: el.playbackRate
+    })
+    lastSampleRef.current = el.currentTime
+    if (delta > 0) pendingWatchRef.current += delta
+  }, [])
+
+  const pinPlaybackSample = useCallback((time) => {
+    if (Number.isFinite(time)) lastSampleRef.current = time
+  }, [])
 
   const scheduleSave = useCallback(() => {
     const el = videoRef.current
@@ -342,6 +366,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       if (el.seeking && Math.abs(el.currentTime - hold) > 0.35) return
       seekHoldRef.current = null
     }
+    samplePlayback()
     setCurrentTime(el.currentTime)
     if (Number.isFinite(el.duration)) setDuration(el.duration)
     onTimeTick?.(el.currentTime)
@@ -362,7 +387,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     saveTimer.current = setTimeout(() => {
       persist(el.currentTime)
     }, 800)
-  }, [persist, isCompleted, lesson?.relativePath, onTimeTick])
+  }, [persist, isCompleted, lesson?.relativePath, onTimeTick, samplePlayback])
 
   useEffect(() => {
     return () => {
@@ -371,6 +396,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       if (el && lesson?.relativePath && Number.isFinite(el.currentTime)) {
         persist(el.currentTime)
       }
+      lastSampleRef.current = null
     }
   }, [lesson?.relativePath, persist])
 
@@ -385,6 +411,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       seekOverride.current = null
       if (target > 0 && target < (el.duration || Infinity) - 0.25) {
         el.currentTime = target
+        pinPlaybackSample(target)
         setCurrentTime(target)
       }
       restoredFor.current = lesson.relativePath
@@ -396,6 +423,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     const target = Math.max(0, Number(initialPositionSec) || 0)
     if (!isCompleted && target > 1 && target < (el.duration || Infinity) - 1) {
       el.currentTime = target
+      pinPlaybackSample(target)
       setCurrentTime(target)
     }
   }
@@ -436,11 +464,12 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       if (Math.abs(baseline - next) >= 0.08) {
         seekHoldRef.current = next
         el.currentTime = next
+        pinPlaybackSample(next)
       }
       showTime(next)
       if (persistNow) persist(next)
     },
-    [persist, showTime]
+    [persist, showTime, pinPlaybackSample]
   )
 
   const onTrackPointerDown = (e) => {
@@ -486,15 +515,17 @@ const LessonPlayer = forwardRef(function LessonPlayer(
     const el = videoRef.current
     if (!el || !Number.isFinite(el.duration) || el.duration <= 0) return
     el.currentTime = Math.min(el.duration, Math.max(0, el.currentTime + deltaSec))
+    pinPlaybackSample(el.currentTime)
     setCurrentTime(el.currentTime)
-  }, [])
+  }, [pinPlaybackSample])
 
   const seekToSec = useCallback((sec) => {
     const el = videoRef.current
     if (!el || !Number.isFinite(el.duration) || el.duration <= 0) return
     el.currentTime = Math.min(Math.max(0, el.duration - 0.05), Math.max(0, sec))
+    pinPlaybackSample(el.currentTime)
     setCurrentTime(el.currentTime)
-  }, [])
+  }, [pinPlaybackSample])
 
   const applyRate = useCallback((next) => {
     setRate(next)
@@ -788,6 +819,8 @@ const LessonPlayer = forwardRef(function LessonPlayer(
               }}
               onSeeked={() => {
                 seekHoldRef.current = null
+                const el = videoRef.current
+                if (el && Number.isFinite(el.currentTime)) pinPlaybackSample(el.currentTime)
                 scheduleSave()
               }}
               onClick={togglePlay}
