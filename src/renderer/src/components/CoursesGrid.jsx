@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import CourseCard from './CourseCard'
 import CourseTable from './CourseTable'
 import ErrorDisplay from './ErrorDisplay'
+import { cn } from '../ui/cn'
+import { cardLg } from '../ui/classes'
 
 export default function CoursesGrid({
   courses,
@@ -44,9 +46,11 @@ export default function CoursesGrid({
 
   if (!courses.length && isCardLayout) {
     return (
-      <div className="empty-state">
-        <h3>Ningún curso coincide</h3>
-        <p>Prueba otra búsqueda, quita filtros o refresca la biblioteca.</p>
+      <div className={cn(cardLg, 'mx-auto my-8 max-w-[420px] px-6 py-8 text-center')}>
+        <h3 className="m-0 mb-[0.35rem] font-display font-black">Ningún curso coincide</h3>
+        <p className="m-0 text-ink-soft">
+          Prueba otra búsqueda, quita filtros o refresca la biblioteca.
+        </p>
       </div>
     )
   }
@@ -56,7 +60,11 @@ export default function CoursesGrid({
       <ErrorDisplay error={error} />
       <div
         ref={gridRef}
-        className={`courses-grid${!isCardLayout ? ' courses-grid--table' : ''}`}
+        className={cn(
+          isCardLayout
+            ? 'grid w-full grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-[1.15rem]'
+            : 'block w-full min-w-0'
+        )}
         role={isCardLayout ? 'listbox' : undefined}
         aria-label="Lista de cursos"
       >

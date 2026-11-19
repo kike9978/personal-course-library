@@ -5,6 +5,20 @@ import {
   coursesForDescriptionBatch,
   parseCourseDescriptionBatch
 } from '../../../shared/courseDescription.js'
+import { cn } from '../ui/cn'
+import { btnCompact, btnGhost, btnPrimary, fieldControl, fieldLabel } from '../ui/classes'
+
+const dialogShell =
+  'w-[calc(100%-2rem)] max-w-[40rem] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel open:flex open:max-h-[min(90vh,48rem)] open:flex-col open:overflow-auto backdrop:bg-[rgba(26,20,35,0.45)] [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55'
+const dialogForm = 'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem]'
+const dialogTitle = 'm-0 font-display text-[1.2rem] font-black'
+const dialogLead = 'mt-[0.35rem] mb-0 text-[0.85rem] leading-[1.4] text-ink-soft'
+const searchInput =
+  'w-full rounded-md border border-ink/10 bg-surface px-3 py-[0.55rem] text-ink outline-none focus:shadow-focus motion-reduce:animate-none'
+const rowBase =
+  'flex cursor-pointer items-start gap-[0.65rem] rounded-[10px] px-[0.65rem] py-[0.55rem] hover:bg-coral/8'
+const briefField = cn(fieldControl, 'min-h-[8rem] resize-y text-[0.78rem] leading-[1.45]')
+const pasteField = cn(fieldControl, 'min-h-[6.5rem] resize-y text-[0.78rem] leading-[1.45]')
 
 function cleanIpcError(err) {
   return String(err?.message || 'No se pudo guardar.')
@@ -267,7 +281,7 @@ function CourseDescriptionBatch({ courses, onClose }) {
   return (
     <dialog
       ref={dialogRef}
-      className="dialog dialog--description"
+      className={dialogShell}
       aria-labelledby="course-description-batch-title"
       onCancel={(event) => {
         event.preventDefault()
@@ -278,23 +292,26 @@ function CourseDescriptionBatch({ courses, onClose }) {
       }}
     >
       <form
-        className="dialog__form"
+        className={dialogForm}
         onSubmit={(event) => {
           event.preventDefault()
           handleSave()
         }}
       >
-        <h3 id="course-description-batch-title">Descripciones</h3>
-        <p className="dialog__lead">
+        <h3 id="course-description-batch-title" className={dialogTitle}>
+          Descripciones
+        </h3>
+        <p className={dialogLead}>
           {skipByPath.size
             ? 'Estos cursos no se guardaron. El motivo está debajo del nombre. Genera otro encargo para ellos.'
             : 'Marca los cursos que entran en este encargo. El guardado usa solo esos.'}
         </p>
 
-        <div className="import-props__toolbar">
+        <div className="flex flex-col gap-[0.55rem]">
           <input
             type="search"
-            className="import-props__search"
+            data-search-field=""
+            className={searchInput}
             placeholder="Filtrar cursos…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -303,13 +320,13 @@ function CourseDescriptionBatch({ courses, onClose }) {
             }}
             aria-label="Filtrar cursos"
           />
-          <div className="import-props__bulk">
-            <span className="import-props__count">
+          <div className="flex flex-wrap gap-[0.35rem]">
+            <span className="text-[0.85rem] font-bold text-ink-soft">
               {selected.length} de {waiting.length} marcados
             </span>
             <button
               type="button"
-              className="btn btn--ghost btn--compact"
+              className={cn(btnGhost, btnCompact)}
               onClick={() => {
                 reviewRef.current = null
                 setPicked(new Set(waiting.map((course) => course.path)))
@@ -320,7 +337,7 @@ function CourseDescriptionBatch({ courses, onClose }) {
             </button>
             <button
               type="button"
-              className="btn btn--ghost btn--compact"
+              className={cn(btnGhost, btnCompact)}
               onClick={() => setPicked(new Set())}
               disabled={picked.size === 0}
             >
@@ -330,7 +347,7 @@ function CourseDescriptionBatch({ courses, onClose }) {
         </div>
 
         {strays.length ? (
-          <ul className="course-description__strays">
+          <ul className="m-0 flex list-disc flex-col gap-[0.2rem] pl-[1.1rem] text-[0.78rem] leading-[1.35] text-coral-deep">
             {strays.map((skip) => (
               <li key={`${skip.title}-${skip.reason}`}>
                 <strong>{skip.title || 'Sin nombre'}</strong>
@@ -341,32 +358,34 @@ function CourseDescriptionBatch({ courses, onClose }) {
           </ul>
         ) : null}
         <div
-          className="import-props__list course-description__pick"
+          className="flex max-h-[min(42vh,360px)] flex-col gap-[0.35rem] overflow-auto rounded-md border border-ink/10 bg-surface p-[0.15rem]"
           aria-label="Cursos del encargo"
         >
           {filtered.length === 0 ? (
-            <p className="import-props__empty">No hay cursos que coincidan.</p>
+            <p className="m-0 p-4 text-center text-[0.9rem] text-ink-soft">
+              No hay cursos que coincidan.
+            </p>
           ) : (
             filtered.map((course) => {
               const checked = picked.has(course.path)
               const reason = skipByPath.get(course.path)
               return (
-                <label
-                  key={course.path}
-                  className={`import-props__row${checked ? ' is-selected' : ''}`}
-                >
+                <label key={course.path} className={cn(rowBase, checked && 'bg-coral/12')}>
                   <input
+                    className="mt-[0.2rem] shrink-0 accent-coral"
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggleCourse(course.path)}
                   />
-                  <span className="import-props__meta">
-                    <span className="import-props__title">{course.title || course.path}</span>
-                    <span className="import-props__folder">{course.path}</span>
+                  <span className="flex min-w-0 flex-col gap-[0.15rem]">
+                    <span className="font-display leading-[1.25] font-extrabold text-ink">
+                      {course.title || course.path}
+                    </span>
+                    <span className="text-[0.78rem] break-all text-ink-soft">{course.path}</span>
                     {reason ? (
-                      <span className="course-description__error">{reason}</span>
+                      <span className="text-[0.82rem] leading-[1.4] text-coral-deep">{reason}</span>
                     ) : course.institution ? (
-                      <span className="import-props__hint">{course.institution}</span>
+                      <span className="text-xs text-ink-soft">{course.institution}</span>
                     ) : null}
                   </span>
                 </label>
@@ -374,12 +393,14 @@ function CourseDescriptionBatch({ courses, onClose }) {
             })
           )}
         </div>
-        <div className="field">
-          <label htmlFor="course-description-batch-brief">Encargo</label>
+        <div>
+          <label className={fieldLabel} htmlFor="course-description-batch-brief">
+            Encargo
+          </label>
           <textarea
             id="course-description-batch-brief"
             ref={briefRef}
-            className="course-description__brief"
+            className={briefField}
             readOnly
             spellCheck={false}
             value={
@@ -389,33 +410,30 @@ function CourseDescriptionBatch({ courses, onClose }) {
             }
           />
         </div>
-        <div className="dialog__actions dialog__actions--spread">
-          <span className="course-description__note">{copyNote}</span>
-          <div className="dialog__actions-btns">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]">
+          <span className="text-xs text-ink-soft">{copyNote}</span>
+          <div className="flex gap-2">
             <button
               type="button"
-              className="btn btn--primary"
+              className={btnPrimary}
               onClick={handleGenerate}
               disabled={!selected.length || generating}
             >
               {generating ? 'Generando…' : 'Generar encargo'}
             </button>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={handleCopy}
-              disabled={!canCopy}
-            >
+            <button type="button" className={btnGhost} onClick={handleCopy} disabled={!canCopy}>
               {copied ? 'Copiado' : 'Copiar'}
             </button>
           </div>
         </div>
 
-        <div className="field">
-          <label htmlFor="course-description-batch-paste">Respuesta</label>
+        <div>
+          <label className={fieldLabel} htmlFor="course-description-batch-paste">
+            Respuesta
+          </label>
           <textarea
             id="course-description-batch-paste"
-            className="course-description__paste"
+            className={pasteField}
             spellCheck={false}
             value={paste}
             placeholder="Pega aquí el JSON del chat"
@@ -426,16 +444,16 @@ function CourseDescriptionBatch({ courses, onClose }) {
           />
         </div>
         {error ? (
-          <p className="course-description__error" role="alert">
+          <p className="m-0 text-[0.82rem] leading-[1.4] text-coral-deep" role="alert">
             {error}
           </p>
         ) : null}
 
-        <div className="dialog__actions">
-          <button type="button" className="btn btn--ghost" onClick={handleClose} disabled={saving}>
+        <div className="flex justify-end gap-2 pt-[0.35rem]">
+          <button type="button" className={btnGhost} onClick={handleClose} disabled={saving}>
             Cerrar
           </button>
-          <button type="submit" className="btn btn--primary" disabled={saving || !selected.length}>
+          <button type="submit" className={btnPrimary} disabled={saving || !selected.length}>
             {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </div>

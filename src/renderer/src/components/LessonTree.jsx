@@ -25,6 +25,123 @@ import {
   sectionIdForPath
 } from '../../../shared/courseTree.js'
 import { statusLabel } from './ProjectPanel'
+import { cn } from '../ui/cn'
+import { btnGhost } from '../ui/classes'
+
+const focusRing =
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral'
+
+const treeItem =
+  'lesson-tree__item flex min-w-0 cursor-pointer items-start gap-[0.45rem] border-0 bg-transparent text-left text-ink'
+
+const treeLabel = 'min-w-0 flex-1 text-[0.9rem] leading-[1.3] line-clamp-2'
+
+const treeBody = 'flex min-w-0 flex-1 flex-col gap-[0.28rem]'
+
+const treeMeta =
+  'inline-flex min-w-0 items-center gap-[0.35rem] text-[0.75rem] font-medium leading-none text-ink-soft'
+
+const treeList = 'm-0 flex list-none flex-col gap-[0.2rem] p-0'
+
+function sectionCopyClass({ dense }) {
+  return cn(
+    'lesson-tree__section-copy flex min-w-0 flex-1 flex-col gap-[0.15rem]',
+    dense && 'flex-row items-center gap-[0.45rem] overflow-hidden'
+  )
+}
+
+function sectionMetaClass({ dense, nested }) {
+  return cn(
+    'lesson-tree__section-meta font-body text-[0.75rem] font-medium normal-case tracking-normal text-ink-soft',
+    dense &&
+      'mt-[0.05rem] min-w-[1.15rem] shrink-0 rounded-full bg-cream-deep px-[0.38rem] py-[0.02rem] text-center text-[0.68rem] leading-[1.35] font-bold',
+    dense && nested && 'bg-transparent pr-0'
+  )
+}
+
+function sectionClass({ nested, dense, bar, open, className }) {
+  const loose = typeof className === 'string' && className.split(/\s+/).includes('is-loose')
+  return cn(
+    'lesson-tree__section mb-4',
+    nested && 'lesson-tree__section--nested',
+    dense && 'lesson-tree__section--dense',
+    bar && 'lesson-tree__section--bar',
+    !open && 'is-collapsed',
+    bar && 'mb-0 border-b border-ink/10',
+    dense && 'mb-[0.1rem]',
+    !open && 'mb-[0.35rem]',
+    nested &&
+      !bar &&
+      'mt-[0.15rem] mr-0 mb-[0.45rem] ml-[0.55rem] border-l border-ink/10 pl-[0.35rem]',
+    dense &&
+      !nested &&
+      !bar &&
+      'm-0 rounded-md border border-ink/10 bg-surface px-[0.15rem] pt-[0.12rem] pb-[0.2rem]',
+    dense &&
+      nested &&
+      !bar &&
+      'm-0 mt-[0.04rem] ml-[var(--ann-indent)] border-0 border-l-0 bg-transparent p-0 pl-0',
+    nested &&
+      bar &&
+      'mt-0 mr-0 mb-0 ml-[0.8rem] border-b-0 border-l-2 border-ink/18 bg-surface pl-0',
+    bar && '[&>div>ul]:gap-0',
+    className,
+    loose && 'border-dashed bg-transparent'
+  )
+}
+
+function sectionHeadClass({ bar, nested }) {
+  return cn(
+    'lesson-tree__section-head m-0 flex min-w-0 items-center',
+    bar && !nested && 'bg-ink/5 hover:bg-ink/8'
+  )
+}
+
+function sectionToggleClass({ nested, dense, bar }) {
+  return cn(
+    'lesson-tree__section-toggle flex w-auto min-w-0 flex-1 cursor-pointer items-center gap-[0.28rem] border-0 bg-transparent text-left text-[0.72rem] font-bold uppercase tracking-[0.04em] text-ink-soft',
+    'mb-[0.35rem] rounded-[6px] px-[0.3rem] py-[0.2rem] hover:bg-ink/5 hover:text-ink',
+    focusRing,
+    nested && 'mb-[0.2rem] text-[0.68rem] normal-case tracking-[0.02em]',
+    dense && !nested && !bar &&
+      'mb-0 items-center gap-[var(--ann-chevron-gap)] rounded-md px-[var(--ann-pad-x)] py-[0.22rem] font-display text-[0.84rem] leading-[1.25] font-extrabold tracking-normal text-ink normal-case hover:bg-[rgba(42,36,56,0.05)] hover:text-ink',
+    dense &&
+      nested &&
+      !bar &&
+      'mb-0 px-[var(--ann-pad-x)] py-[0.16rem] text-[0.75rem] font-[650] tracking-normal text-ink-soft normal-case',
+    bar &&
+      'm-0 items-start gap-3 rounded-none bg-ink/5 px-[0.95rem] py-[0.85rem] text-[0.95rem] font-extrabold normal-case tracking-normal text-ink hover:bg-ink/8 hover:text-ink',
+    bar && !nested && 'bg-transparent hover:bg-transparent hover:text-ink',
+    bar &&
+      nested &&
+      'm-0 bg-transparent px-[0.75rem] pt-[0.65rem] pb-[0.4rem] text-[0.9rem] font-bold hover:bg-ink/5'
+  )
+}
+
+function sectionChevronClass({ bar, nested, dense, open }) {
+  return cn(
+    'lesson-tree__section-chevron shrink-0 transition-transform duration-[120ms] ease-pop',
+    bar ? 'mt-[0.15rem] h-[1.15rem] w-[1.15rem] text-ink-soft' : 'h-[0.65rem] w-[0.65rem]',
+    bar && nested && 'h-[0.95rem] w-[0.95rem]',
+    dense && !bar && 'mt-0 size-[var(--ann-chevron)]',
+    open && (bar ? 'rotate-180' : 'rotate-90')
+  )
+}
+
+function sectionTitleClass({ bar, nested }) {
+  return cn(
+    'lesson-tree__section-title min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap',
+    bar &&
+      'overflow-visible font-display text-clip font-extrabold leading-[1.25] whitespace-normal',
+    bar && nested && 'font-bold'
+  )
+}
+
+const iconBtnQuiet =
+  'inline-flex h-[1.85rem] w-[1.85rem] cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-ink-soft hover:bg-ink/6 hover:text-ink'
+
+const pillBtn =
+  'relative inline-flex max-w-[11rem] cursor-pointer items-center gap-[0.3rem] rounded-full border-[1.5px] border-coral bg-surface px-[0.55rem] py-[0.22rem] text-[0.75rem] leading-none font-bold text-coral-deep hover:bg-coral/10'
 
 const KIND_ICON = {
   doc: FileText,
@@ -158,40 +275,42 @@ function TreeSection({
 }) {
   const panelId = panelIdFor(id, idPrefix)
   const Chevron = bar ? ChevronDown : ChevronRight
+  const chevronClass = sectionChevronClass({ bar, nested, dense, open })
   return (
-    <div
-      className={`lesson-tree__section${nested ? ' lesson-tree__section--nested' : ''}${
-        dense ? ' lesson-tree__section--dense' : ''
-      }${bar ? ' lesson-tree__section--bar' : ''}${open ? '' : ' is-collapsed'}${
-        className ? ` ${className}` : ''
-      }`}
-    >
-      <h3 className="lesson-tree__section-head">
+    <div className={sectionClass({ nested, dense, bar, open, className })}>
+      <h3 className={sectionHeadClass({ bar, nested })}>
         <button
           type="button"
-          className="lesson-tree__section-toggle"
+          className={sectionToggleClass({ nested, dense, bar })}
           aria-expanded={open}
           aria-controls={panelId}
           aria-label={open ? `Contraer ${title}` : `Expandir ${title}`}
           title={title}
           onClick={onToggle}
         >
-          {bar ? null : <Chevron className="lesson-tree__section-chevron" aria-hidden="true" />}
-          <span className="lesson-tree__section-copy">
-            <span className="lesson-tree__section-title">{title}</span>
-            {meta ? <span className="lesson-tree__section-meta">{meta}</span> : null}
+          {bar ? null : <Chevron className={chevronClass} aria-hidden="true" />}
+          <span className={sectionCopyClass({ dense })}>
+            <span className={sectionTitleClass({ bar, nested })}>{title}</span>
+            {meta ? <span className={sectionMetaClass({ dense, nested })}>{meta}</span> : null}
           </span>
         </button>
-        {actions ? <div className="lesson-tree__actions">{actions}</div> : null}
+        {actions ? (
+          <div className="lesson-tree__actions mr-3 ml-0 inline-flex items-center gap-[0.4rem] self-center">
+            {actions}
+          </div>
+        ) : null}
         {bar ? (
           <button
             type="button"
-            className="lesson-tree__section-chevron-btn"
+            className={cn(
+              'lesson-tree__section-chevron-btn mr-[0.7rem] ml-0 inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[6px] border-0 bg-transparent p-[0.2rem] text-ink-soft',
+              focusRing
+            )}
             aria-expanded={open}
             aria-label={open ? `Contraer ${title}` : `Expandir ${title}`}
             onClick={onToggle}
           >
-            <Chevron className="lesson-tree__section-chevron" aria-hidden="true" />
+            <Chevron className={chevronClass} aria-hidden="true" />
           </button>
         ) : null}
       </h3>
@@ -206,7 +325,10 @@ function CheckControl({ done, onToggle, doneLabel, openLabel }) {
   return (
     <button
       type="button"
-      className={`lesson-tree__check${done ? ' is-done' : ''}`}
+      className={cn(
+        'mt-[0.12rem] inline-flex h-[1.05rem] w-[1.05rem] cursor-pointer items-center justify-center rounded-[3px] border-[1.5px] border-ink/38 bg-transparent p-0 text-teal',
+        done && 'border-teal'
+      )}
       title={done ? doneLabel : openLabel}
       aria-pressed={done}
       onClick={(e) => {
@@ -257,10 +379,10 @@ function ProjectsButton({ projects, selectedProjectId, onSelectProject }) {
   }
 
   return (
-    <span className="lesson-tree__projects" ref={rootRef}>
+    <span className="relative inline-flex min-w-0" ref={rootRef}>
       <button
         type="button"
-        className={`lesson-tree__resources${active ? ' is-active' : ''}${open ? ' is-open' : ''}`}
+        className={cn(pillBtn, active && 'bg-coral/10')}
         aria-expanded={single ? undefined : open}
         aria-haspopup={single ? undefined : 'menu'}
         title={hint}
@@ -271,17 +393,33 @@ function ProjectsButton({ projects, selectedProjectId, onSelectProject }) {
         }}
       >
         <FolderKanban size={14} strokeWidth={2} aria-hidden="true" />
-        <span className="lesson-tree__pill-label">{label}</span>
-        {single ? null : <ChevronDown size={14} strokeWidth={2} aria-hidden="true" />}
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{label}</span>
+        {single ? null : (
+          <ChevronDown
+            size={14}
+            strokeWidth={2}
+            aria-hidden="true"
+            className={cn(
+              'transition-transform duration-[120ms] ease-pop',
+              open && 'rotate-180'
+            )}
+          />
+        )}
       </button>
       {open ? (
-        <ul className="lesson-tree__projects-menu" role="menu">
+        <ul
+          className="absolute top-[calc(100%+0.35rem)] right-0 z-[4] m-0 min-w-[11rem] max-w-[16rem] list-none rounded-sm border border-ink/10 bg-surface p-[0.3rem] shadow-lift"
+          role="menu"
+        >
           {list.map((project) => (
             <li key={project.id}>
               <button
                 type="button"
                 role="menuitem"
-                className={selectedProjectId === project.id ? 'is-active' : ''}
+                className={cn(
+                  'w-full cursor-pointer rounded-sm border-0 bg-transparent px-[0.55rem] py-[0.4rem] text-left text-[0.82rem] font-semibold text-ink hover:bg-coral/12',
+                  selectedProjectId === project.id && 'bg-coral/12'
+                )}
                 title={project.linkMissing ? 'Sin carpeta vinculada' : project.linkedFolderPath || project.title}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -304,15 +442,18 @@ function ProjectRow({ project, selectedProjectId, onSelectProject }) {
     <li>
       <button
         type="button"
-        className={`lesson-tree__item lesson-tree__item--project${isActive ? ' is-active' : ''}${
-          project.linkMissing ? ' is-broken' : ''
-        }`}
+        className={cn(
+          treeItem,
+          'w-full rounded-none pt-[0.6rem] pr-[0.95rem] pb-[0.65rem] pl-[2.15rem] hover:bg-ink/4',
+          isActive && 'is-active bg-coral/20 text-ink',
+          project.linkMissing && !isActive && 'text-coral-deep'
+        )}
         onClick={() => onSelectProject?.(project)}
         title={project.linkedFolderPath || 'Sin carpeta vinculada'}
       >
-        <span className="lesson-tree__body">
-          <span className="lesson-tree__label">{project.title}</span>
-          <span className="lesson-tree__meta">
+        <span className={treeBody}>
+          <span className={treeLabel}>{project.title}</span>
+          <span className={cn(treeMeta, 'text-teal')}>
             <FolderKanban size={13} strokeWidth={2} aria-hidden="true" />
             <span>{project.linkMissing ? 'Sin carpeta' : statusLabel(project.status)}</span>
           </span>
@@ -444,7 +585,7 @@ function LessonTree({
       return (
         <button
           type="button"
-          className="lesson-tree__expand"
+          className={cn(iconBtnQuiet, focusRing)}
           onClick={onToggleCollapsed}
           title="Mostrar contenido"
           aria-expanded={false}
@@ -455,9 +596,9 @@ function LessonTree({
       )
     }
     return (
-      <div className="lesson-tree lesson-tree--empty">
+      <div className="p-5 text-[0.9rem] text-ink-soft">
         <p>No hay lecciones ni recursos en esta carpeta.</p>
-        <button type="button" className="btn btn--ghost" onClick={() => onAddProject?.()}>
+        <button type="button" className={btnGhost} onClick={() => onAddProject?.()}>
           + Proyecto
         </button>
       </div>
@@ -469,7 +610,7 @@ function LessonTree({
     {collapsed && onToggleCollapsed ? (
       <button
         type="button"
-        className="lesson-tree__expand"
+        className={cn(iconBtnQuiet, focusRing)}
         onClick={onToggleCollapsed}
         title="Mostrar contenido"
         aria-expanded={false}
@@ -479,20 +620,25 @@ function LessonTree({
       </button>
     ) : null}
     <nav
-      className="lesson-tree"
+      className="px-0 pt-0 pb-6"
       aria-label="Contenido del curso"
       hidden={collapsed}
       ref={treeRef}
     >
-      <div className="lesson-tree__sticky">
-        <div className="lesson-tree__header">
-          <div className="lesson-tree__header-copy">
-            <h2 title={courseTitle}>{courseTitle}</h2>
+      <div className="sticky top-0 z-[2] bg-surface pb-[0.35rem]">
+        <div className="static z-[1] flex items-center justify-between gap-3 bg-surface px-[0.95rem] pt-[0.9rem] pb-[0.35rem]">
+          <div className="min-w-0 flex-1">
+            <h2
+              className="m-0 overflow-hidden font-display text-[1.05rem] font-extrabold text-ellipsis whitespace-nowrap"
+              title={courseTitle}
+            >
+              {courseTitle}
+            </h2>
           </div>
-          <div className="lesson-tree__header-actions">
+          <div className="flex shrink-0 items-center gap-[0.15rem]">
             <button
               type="button"
-              className="lesson-tree__add-project"
+              className="cursor-pointer rounded-sm border-0 bg-transparent px-[0.35rem] py-[0.3rem] text-[0.78rem] font-bold text-coral-deep hover:bg-coral/8"
               onClick={() => onAddProject?.()}
               title="Añadir proyecto virtual"
             >
@@ -501,7 +647,7 @@ function LessonTree({
             {onToggleCollapsed ? (
               <button
                 type="button"
-                className="lesson-tree__collapse"
+                className={cn(iconBtnQuiet, focusRing)}
                 onClick={onToggleCollapsed}
                 title="Cerrar panel"
                 aria-expanded={!collapsed}
@@ -514,19 +660,24 @@ function LessonTree({
         </div>
         {playableCount > 0 ? (
           <div
-            className="course-goal"
+            className="mx-3 mt-[0.35rem] mb-[0.15rem] flex items-center gap-3 rounded-[12px] border border-ink/10 bg-cream px-[0.8rem] py-[0.7rem]"
             style={{ '--goal': `${Math.round((completedCount / playableCount) * 100)}%` }}
           >
-            <div className="course-goal__copy">
-              <strong>
+            <div className="min-w-0 flex-1">
+              <strong className="block text-[0.92rem] font-extrabold">
                 Progreso · {completedCount}/{playableCount}
               </strong>
-              <p>
+              <p className="mt-[0.2rem] text-[0.8rem] leading-[1.35] text-ink-soft">
                 {completedCount} de {playableCount}{' '}
                 {playableCount === 1 ? 'lección completada' : 'lecciones completadas'}.
               </p>
             </div>
-            <div className="course-goal__ring" aria-hidden="true" />
+            <div
+              className="grid size-[2.35rem] shrink-0 place-items-center rounded-full bg-[conic-gradient(var(--color-teal)_var(--goal,0%),rgba(61,122,122,0.18)_0)]"
+              aria-hidden="true"
+            >
+              <span className="size-[1.65rem] rounded-full bg-cream" />
+            </div>
           </div>
         ) : null}
       </div>
@@ -540,7 +691,7 @@ function LessonTree({
           open={!collapsedIds.has('__projects__')}
           onToggle={() => toggleSection('__projects__')}
         >
-          <ul className="lesson-tree__list">
+          <ul className={treeList}>
             {unanchored.map((project) => (
               <ProjectRow
                 key={project.id}
@@ -619,9 +770,15 @@ function LessonRow({
   const kind = lesson.kind === 'audio' ? 'audio' : 'video'
 
   return (
-    <li className="lesson-tree__block">
+    <li className="flex flex-col gap-[0.15rem]">
       <div
-        className={`lesson-tree__row${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
+        className={cn(
+          'relative grid items-start gap-x-[0.65rem] px-[0.9rem] py-[0.7rem] hover:bg-ink/4',
+          linked.length > 0 || sidecars.length > 0
+            ? 'grid-cols-[auto_minmax(0,1fr)_auto]'
+            : 'grid-cols-[auto_minmax(0,1fr)]',
+          isActive && 'is-active bg-coral/10 hover:bg-coral/10'
+        )}
       >
         <CheckControl
           done={isDone}
@@ -631,23 +788,27 @@ function LessonRow({
         />
         <button
           type="button"
-          className={`lesson-tree__item${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
+          className={cn(
+            treeItem,
+            'flex-1 rounded-none p-0 hover:bg-transparent hover:text-ink',
+            isActive && 'is-active bg-transparent text-ink'
+          )}
           onClick={() => onSelectLesson?.(lesson)}
           title={lesson.relativePath}
         >
-          <span className="lesson-tree__body">
-            <span className="lesson-tree__label">{lesson.title}</span>
-            <span className="lesson-tree__meta">
+          <span className={treeBody}>
+            <span className={cn(treeLabel, isDone && 'opacity-65')}>{lesson.title}</span>
+            <span className={treeMeta}>
               <KindMark kind={kind} size={13} />
               <span>{duration || KIND_NAME[kind]}</span>
               {prog?.positionSec > 0 && !isDone ? (
-                <span className="lesson-tree__resume" aria-hidden="true" />
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-teal" aria-hidden="true" />
               ) : null}
             </span>
           </span>
         </button>
         {linked.length > 0 || sidecars.length > 0 ? (
-          <div className="lesson-tree__actions">
+          <div className="ml-[0.65rem] inline-flex items-center gap-[0.4rem] self-center">
             <ProjectsButton
               projects={linked}
               selectedProjectId={selectedProjectId}
@@ -656,7 +817,7 @@ function LessonRow({
             {sidecars.length > 0 ? (
               <button
                 type="button"
-                className={`lesson-tree__resources${resourcesActive ? ' is-active' : ''}`}
+                className={cn(pillBtn, resourcesActive && 'bg-coral/10')}
                 aria-pressed={resourcesActive}
                 onClick={() =>
                   onOpenResources?.({
@@ -671,7 +832,12 @@ function LessonRow({
               >
                 <Folder size={14} strokeWidth={2} aria-hidden="true" />
                 Recursos
-                <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+                <ChevronRight
+                  size={14}
+                  strokeWidth={2}
+                  aria-hidden="true"
+                  className="transition-transform duration-[120ms] ease-pop"
+                />
               </button>
             ) : null}
           </div>
@@ -709,7 +875,7 @@ function SectionView({
     const batch = lessonBuffer
     lessonBuffer = []
     blocks.push(
-      <ul className="lesson-tree__list" key={`lessons-${batch[0].id || batch[0].relativePath}`}>
+      <ul className={treeList} key={`lessons-${batch[0].id || batch[0].relativePath}`}>
         {batch.map((lesson) => (
           <LessonRow
             key={lesson.id || lesson.relativePath}
@@ -778,13 +944,15 @@ function SectionView({
     >
       {blocks}
       {resources.length > 0 ? (
-        <ul className="lesson-tree__list">
+        <ul className={treeList}>
           <li>
             <button
               type="button"
-              className={`lesson-tree__item lesson-tree__item--resources${
-                activeResourceGroupId === `section:${section.id}` ? ' is-active' : ''
-              }`}
+              className={cn(
+                treeItem,
+                'w-full items-center rounded-none pt-[0.7rem] pr-[0.95rem] pb-[0.75rem] pl-[2.6rem] hover:bg-ink/4',
+                activeResourceGroupId === `section:${section.id}` && 'is-active bg-coral/20 text-ink'
+              )}
               onClick={() =>
                 onOpenResources?.({
                   id: `section:${section.id}`,
@@ -795,9 +963,9 @@ function SectionView({
                 })
               }
             >
-              <span className="lesson-tree__body">
-                <span className="lesson-tree__label">Recursos</span>
-                <span className="lesson-tree__meta">
+              <span className={treeBody}>
+                <span className={treeLabel}>Recursos</span>
+                <span className={treeMeta}>
                   <Folder size={13} strokeWidth={2} aria-hidden="true" />
                   <span>
                     {resources.length} {resources.length === 1 ? 'archivo' : 'archivos'}

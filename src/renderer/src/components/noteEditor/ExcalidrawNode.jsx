@@ -41,13 +41,12 @@ export class ExcalidrawNode extends DecoratorNode {
 
   exportDOM() {
     const wrap = document.createElement('div')
-    wrap.setAttribute('class', 'note-editor__excalidraw-export')
     wrap.setAttribute('data-excalidraw-id', this.__drawingId || '')
     if (this.__previewSrc) {
       const img = document.createElement('img')
       img.setAttribute('src', this.__previewSrc)
       img.setAttribute('alt', 'Dibujo Excalidraw')
-      img.setAttribute('class', 'note-editor__excalidraw-preview')
+      img.setAttribute('class', 'block max-h-56 w-full bg-white object-contain')
       wrap.appendChild(img)
     } else {
       wrap.textContent = 'Dibujo Excalidraw'
@@ -58,7 +57,7 @@ export class ExcalidrawNode extends DecoratorNode {
   createDOM(config) {
     const div = document.createElement('div')
     const className = config.theme?.excalidraw
-    div.className = className || 'note-editor__excalidraw'
+    div.className = className || 'my-[0.45rem] block'
     return div
   }
 

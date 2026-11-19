@@ -1,5 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
+import { cn } from '../ui/cn'
+import { btnCompact, btnGhost, btnPrimary, fieldControl, fieldLabel } from '../ui/classes'
+
+const dialogShell =
+  'w-[calc(100%-2rem)] max-w-[760px] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel open:flex open:max-h-[calc(100vh-2rem)] open:flex-col backdrop:bg-[rgba(26,20,35,0.45)]'
+const dialogForm = 'flex flex-col gap-[0.85rem] overflow-auto px-[1.15rem] pt-2 pb-[1.15rem]'
+const dialogLead = 'mt-[0.35rem] mb-0 text-[0.85rem] leading-[1.4] text-ink-soft'
+const searchInput =
+  'w-full rounded-md border border-ink/10 bg-surface px-3 py-[0.55rem] text-ink outline-none focus:shadow-focus motion-reduce:animate-none'
+const rowBase =
+  'flex cursor-pointer items-start gap-[0.65rem] rounded-[10px] px-[0.65rem] py-[0.55rem] hover:bg-coral/8'
+const listBox =
+  'flex max-h-[min(42vh,360px)] flex-col gap-[0.35rem] overflow-auto rounded-md border border-ink/10 bg-surface p-[0.15rem]'
+const emptyNote = 'm-0 p-4 text-center text-[0.9rem] text-ink-soft'
 
 function coverQueryFor(course) {
   return [course?.institution, course?.title]
@@ -376,35 +390,36 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
   return (
     <dialog
       ref={dialogRef}
-      className={`dialog dialog--covers${dragOver ? ' is-dragover' : ''}`}
+      className={cn(dialogShell, dragOver && 'shadow-[0_0_0_3px_#e84570]')}
       onClose={handleClose}
       onClick={handleBackdropClick}
     >
       {step === 'select' ? (
         <>
-          <div className="dialog__preview">
+          <div className="flex items-center gap-[0.85rem] px-[1.15rem] pt-4 pb-2">
             <div>
               <h3>Buscar portadas</h3>
-              <p className="dialog__lead">
+              <p className={dialogLead}>
                 Elige cursos sin imagen. Se buscará en la web con la academia y el título, y podrás
                 elegir una opción por curso.
               </p>
             </div>
           </div>
-          <div className="dialog__form">
-            <div className="import-props__toolbar">
+          <div className={dialogForm}>
+            <div className="flex flex-col gap-[0.55rem]">
               <input
                 type="search"
-                className="import-props__search"
+                data-search-field=""
+                className={searchInput}
                 placeholder="Filtrar cursos…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 aria-label="Filtrar cursos"
               />
-              <div className="import-props__bulk">
+              <div className="flex flex-wrap gap-[0.35rem]">
                 <button
                   type="button"
-                  className="btn btn--ghost btn--compact"
+                  className={cn(btnGhost, btnCompact)}
                   onClick={() => {
                     setSelected((prev) => {
                       const next = new Set(prev)
@@ -421,7 +436,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                 </button>
                 <button
                   type="button"
-                  className="btn btn--ghost btn--compact"
+                  className={cn(btnGhost, btnCompact)}
                   onClick={() => setSelected(new Set())}
                   disabled={selectedCount === 0}
                 >
@@ -429,7 +444,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                 </button>
                 <button
                   type="button"
-                  className="btn btn--ghost btn--compact"
+                  className={cn(btnGhost, btnCompact)}
                   onClick={() => setSelected(new Set(courses.map((course) => course.path)))}
                   disabled={courses.length === 0 || selectedCount === courses.length}
                 >
@@ -437,26 +452,28 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                 </button>
               </div>
             </div>
-            <div className="import-props__list" role="listbox" aria-multiselectable="true">
+            <div className={listBox} role="listbox" aria-multiselectable="true">
               {filtered.length === 0 ? (
-                <p className="import-props__empty">No hay cursos que coincidan.</p>
+                <p className={emptyNote}>No hay cursos que coincidan.</p>
               ) : (
                 filtered.map((course) => {
                   const checked = selected.has(course.path)
                   return (
-                    <label
-                      key={course.path}
-                      className={`import-props__row${checked ? ' is-selected' : ''}`}
-                    >
+                    <label key={course.path} className={cn(rowBase, checked && 'bg-coral/12')}>
                       <input
+                        className="mt-[0.2rem] shrink-0 accent-coral"
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleOne(course.path)}
                       />
-                      <span className="import-props__meta">
-                        <span className="import-props__title">{course.title || course.path}</span>
-                        <span className="import-props__folder">{course.path}</span>
-                        <span className="import-props__hint">
+                      <span className="flex min-w-0 flex-col gap-[0.15rem]">
+                        <span className="font-display leading-[1.25] font-extrabold text-ink">
+                          {course.title || course.path}
+                        </span>
+                        <span className="text-[0.78rem] break-all text-ink-soft">
+                          {course.path}
+                        </span>
+                        <span className="text-xs text-ink-soft">
                           {course.institution || 'Sin academia'}
                         </span>
                       </span>
@@ -465,17 +482,17 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                 })
               )}
             </div>
-            <div className="dialog__actions dialog__actions--spread">
-              <span className="import-props__count">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]">
+              <span className="text-[0.85rem] font-bold text-ink-soft">
                 {selectedCount} de {courses.length} seleccionado{selectedCount === 1 ? '' : 's'}
               </span>
-              <div className="dialog__actions-btns">
-                <button type="button" className="btn btn--ghost" onClick={handleClose}>
+              <div className="flex gap-2">
+                <button type="button" className={btnGhost} onClick={handleClose}>
                   Cancelar
                 </button>
                 <button
                   type="button"
-                  className="btn btn--primary"
+                  className={btnPrimary}
                   onClick={startSearch}
                   disabled={selectedCount === 0}
                 >
@@ -489,32 +506,37 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
 
       {step === 'choose' && courses[0] ? (
         <>
-          <div className="dialog__preview">
+          <div className="flex items-center gap-[0.85rem] px-[1.15rem] pt-4 pb-2">
             <div>
               <h3>{courses[0].hasCover ? 'Reemplazar portada' : 'Buscar portada'}</h3>
-              <p className="dialog__lead">
+              <p className={dialogLead}>
                 {courses[0].institution ? `${courses[0].institution} · ` : ''}
                 {courses[0].hasCover
                   ? 'La imagen actual se sustituye cuando guardes otra.'
                   : 'Elige cómo conseguir la imagen. La búsqueda web no empieza sola.'}
               </p>
-              <p className="cover-search__course">{courses[0].title || courses[0].path}</p>
+              <p className="mt-[0.35rem] mb-0 font-display font-extrabold text-ink">
+                {courses[0].title || courses[0].path}
+              </p>
             </div>
           </div>
-          <div className="dialog__form">
-            <div className="field">
-              <label htmlFor="cover-query">Búsqueda</label>
+          <div className={dialogForm}>
+            <div>
+              <label className={fieldLabel} htmlFor="cover-query">
+                Búsqueda
+              </label>
               <input
                 id="cover-query"
+                className={fieldControl}
                 type="text"
                 value={queryDraft}
                 onChange={(e) => setQueryDraft(e.target.value)}
               />
             </div>
-            <div className="cover-search__query">
+            <div className="flex flex-wrap items-center gap-[0.45rem]">
               <button
                 type="button"
-                className="btn btn--ghost"
+                className={btnGhost}
                 onClick={handleOpenGoogle}
                 disabled={saving || !queryDraft.trim()}
               >
@@ -522,25 +544,25 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
               </button>
               <button
                 type="button"
-                className="btn btn--primary"
+                className={btnPrimary}
                 onClick={startChosenSearch}
                 disabled={saving || !queryDraft.trim()}
               >
                 Buscar en la web
               </button>
             </div>
-            <p className={`cover-search__drop-hint${dragOver ? ' is-active' : ''}`}>
+            <p
+              className={cn(
+                'm-0 text-[0.8rem] text-ink-soft',
+                dragOver && 'font-extrabold text-coral-deep'
+              )}
+            >
               {dragOver
                 ? 'Suelta para usar esta imagen'
                 : 'Arrastra una imagen desde el navegador a esta ventana.'}
             </p>
-            <div className="dialog__actions">
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={handleClose}
-                disabled={saving}
-              >
+            <div className="flex justify-end gap-2 pt-[0.35rem]">
+              <button type="button" className={btnGhost} onClick={handleClose} disabled={saving}>
                 Cerrar
               </button>
             </div>
@@ -550,29 +572,31 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
 
       {step === 'searching' ? (
         <>
-          <div className="dialog__preview">
+          <div className="flex items-center gap-[0.85rem] px-[1.15rem] pt-4 pb-2">
             <div>
               <h3>Buscando portadas</h3>
-              <p className="dialog__lead">
+              <p className={dialogLead}>
                 {progress.total === 0
                   ? 'No hay cursos para buscar.'
                   : `${progress.done} de ${progress.total}`}
               </p>
             </div>
           </div>
-          <div className="dialog__form">
+          <div className={dialogForm}>
             <div
-              className="cover-search__bar"
+              className="h-2 overflow-hidden rounded-full border border-ink/10 bg-cream-deep"
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={progress.total}
               aria-valuenow={progress.done}
             >
-              <span style={{ width: `${progressPct}%` }} />
+              <span className="block h-full bg-coral" style={{ width: `${progressPct}%` }} />
             </div>
-            <p className="cover-search__status">{progress.title || 'Preparando búsqueda…'}</p>
-            <div className="dialog__actions">
-              <button type="button" className="btn btn--ghost" onClick={handleClose}>
+            <p className="m-0 text-[0.9rem] text-ink-soft">
+              {progress.title || 'Preparando búsqueda…'}
+            </p>
+            <div className="flex justify-end gap-2 pt-[0.35rem]">
+              <button type="button" className={btnGhost} onClick={handleClose}>
                 Cancelar
               </button>
             </div>
@@ -582,22 +606,27 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
 
       {step === 'review' && current ? (
         <>
-          <div className="dialog__preview">
+          <div className="flex items-center gap-[0.85rem] px-[1.15rem] pt-4 pb-2">
             <div>
               <h3>Elegir portada</h3>
-              <p className="dialog__lead">
+              <p className={dialogLead}>
                 {reviewIndex + 1} de {items.length}
                 {current.course.institution ? ` · ${current.course.institution}` : ''}
               </p>
-              <p className="cover-search__course">{current.course.title || current.course.path}</p>
+              <p className="mt-[0.35rem] mb-0 font-display font-extrabold text-ink">
+                {current.course.title || current.course.path}
+              </p>
             </div>
           </div>
-          <div className="dialog__form">
-            <div className="field">
-              <label htmlFor="cover-query">Búsqueda</label>
-              <div className="cover-search__query">
+          <div className={dialogForm}>
+            <div>
+              <label className={fieldLabel} htmlFor="cover-query">
+                Búsqueda
+              </label>
+              <div className="flex flex-wrap items-center gap-[0.45rem]">
                 <input
                   id="cover-query"
+                  className={cn(fieldControl, 'min-w-0 flex-1')}
                   type="text"
                   value={queryDraft}
                   onChange={(e) => setQueryDraft(e.target.value)}
@@ -610,7 +639,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                 />
                 <button
                   type="button"
-                  className="btn btn--ghost"
+                  className={btnGhost}
                   onClick={handleResearch}
                   disabled={researching || saving || !queryDraft.trim()}
                 >
@@ -618,7 +647,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                 </button>
                 <button
                   type="button"
-                  className="btn btn--ghost"
+                  className={btnGhost}
                   onClick={handleOpenGoogle}
                   disabled={saving || !queryDraft.trim()}
                 >
@@ -626,17 +655,24 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                 </button>
               </div>
             </div>
-            <p className={`cover-search__drop-hint${dragOver ? ' is-active' : ''}`}>
+            <p
+              className={cn(
+                'm-0 text-[0.8rem] text-ink-soft',
+                dragOver && 'font-extrabold text-coral-deep'
+              )}
+            >
               {dragOver
                 ? 'Suelta para usar esta imagen'
                 : 'O abre Google Imágenes y arrastra una foto a esta ventana.'}
             </p>
 
-            {current.error ? <p className="cover-search__error">{current.error}</p> : null}
+            {current.error ? (
+              <p className="m-0 text-[0.9rem] text-coral-deep">{current.error}</p>
+            ) : null}
 
             {current.candidates.length > 0 ? (
               <div
-                className="cover-search__grid"
+                className="grid max-h-[min(46vh,440px)] grid-cols-4 gap-[0.55rem] overflow-auto p-1 max-[640px]:grid-cols-2"
                 role="radiogroup"
                 aria-label="Opciones de portada"
               >
@@ -648,46 +684,43 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                       type="button"
                       role="radio"
                       aria-checked={isSelected}
-                      className={`cover-search__option${isSelected ? ' is-selected' : ''}`}
+                      className={cn(
+                        'cursor-pointer rounded-md border border-ink/10 bg-cream-deep p-0 shadow-none focus-visible:border-coral focus-visible:shadow-[0_0_0_3px_#e84570] disabled:cursor-default disabled:opacity-70',
+                        isSelected && 'border-coral shadow-[0_0_0_3px_#e84570]'
+                      )}
                       onClick={() => setSelectedId(candidate.id)}
                       disabled={researching || saving}
                     >
-                      <span className="cover-search__thumb">
-                        <img src={candidate.dataUrl} alt="" />
+                      <span className="block aspect-[16/10] overflow-hidden rounded-[12px]">
+                        <img
+                          className="block h-full w-full object-cover"
+                          src={candidate.dataUrl}
+                          alt=""
+                        />
                       </span>
                     </button>
                   )
                 })}
               </div>
             ) : (
-              <p className="import-props__empty">Sin imágenes para esta búsqueda.</p>
+              <p className={emptyNote}>Sin imágenes para esta búsqueda.</p>
             )}
 
             {selectedCandidate?.source ? (
-              <p className="cover-search__source">{selectedCandidate.source}</p>
+              <p className="m-0 text-[0.78rem] text-ink-soft">{selectedCandidate.source}</p>
             ) : null}
 
-            <div className="dialog__actions dialog__actions--spread">
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={handleClose}
-                disabled={saving}
-              >
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]">
+              <button type="button" className={btnGhost} onClick={handleClose} disabled={saving}>
                 Cerrar
               </button>
-              <div className="dialog__actions-btns">
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  onClick={handleSkip}
-                  disabled={saving}
-                >
+              <div className="flex gap-2">
+                <button type="button" className={btnGhost} onClick={handleSkip} disabled={saving}>
                   Saltar
                 </button>
                 <button
                   type="button"
-                  className="btn btn--primary"
+                  className={btnPrimary}
                   onClick={handleUse}
                   disabled={saving || researching || !selectedCandidate}
                 >

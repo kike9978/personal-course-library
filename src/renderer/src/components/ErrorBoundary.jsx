@@ -16,7 +16,7 @@ export default class ErrorBoundary extends Component {
   render() {
     if (this.state.error) {
       return (
-        <div className="error-fallback">
+        <div className="m-8 rounded-md border-[3px] border-[#ff4444] bg-[#ffe6e6] p-8">
           <h2>Something went wrong</h2>
           <p>{this.state.error.message}</p>
           <button type="button" onClick={() => this.setState({ error: null })}>

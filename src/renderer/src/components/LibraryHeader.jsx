@@ -3,6 +3,7 @@ import AppNav from './AppNav'
 import CourseFilterBar from './CourseFilterBar'
 import { NotionSyncButton } from './NotionSyncControl'
 import brandMark from '../assets/img/brand-mark.svg'
+import { cn } from '../ui/cn'
 
 const SORT_OPTIONS = [
   { value: 'az', label: 'A → Z' },
@@ -15,6 +16,15 @@ const SORT_OPTIONS = [
   { value: 'progress', label: 'Más progreso' },
   { value: 'inProgress', label: 'En curso primero' }
 ]
+
+const headerIcon =
+  'inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus enabled:hover:bg-ink/[0.06] disabled:cursor-not-allowed disabled:opacity-45 [&_svg]:h-5 [&_svg]:w-5'
+
+const popoverItem =
+  'flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-[8px] border-0 bg-transparent px-2.5 py-2 text-left text-sm font-bold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus enabled:hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50 [&_small]:text-xs [&_small]:font-medium [&_small]:text-ink-soft'
+
+const searchInput =
+  'h-9 w-full rounded-full border border-ink/10 bg-surface py-0 pr-4 pl-[2.4rem] text-ink shadow-none outline-none transition-[box-shadow,transform] duration-[120ms] ease-[ease] focus:shadow-find motion-reduce:animate-none'
 
 function LibraryHeader({
   filterText,
@@ -80,21 +90,23 @@ function LibraryHeader({
   }, [moreOpen])
 
   return (
-    <header className="app-header">
-      <div className="app-header__bar">
-        <div className="brand">
-          <div className="brand__mark">
+    <header className="relative z-40 shrink-0 border-b border-ink/10 bg-cream/92 px-6 pt-[0.6rem] pb-[0.55rem] backdrop-blur-[10px]">
+      <div className="@container flex min-w-0 flex-wrap items-center gap-x-4 gap-y-3">
+        <div className="flex shrink-0 items-center gap-[0.65rem] min-w-max">
+          <div className="h-9 w-9 shrink-0 overflow-hidden rounded-sm border border-ink/10 bg-cream shadow-card [&_img]:block [&_img]:h-full [&_img]:w-full [&_svg]:block [&_svg]:h-full [&_svg]:w-full">
             <img src={brandMark} alt="" />
           </div>
-          <div className="brand__text">
-            <h1 className="brand__title">Catálogo de cursos</h1>
+          <div className="flex min-w-0 flex-row items-center gap-3 [&_nav]:flex-nowrap">
+            <h1 className="m-0 font-display text-[1.15rem] leading-[1.1] font-black tracking-[-0.02em] whitespace-nowrap text-ink">
+              Catálogo de cursos
+            </h1>
             <AppNav active="library" onSelect={onNavigate} />
           </div>
         </div>
 
-        <div className="search-field">
+        <div className="relative min-w-[12rem] flex-[1_1_16rem] @max-[860px]:order-1 @max-[860px]:basis-full">
           <svg
-            className="search-field__icon"
+            className="pointer-events-none absolute top-1/2 left-[0.95rem] h-4 w-4 -translate-y-1/2 opacity-55"
             viewBox="0 0 24 24"
             fill="currentColor"
             aria-hidden="true"
@@ -103,6 +115,8 @@ function LibraryHeader({
           </svg>
           <input
             type="search"
+            data-search-field=""
+            className={searchInput}
             value={filterText}
             placeholder="Buscar título, academia, instructor, temas, notas…"
             onChange={(e) => onFilterTextChange(e.target.value)}
@@ -111,11 +125,11 @@ function LibraryHeader({
           />
         </div>
 
-        <div className="header-tools">
+        <div className="ml-auto flex shrink-0 items-center gap-[0.15rem]">
           <NotionSyncButton />
           <button
             type="button"
-            className="header-icon"
+            className={headerIcon}
             onClick={onChangeLibrary}
             title="Cambiar carpeta"
             aria-label="Cambiar carpeta"
@@ -129,7 +143,7 @@ function LibraryHeader({
           </button>
           <button
             type="button"
-            className={`header-icon${isLoading ? ' is-busy' : ''}`}
+            className={cn(headerIcon, isLoading && '[&_svg]:animate-loader')}
             onClick={onRefresh}
             disabled={isLoading}
             title="Refrescar (Ctrl+R)"
@@ -142,10 +156,10 @@ function LibraryHeader({
               />
             </svg>
           </button>
-          <div className="header-menu" ref={moreRef}>
+          <div className="relative shrink-0" ref={moreRef}>
             <button
               type="button"
-              className="header-icon"
+              className={headerIcon}
               aria-label="Más acciones"
               aria-haspopup="menu"
               aria-expanded={moreOpen}
@@ -160,10 +174,14 @@ function LibraryHeader({
               </svg>
             </button>
             {moreOpen ? (
-              <div className="header-popover" role="menu" aria-label="Más acciones">
+              <div
+                className="absolute top-[calc(100%+6px)] right-0 z-[5] min-w-[17rem] rounded-md border border-ink/10 bg-surface p-1.5 shadow-panel"
+                role="menu"
+                aria-label="Más acciones"
+              >
                 <button
                   type="button"
-                  className="header-popover__item"
+                  className={popoverItem}
                   role="menuitem"
                   disabled={isLoading || isExporting || !canExport}
                   onClick={() => {
@@ -175,12 +193,12 @@ function LibraryHeader({
                   <small>JSON con metadatos</small>
                 </button>
                 {missingCoverCount > 0 || missingDescriptionCount > 0 ? (
-                  <hr className="header-popover__sep" />
+                  <hr className="mx-1.5 my-1 h-px border-0 bg-ink/10" />
                 ) : null}
                 {missingCoverCount > 0 ? (
                   <button
                     type="button"
-                    className="header-popover__item"
+                    className={popoverItem}
                     role="menuitem"
                     onClick={() => {
                       setMoreOpen(false)
@@ -196,7 +214,7 @@ function LibraryHeader({
                 {missingDescriptionCount > 0 ? (
                   <button
                     type="button"
-                    className="header-popover__item"
+                    className={popoverItem}
                     role="menuitem"
                     onClick={() => {
                       setMoreOpen(false)
@@ -216,10 +234,15 @@ function LibraryHeader({
         </div>
       </div>
 
-      <div className="app-header__toolbar">
-        <div className="segmented" role="group" aria-label="Vista">
+      <div className="mt-2 flex min-w-0 items-center gap-2">
+        <div
+          className="inline-flex h-8 shrink-0 gap-[0.2rem] rounded-sm border border-ink/10 bg-surface p-0.5 shadow-none"
+          role="group"
+          aria-label="Vista"
+        >
           <button
             type="button"
+            className="grid h-[26px] w-7 cursor-pointer place-items-center rounded-[7px] border-0 bg-transparent p-0 text-ink-soft aria-pressed:bg-ink aria-pressed:text-white [&_svg]:h-4 [&_svg]:w-4"
             aria-pressed={isCardLayout}
             aria-label="Cards"
             title="Cards"
@@ -234,6 +257,7 @@ function LibraryHeader({
           </button>
           <button
             type="button"
+            className="grid h-[26px] w-7 cursor-pointer place-items-center rounded-[7px] border-0 bg-transparent p-0 text-ink-soft aria-pressed:bg-ink aria-pressed:text-white [&_svg]:h-4 [&_svg]:w-4"
             aria-pressed={!isCardLayout}
             aria-label="Lista"
             title="Lista"
@@ -248,10 +272,16 @@ function LibraryHeader({
           </button>
         </div>
 
-        <div className="header-sort">
-          <label htmlFor="sort-mode">Orden</label>
+        <div className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-sm border border-border-strong bg-surface pr-2 pl-2.5">
+          <label
+            className="text-[0.72rem] font-bold tracking-[0.04em] text-ink-soft uppercase"
+            htmlFor="sort-mode"
+          >
+            Orden
+          </label>
           <select
             id="sort-mode"
+            className="max-w-[9.5rem] cursor-pointer border-0 bg-transparent py-0 pr-0.5 pl-0 text-[0.8125rem] font-[650] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             value={sortMode}
             onChange={(e) => onSortModeChange(e.target.value)}
           >
@@ -290,7 +320,10 @@ function LibraryHeader({
           }}
         />
 
-        <span className="header-count" aria-live="polite">
+        <span
+          className="shrink-0 text-[0.8rem] font-[650] whitespace-nowrap text-ink-soft"
+          aria-live="polite"
+        >
           {courseCount} {courseCount === 1 ? 'curso' : 'cursos'}
         </span>
       </div>

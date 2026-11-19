@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from 'd3-force'
 import { LABEL_ZOOM, clampLabelZoom, clampLinkDistance } from '../../../shared/knowledgeGraph.js'
+import { cn } from '../ui/cn'
+
+const graphSvg =
+  'absolute inset-0 block h-full w-full cursor-grab touch-none [&:not(.is-detailed)_text]:hidden [&.is-detailed_g_text]:!block [&.is-labels.is-detailed_.kg-edge]:!block [&_g.is-selected_text]:!block [&_g:hover_text]:!block [&:not(.is-labels)_g_text[data-kind]]:!hidden [&:not(.is-labels)_.kg-edge]:!hidden'
+const nodeText =
+  'pointer-events-none font-body text-[11px] fill-ink stroke-white stroke-[3px] [paint-order:stroke]'
+const edgeLabel =
+  'kg-edge pointer-events-none hidden font-body text-[10px] fill-ink-soft stroke-white stroke-[3px] [paint-order:stroke] [text-anchor:middle]'
 
 const FILL = {
   finding: '#e84570',
@@ -558,20 +566,20 @@ function KnowledgeGraphView({
 
   return (
     <div
-      className="knowledge-graph"
+      className="relative min-h-[16rem] flex-auto overflow-hidden"
       ref={hostRef}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerLeave={onPointerUp}
     >
       {!nodes.length ? (
-        <div className="knowledge-graph--empty">
+        <div className="grid h-full place-items-center p-6 text-center text-ink-soft">
           <p>Todavía no hay temas ni cursos para conectar.</p>
         </div>
       ) : (
         <svg
           ref={svgRef}
-          className={`knowledge-graph__svg${showLabels ? ' is-labels' : ''}`}
+          className={cn(graphSvg, showLabels && 'is-labels')}
           viewBox={`0 0 ${size.width} ${size.height}`}
           role="application"
           aria-label="Gráfica de la biblioteca"
@@ -624,7 +632,13 @@ function KnowledgeGraphView({
                     y2={line.y2}
                     data-type={edge.edgeType}
                     markerEnd={arrow ? 'url(#knowledge-graph-arrow)' : undefined}
-                    className={`knowledge-graph__link${hot ? ' is-hot' : ' is-dim'}`}
+                    className={cn(
+                      'stroke-[rgba(42,36,56,0.38)] [stroke-width:1.25px]',
+                      edge.edgeType === 'shared-topic' && '[stroke-dasharray:6_3]',
+                      hot
+                        ? 'stroke-[rgba(42,36,56,0.72)] [stroke-width:1.6px]'
+                        : 'opacity-[0.18]'
+                    )}
                   />
                   {edge.label ? (
                     <text
@@ -632,7 +646,7 @@ function KnowledgeGraphView({
                         if (el) labelElsRef.current.set(edge.id, el)
                         else labelElsRef.current.delete(edge.id)
                       }}
-                      className="knowledge-graph__edge-label"
+                      className={edgeLabel}
                       x={(line.x1 + line.x2) / 2}
                       y={(line.y1 + line.y2) / 2}
                     >
@@ -652,7 +666,12 @@ function KnowledgeGraphView({
                     if (el) nodeElsRef.current.set(node.id, el)
                     else nodeElsRef.current.delete(node.id)
                   }}
-                  className={`knowledge-graph__node${node.id === selectedId ? ' is-selected' : ''}${dim ? ' is-dim' : ''}`}
+                  className={cn(
+                    'cursor-grab',
+                    node.id === selectedId &&
+                      'is-selected [&_circle]:stroke-coral-deep [&_circle]:[stroke-width:2px]',
+                    dim && 'opacity-[0.18]'
+                  )}
                   transform={`translate(${point.x} ${point.y})`}
                   onPointerDown={(event) => onNodeDown(event, node)}
                   onDoubleClick={(event) => onNodeDoubleClick(event, node)}
@@ -664,6 +683,7 @@ function KnowledgeGraphView({
                     fill={FILL[node.data?.kind] || FILL.finding}
                   />
                   <text
+                    className={nodeText}
                     data-kind={node.data?.kind}
                     x={0}
                     y={radiusFor(node.data?.kind, node.id === selectedId, nodeScale) + 14}
@@ -684,14 +704,21 @@ function KnowledgeGraphView({
             if (!node || !point) return null
             const { x, y, k } = cameraRef.current
             return (
-              <div className="knowledge-graph__tip" style={{ left: x + point.x * k, top: y + point.y * k }}>
+              <div
+                className="pointer-events-none absolute z-[2] max-w-[16rem] -translate-x-1/2 -translate-y-[calc(100%+1.1rem)] rounded-sm border border-ink/10 bg-surface px-2 py-[0.35rem] text-ink shadow-card [&_span]:mb-[0.1rem] [&_span]:block [&_span]:text-[0.68rem] [&_span]:text-ink-soft [&_strong]:block [&_strong]:text-[0.78rem] [&_strong]:leading-[1.3] [&_strong]:font-semibold"
+                style={{ left: x + point.x * k, top: y + point.y * k }}
+              >
                 {node.data?.kindLabel ? <span>{node.data.kindLabel}</span> : null}
                 <strong>{node.data?.fullLabel}</strong>
               </div>
             )
           })()
         : null}
-      {truncated ? <p className="knowledge-graph__note">Mostrando los vecinos más cercanos.</p> : null}
+      {truncated ? (
+        <p className="absolute bottom-[0.4rem] left-3 m-0 text-[0.72rem] text-ink-soft">
+          Mostrando los vecinos más cercanos.
+        </p>
+      ) : null}
     </div>
   )
 }

@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
+import { cn } from '../ui/cn'
+import { btnCompact, btnGhost, btnPrimary } from '../ui/classes'
+
+const dialogShell =
+  'w-[calc(100%-2rem)] max-w-[560px] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel open:flex open:flex-col backdrop:bg-[rgba(26,20,35,0.45)]'
+const dialogForm = 'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem]'
+const dialogLead =
+  'mt-[0.35rem] mb-0 text-[0.85rem] leading-[1.4] text-ink-soft [&_code]:text-[0.8em]'
+const searchInput =
+  'w-full rounded-md border border-ink/10 bg-surface px-3 py-[0.55rem] text-ink outline-none focus:shadow-focus motion-reduce:animate-none'
+const rowBase =
+  'flex cursor-pointer items-start gap-[0.65rem] rounded-[10px] px-[0.65rem] py-[0.55rem] hover:bg-coral/8'
 
 function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
   const dialogRef = useRef(null)
@@ -36,8 +48,7 @@ function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
   }, [courses, query])
 
   const selectedCount = selected.size
-  const allFilteredSelected =
-    filtered.length > 0 && filtered.every((c) => selected.has(c.path))
+  const allFilteredSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.path))
 
   const handleClose = () => {
     if (dialogRef.current) dialogRef.current.close()
@@ -94,36 +105,32 @@ function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
   }
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="dialog dialog--import"
-      onClose={onClose}
-      onClick={handleBackdropClick}
-    >
-      <div className="dialog__preview">
+    <dialog ref={dialogRef} className={dialogShell} onClose={onClose} onClick={handleBackdropClick}>
+      <div className="flex items-center gap-[0.85rem] px-[1.15rem] pt-4 pb-2">
         <div>
           <h3>Importar carpetas sin props</h3>
-          <p className="dialog__lead">
+          <p className={dialogLead}>
             Elige qué carpetas convertir en cursos. Se creará <code>courseProps.json</code> desde el
             nombre de carpeta.
           </p>
         </div>
       </div>
 
-      <div className="dialog__form">
-        <div className="import-props__toolbar">
+      <div className={dialogForm}>
+        <div className="flex flex-col gap-[0.55rem]">
           <input
             type="search"
-            className="import-props__search"
+            data-search-field=""
+            className={searchInput}
             placeholder="Filtrar carpetas…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Filtrar carpetas"
           />
-          <div className="import-props__bulk">
+          <div className="flex flex-wrap gap-[0.35rem]">
             <button
               type="button"
-              className="btn btn--ghost btn--compact"
+              className={cn(btnGhost, btnCompact)}
               onClick={allFilteredSelected ? deselectFiltered : selectFiltered}
               disabled={filtered.length === 0}
             >
@@ -131,7 +138,7 @@ function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
             </button>
             <button
               type="button"
-              className="btn btn--ghost btn--compact"
+              className={cn(btnGhost, btnCompact)}
               onClick={() => setSelected(new Set())}
               disabled={selectedCount === 0}
             >
@@ -139,7 +146,7 @@ function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
             </button>
             <button
               type="button"
-              className="btn btn--ghost btn--compact"
+              className={cn(btnGhost, btnCompact)}
               onClick={() => setSelected(new Set(courses.map((c) => c.path)))}
               disabled={courses.length === 0 || selectedCount === courses.length}
             >
@@ -148,9 +155,15 @@ function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
           </div>
         </div>
 
-        <div className="import-props__list" role="listbox" aria-multiselectable="true">
+        <div
+          className="flex max-h-[min(42vh,360px)] flex-col gap-[0.35rem] overflow-auto rounded-md border border-ink/10 bg-surface p-[0.15rem]"
+          role="listbox"
+          aria-multiselectable="true"
+        >
           {filtered.length === 0 ? (
-            <p className="import-props__empty">No hay carpetas que coincidan.</p>
+            <p className="m-0 p-4 text-center text-[0.9rem] text-ink-soft">
+              No hay carpetas que coincidan.
+            </p>
           ) : (
             filtered.map((course) => {
               const checked = selected.has(course.path)
@@ -159,19 +172,19 @@ function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
                   ? course.programs.join(', ')
                   : null
               return (
-                <label
-                  key={course.path}
-                  className={`import-props__row${checked ? ' is-selected' : ''}`}
-                >
+                <label key={course.path} className={cn(rowBase, checked && 'bg-coral/12')}>
                   <input
+                    className="mt-[0.2rem] shrink-0 accent-coral"
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggleOne(course.path)}
                   />
-                  <span className="import-props__meta">
-                    <span className="import-props__title">{course.title || course.path}</span>
-                    <span className="import-props__folder">{course.path}</span>
-                    <span className="import-props__hint">
+                  <span className="flex min-w-0 flex-col gap-[0.15rem]">
+                    <span className="font-display leading-[1.25] font-extrabold text-ink">
+                      {course.title || course.path}
+                    </span>
+                    <span className="text-[0.78rem] break-all text-ink-soft">{course.path}</span>
+                    <span className="text-xs text-ink-soft">
                       {[course.institution, programs].filter(Boolean).join(' · ') ||
                         'Sin academia / programas detectados'}
                     </span>
@@ -182,17 +195,17 @@ function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
           )}
         </div>
 
-        <div className="dialog__actions dialog__actions--spread">
-          <span className="import-props__count">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]">
+          <span className="text-[0.85rem] font-bold text-ink-soft">
             {selectedCount} de {courses.length} seleccionada{selectedCount === 1 ? '' : 's'}
           </span>
-          <div className="dialog__actions-btns">
-            <button type="button" className="btn btn--ghost" onClick={handleClose}>
+          <div className="flex gap-2">
+            <button type="button" className={btnGhost} onClick={handleClose}>
               Cancelar
             </button>
             <button
               type="button"
-              className="btn btn--primary"
+              className={btnPrimary}
               onClick={handleImport}
               disabled={isImporting || selectedCount === 0}
             >

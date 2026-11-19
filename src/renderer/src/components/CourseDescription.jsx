@@ -3,6 +3,16 @@ import {
   buildCourseDescriptionBrief,
   parseCourseDescription
 } from '../../../shared/courseDescription.js'
+import { cn } from '../ui/cn'
+import { btnGhost, btnPrimary, fieldControl, fieldLabel } from '../ui/classes'
+
+const dialogShell =
+  'w-[calc(100%-2rem)] max-w-[40rem] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel open:flex open:max-h-[min(90vh,48rem)] open:flex-col open:overflow-auto backdrop:bg-[rgba(26,20,35,0.45)] [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55'
+const dialogForm = 'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem]'
+const dialogTitle = 'm-0 font-display text-[1.2rem] font-black'
+const dialogLead = 'mt-[0.35rem] mb-0 text-[0.85rem] leading-[1.4] text-ink-soft'
+const briefField = cn(fieldControl, 'min-h-[8rem] resize-y text-[0.78rem] leading-[1.45]')
+const pasteField = cn(fieldControl, 'min-h-[6.5rem] resize-y text-[0.78rem] leading-[1.45]')
 
 export function CourseDescriptionDialog({ course, description, onClose, onSaved }) {
   const dialogRef = useRef(null)
@@ -103,7 +113,7 @@ export function CourseDescriptionDialog({ course, description, onClose, onSaved 
   return (
     <dialog
       ref={dialogRef}
-      className="dialog dialog--description"
+      className={dialogShell}
       aria-labelledby="course-description-title"
       onCancel={(event) => {
         event.preventDefault()
@@ -114,46 +124,47 @@ export function CourseDescriptionDialog({ course, description, onClose, onSaved 
       }}
     >
       <form
-        className="dialog__form"
+        className={dialogForm}
         onSubmit={(event) => {
           event.preventDefault()
           handleSave()
         }}
       >
-        <h3 id="course-description-title">Descripción</h3>
-        <p className="dialog__lead">
+        <h3 id="course-description-title" className={dialogTitle}>
+          Descripción
+        </h3>
+        <p className={dialogLead}>
           Copia el encargo, pégalo en tu chat y trae el JSON. El chat busca la página del curso.
           Esta app no llama a un modelo.
         </p>
 
-        <div className="field">
-          <label htmlFor="course-description-brief">Encargo</label>
+        <div>
+          <label className={fieldLabel} htmlFor="course-description-brief">
+            Encargo
+          </label>
           <textarea
             id="course-description-brief"
             ref={briefRef}
-            className="course-description__brief"
+            className={briefField}
             readOnly
             spellCheck={false}
             value={briefReady ? brief : 'Leyendo el temario…'}
           />
         </div>
-        <div className="dialog__actions dialog__actions--spread">
-          <span className="course-description__note">{copyNote}</span>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={handleCopy}
-            disabled={!briefReady}
-          >
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]">
+          <span className="text-xs text-ink-soft">{copyNote}</span>
+          <button type="button" className={btnGhost} onClick={handleCopy} disabled={!briefReady}>
             {copied ? 'Copiado' : 'Copiar'}
           </button>
         </div>
 
-        <div className="field">
-          <label htmlFor="course-description-paste">Respuesta</label>
+        <div>
+          <label className={fieldLabel} htmlFor="course-description-paste">
+            Respuesta
+          </label>
           <textarea
             id="course-description-paste"
-            className="course-description__paste"
+            className={pasteField}
             spellCheck={false}
             value={paste}
             placeholder="Pega aquí el JSON del chat"
@@ -164,16 +175,16 @@ export function CourseDescriptionDialog({ course, description, onClose, onSaved 
           />
         </div>
         {error ? (
-          <p className="course-description__error" role="alert">
+          <p className="m-0 text-[0.82rem] leading-[1.4] text-coral-deep" role="alert">
             {error}
           </p>
         ) : null}
 
-        <div className="dialog__actions">
-          <button type="button" className="btn btn--ghost" onClick={handleClose} disabled={saving}>
+        <div className="flex justify-end gap-2 pt-[0.35rem]">
+          <button type="button" className={btnGhost} onClick={handleClose} disabled={saving}>
             Cerrar
           </button>
-          <button type="submit" className="btn btn--primary" disabled={saving}>
+          <button type="submit" className={btnPrimary} disabled={saving}>
             {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </div>
@@ -195,18 +206,18 @@ function CourseDescription({ course }) {
   const sourceUrl = description?.source?.url || ''
 
   return (
-    <section className="detail-description" aria-label="Descripción">
-      <h3 className="detail-description__head">
+    <section className="flex flex-col gap-[0.35rem]" aria-label="Descripción">
+      <h3 className="m-0">
         <button
           type="button"
-          className="detail-description__toggle"
+          className="group flex w-full cursor-pointer items-center justify-between gap-2 border-0 bg-transparent p-0 text-left font-display text-[0.95rem] font-extrabold text-ink hover:text-coral-deep focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-focus"
           aria-expanded={expanded}
           aria-controls={panelId}
           onClick={() => setExpanded((open) => !open)}
         >
           Descripción
           <svg
-            className="detail-description__chevron"
+            className="h-[0.7rem] w-[0.7rem] shrink-0 text-current transition-transform duration-[120ms] ease-pop group-aria-expanded:rotate-90"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -220,26 +231,32 @@ function CourseDescription({ course }) {
         </button>
       </h3>
 
-      <div id={panelId} className="detail-description__body" hidden={!expanded}>
+      <div
+        id={panelId}
+        className={cn('flex-col gap-[0.35rem]', expanded ? 'flex' : 'hidden')}
+        hidden={!expanded}
+      >
         {!description ? (
-          <p className="detail-description__empty">
+          <p className="m-0 text-[0.82rem] leading-[1.4] text-ink-soft">
             Sin descripción. Se escribe desde Editar detalles.
           </p>
         ) : (
           <>
-            <p className="detail-description__summary">{description.summary}</p>
+            <p className="m-0 text-[0.86rem] leading-[1.45]">{description.summary}</p>
             {description.audience ? (
-              <p className="detail-description__audience">{description.audience}</p>
+              <p className="m-0 text-[0.78rem] leading-[1.4] text-ink-soft">
+                {description.audience}
+              </p>
             ) : null}
             {outcomes.length ? (
-              <ul className="detail-description__outcomes">
+              <ul className="m-0 flex list-disc flex-col gap-[0.15rem] pl-[1.1rem] text-[0.8rem] leading-[1.35]">
                 {outcomes.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
             ) : null}
             {sourceUrl ? (
-              <p className="detail-description__source">
+              <p className="m-0 text-xs [&_a]:font-bold [&_a]:text-teal">
                 <a href={sourceUrl} target="_blank" rel="noreferrer noopener">
                   {description.source.title || 'Fuente'}
                 </a>

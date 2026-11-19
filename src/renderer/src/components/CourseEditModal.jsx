@@ -4,15 +4,25 @@ import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import brandMark from '../assets/img/brand-mark.svg'
 import ChipAutocomplete from './ChipAutocomplete'
 import { CourseDescriptionDialog } from './CourseDescription'
+import { cn } from '../ui/cn'
+import { btnGhost, btnPrimary, fieldControl, fieldLabel } from '../ui/classes'
+
+const dialogShell =
+  'w-[calc(100%-2rem)] max-w-[460px] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel open:flex open:flex-col backdrop:bg-[rgba(26,20,35,0.45)]'
+const dialogForm = 'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem]'
+const textArea = cn(fieldControl, 'min-h-[4.5rem] resize-y')
 
 function StarRate({ value, onChange }) {
   return (
-    <div className="star-rate" role="group" aria-label="Valoración">
+    <div className="flex flex-wrap items-center gap-[0.2rem]" role="group" aria-label="Valoración">
       {[1, 2, 3, 4, 5].map((n) => (
         <button
           key={n}
           type="button"
-          className={`star-rate__btn${value >= n ? ' is-on' : ''}`}
+          className={cn(
+            'cursor-pointer border-0 bg-transparent px-[0.15rem] py-[0.1rem] text-[1.35rem] leading-none text-[rgba(26,20,35,0.28)]',
+            value >= n && 'text-coral-deep'
+          )}
           aria-pressed={value >= n}
           onClick={() => onChange(value === n ? 0 : n)}
           title={`${n} estrella${n === 1 ? '' : 's'}`}
@@ -21,7 +31,11 @@ function StarRate({ value, onChange }) {
         </button>
       ))}
       {value > 0 ? (
-        <button type="button" className="star-rate__clear" onClick={() => onChange(0)}>
+        <button
+          type="button"
+          className="ml-[0.35rem] cursor-pointer border-0 bg-transparent text-[0.8rem] font-[650] text-ink-soft underline"
+          onClick={() => onChange(0)}
+        >
           Quitar
         </button>
       ) : null}
@@ -158,11 +172,17 @@ function CourseEditModal({
 
   return (
     <>
-      <dialog ref={dialogRef} className="dialog" onClose={onClose} onClick={handleBackdropClick}>
-        <div className="dialog__preview">
-          <div className="dialog__preview-cover">
+      <dialog
+        ref={dialogRef}
+        className={dialogShell}
+        onClose={onClose}
+        onClick={handleBackdropClick}
+      >
+        <div className="flex items-center gap-[0.85rem] px-[1.15rem] pt-4 pb-2">
+          <div className="h-16 w-24 shrink-0 overflow-hidden rounded-xl border border-ink/10 bg-cream-deep">
             {course.hasCover ? (
               <img
+                className="h-full w-full object-cover"
                 src={coverImg}
                 alt=""
                 onError={(e) => {
@@ -170,24 +190,33 @@ function CourseEditModal({
                 }}
               />
             ) : (
-              <div className="cover-placeholder">
-                <img src={brandMark} alt="" width={36} height={36} />
+              <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle_at_30%_30%,rgba(232,69,112,0.08),transparent_50%),radial-gradient(circle_at_70%_70%,rgba(61,122,122,0.08),transparent_45%),var(--color-cream-deep)] text-ink-soft">
+                <img
+                  className="!h-7 !w-7 max-h-7 max-w-7 object-contain opacity-55"
+                  src={brandMark}
+                  alt=""
+                  width={36}
+                  height={36}
+                />
               </div>
             )}
           </div>
           <div>
             <h3>Editar propiedades</h3>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--clr-ink-soft)' }}>
+            <p className="m-0 text-[0.85rem] text-ink-soft">
               {course.title}
               {course.missingProps ? ' · Sin courseProps (se creará al guardar)' : ''}
             </p>
           </div>
         </div>
 
-        <div className="dialog__form">
-          <div className="field">
-            <label htmlFor="course-title">Nombre de curso</label>
+        <div className={dialogForm}>
+          <div>
+            <label className={fieldLabel} htmlFor="course-title">
+              Nombre de curso
+            </label>
             <textarea
+              className={textArea}
               id="course-title"
               value={localCourseTitle}
               onChange={(e) => setLocalCourseTitle(e.target.value)}
@@ -212,14 +241,17 @@ function CourseEditModal({
             placeholder="Buscar o añadir tema…"
           />
 
-          <div className="field">
-            <label>Valoración</label>
+          <div>
+            <label className={fieldLabel}>Valoración</label>
             <StarRate value={rate} onChange={setRate} />
           </div>
 
-          <div className="field">
-            <label htmlFor="course-instructor">Instructor</label>
+          <div>
+            <label className={fieldLabel} htmlFor="course-instructor">
+              Instructor
+            </label>
             <input
+              className={fieldControl}
               id="course-instructor"
               type="text"
               value={instructor}
@@ -227,9 +259,12 @@ function CourseEditModal({
             />
           </div>
 
-          <div className="field">
-            <label htmlFor="course-institution">Academia</label>
+          <div>
+            <label className={fieldLabel} htmlFor="course-institution">
+              Academia
+            </label>
             <input
+              className={fieldControl}
               id="course-institution"
               type="text"
               value={institution}
@@ -237,27 +272,38 @@ function CourseEditModal({
             />
           </div>
 
-          <div className="field">
-            <div className="course-edit__description">
-              <span>Descripción</span>
+          <div>
+            <div className="mb-[0.3rem] flex items-baseline justify-between gap-2">
+              <span className="text-[0.78rem] font-extrabold tracking-[0.04em] text-ink-soft uppercase">
+                Descripción
+              </span>
               <button
                 type="button"
-                className="course-edit__write"
+                className="cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-coral-deep hover:underline"
                 onClick={() => setWritingDescription(true)}
               >
                 {description ? 'Reescribir' : 'Escribir'}
               </button>
             </div>
-            <p className={`course-edit__description-preview${description ? '' : ' is-empty'}`}>
+            <p
+              className={cn(
+                'm-0 line-clamp-3 text-[0.82rem] leading-[1.4]',
+                !description && 'text-ink-soft'
+              )}
+            >
               {description
                 ? description.summary
                 : 'Sin descripción. El encargo usa la ficha, el temario y una búsqueda en tu chat.'}
             </p>
           </div>
 
-          <div className="field">
-            <label className="course-edit__hide" htmlFor="course-hide">
+          <div>
+            <label
+              className="flex w-fit cursor-pointer items-center gap-2 text-[0.92rem] font-bold tracking-normal text-ink normal-case"
+              htmlFor="course-hide"
+            >
               <input
+                className="m-0 h-4 w-4 border-0 p-0 accent-coral-deep shadow-none focus:shadow-none"
                 id="course-hide"
                 type="checkbox"
                 checked={hide}
@@ -265,19 +311,19 @@ function CourseEditModal({
               />
               <span>Ocultar</span>
             </label>
-            <p className="course-edit__hide-note">
+            <p className="mt-[0.35rem] mb-0 text-[0.78rem] leading-[1.4] text-ink-soft">
               No entra en las listas ni en el resto de la app. Para volver a verlo, pon{' '}
               <code>hide</code> en <code>false</code> dentro de courseProps.json.
             </p>
           </div>
 
-          <div className="dialog__actions">
-            <button type="button" className="btn btn--ghost" onClick={handleClose}>
+          <div className="flex justify-end gap-2 pt-[0.35rem]">
+            <button type="button" className={btnGhost} onClick={handleClose}>
               Cancelar
             </button>
             <button
               type="button"
-              className="btn btn--primary"
+              className={btnPrimary}
               onClick={handleSaveAll}
               disabled={isSaving}
             >

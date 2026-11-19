@@ -38,7 +38,9 @@ export class MentionNode extends TextNode {
 
   createDOM(config) {
     const dom = super.createDOM(config)
-    dom.className = config.theme?.mention || 'note-editor__mention'
+    dom.className =
+      config.theme?.mention ||
+      'note-editor__mention inline rounded-[4px] bg-black/6 px-[0.25em] py-[0.05em] font-semibold text-ink data-[mention-type=note]:cursor-pointer'
     dom.spellcheck = false
     dom.dataset.mentionType = this.getMentionType()
     dom.dataset.mentionId = this.getMentionId()

@@ -5,6 +5,24 @@ import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import { InstitutionMark } from './InstitutionMark'
 import CourseDescription from './CourseDescription'
 import brandMark from '../assets/img/brand-mark.svg'
+import { cn } from '../ui/cn'
+import { iconBtn } from '../ui/classes'
+
+const badge = 'rounded-full border px-[0.55rem] py-[0.18rem] text-[0.7rem] font-bold'
+const badgeNew = cn(badge, 'border-[#1a6b5c] bg-[#d8f3ec] text-[#0f4a40]')
+const badgeWarn = cn(badge, 'border-[#a66b1a] bg-[#ffe8c2] text-[#6b4508]')
+const badgePrograms = cn(
+  badge,
+  'border-chip-programs-border bg-chip-programs text-chip-programs-text'
+)
+const badgeTheme = cn(badge, 'border-[#5a4a7a] bg-[#ece6f7] text-[#3d3258]')
+const badgeDone = cn(badge, 'border-chip-status-border bg-chip-status text-chip-status-text')
+const ribbon =
+  'static rounded-full border border-chip-status-border bg-chip-status px-[0.65rem] py-[0.28rem] text-[0.7rem] font-extrabold tracking-[0.03em] text-chip-status-text uppercase'
+const ribbonRecent = 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
+const detailUtil =
+  'min-h-[1.85rem] flex-[1_1_calc(50%-0.35rem)] cursor-pointer rounded-sm border border-ink/10 bg-surface px-[0.45rem] py-[0.28rem] text-center text-xs leading-[1.25] font-semibold text-ink-soft shadow-none hover:bg-cream-deep hover:text-ink'
+const detailUtilAccent = 'basis-full font-bold text-teal hover:bg-chip-status hover:text-teal'
 
 function formatDuration(sec) {
   const total = Math.round(Number(sec) || 0)
@@ -37,18 +55,17 @@ function OutlineSections({
     const nested = section.sections || []
     if (!lessons.length && !nested.length) return null
     return (
-      <div
-        key={section.id}
-        className="detail-outline__section"
-        style={depth > 0 ? { marginLeft: '0.75rem' } : undefined}
-      >
+      <div key={section.id} className={cn('flex flex-col gap-[0.2rem]', depth > 0 && 'ml-3')}>
         {showSectionTitles ? (
-          <h4 className="detail-outline__section-title" title={section.title}>
+          <h4
+            className="mt-[0.35rem] truncate text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase"
+            title={section.title}
+          >
             {section.title}
           </h4>
         ) : null}
         {lessons.length > 0 ? (
-          <ol className="detail-outline__list">
+          <ol className="m-0 flex list-none flex-col gap-[0.1rem] p-0">
             {lessons.map((lesson, index) => {
               const done = Boolean(course.learning?.lessons?.[lesson.relativePath]?.completed)
               const current = lesson.relativePath === currentPath
@@ -61,19 +78,33 @@ function OutlineSections({
                   <button
                     type="button"
                     ref={current ? currentRef : null}
-                    className={`detail-outline__lesson${done ? ' is-done' : ''}${
-                      current ? ' is-current' : ''
-                    }`}
+                    className={cn(
+                      'flex w-full min-w-0 cursor-pointer items-center gap-[0.45rem] rounded-sm border-0 bg-transparent px-[0.35rem] py-[0.28rem] text-left text-[0.82rem] leading-[1.3] text-ink hover:bg-surface',
+                      current && 'bg-chip-programs'
+                    )}
                     aria-current={current ? 'true' : undefined}
                     aria-label={status ? `${lesson.title}, ${status}` : lesson.title}
                     title={lesson.title}
                     onClick={() => onOpenLesson(lesson)}
                   >
-                    <span className="detail-outline__mark" aria-hidden="true">
+                    <span
+                      className={cn(
+                        'w-5 shrink-0 text-center text-[0.68rem] font-bold text-ink-soft',
+                        done && 'text-teal',
+                        current && 'text-coral-deep'
+                      )}
+                      aria-hidden="true"
+                    >
                       {done ? '✓' : index + 1}
                     </span>
-                    <span className="detail-outline__label">{lesson.title}</span>
-                    {length ? <span className="detail-outline__duration">{length}</span> : null}
+                    <span className={cn('min-w-0 flex-1 truncate', done && 'text-ink-soft')}>
+                      {lesson.title}
+                    </span>
+                    {length ? (
+                      <span className="shrink-0 text-[0.72rem] font-medium text-ink-soft">
+                        {length}
+                      </span>
+                    ) : null}
                   </button>
                 </li>
               )
@@ -144,19 +175,19 @@ function CourseOutline({ course, onOpenLesson }) {
     sections.length > 1 || (sections.length === 1 && sections[0].id !== '__root__')
 
   return (
-    <section className="detail-outline" aria-label="Temario">
-      <div className="detail-outline__head">
-        <h3>
+    <section className="flex flex-col gap-[0.45rem]" aria-label="Temario">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="m-0 min-w-0 flex-1">
           <button
             type="button"
-            className="detail-outline__toggle"
+            className="group flex w-full cursor-pointer items-center justify-between gap-2 border-0 bg-transparent p-0 text-left font-display text-[0.95rem] font-extrabold text-ink hover:text-coral-deep focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-focus"
             aria-expanded={open}
             aria-controls={panelId}
             onClick={() => setOpen((current) => !current)}
           >
             Temario
             <svg
-              className="detail-outline__chevron"
+              className="h-[0.7rem] w-[0.7rem] shrink-0 text-current transition-transform duration-[120ms] ease-pop group-aria-expanded:rotate-90"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -170,17 +201,17 @@ function CourseOutline({ course, onOpenLesson }) {
           </button>
         </h3>
         {lessonCount > 0 ? (
-          <span>
+          <span className="text-xs font-bold text-ink-soft">
             {lessonCount}
             {totalLength ? ` · ${totalLength}` : ''}
           </span>
         ) : null}
       </div>
       <div id={panelId} hidden={!open}>
-        {loading ? <p className="detail-outline__note">Cargando temario…</p> : null}
-        {!loading && error ? <p className="detail-outline__note">{error}</p> : null}
+        {loading ? <p className="m-0 text-[0.82rem] text-ink-soft">Cargando temario…</p> : null}
+        {!loading && error ? <p className="m-0 text-[0.82rem] text-ink-soft">{error}</p> : null}
         {!loading && !error && lessonCount === 0 ? (
-          <p className="detail-outline__note">Este curso no tiene lecciones.</p>
+          <p className="m-0 text-[0.82rem] text-ink-soft">Este curso no tiene lecciones.</p>
         ) : null}
         <OutlineSections
           sections={sections}
@@ -274,11 +305,14 @@ function CourseDetailPanel({
     showIdle
 
   return (
-    <aside className="detail-panel" aria-label="Detalle del curso">
-      <div className="detail-panel__cover">
+    <aside
+      className="detail-panel relative z-20 flex h-full min-h-0 w-detail max-w-[40vw] shrink-0 animate-slide-in flex-col self-stretch overflow-hidden border-l border-ink/10 bg-[#f7f2ec] bg-linear-to-b from-[#fffaf5] to-[#f7f2ec] motion-reduce:animate-none max-[900px]:max-h-[45vh] max-[900px]:w-full max-[900px]:max-w-none max-[900px]:flex-none max-[900px]:border-t max-[900px]:border-l-0 max-[900px]:border-ink/10"
+      aria-label="Detalle del curso"
+    >
+      <div className="relative aspect-[16/7] max-h-36 shrink-0 overflow-hidden border-b border-ink/10 bg-cream-deep">
         <button
           type="button"
-          className="card-action detail-panel__close"
+          className="absolute top-[0.55rem] right-[0.55rem] z-[2] grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-ink/10 bg-surface shadow-card hover:bg-coral hover:text-white"
           onClick={onClose}
           title="Cerrar"
           aria-label="Cerrar panel"
@@ -289,6 +323,7 @@ function CourseDetailPanel({
         </button>
         {course.hasCover ? (
           <img
+            className="h-full w-full object-cover"
             src={coverImg}
             alt=""
             onError={(e) => {
@@ -296,68 +331,83 @@ function CourseDetailPanel({
             }}
           />
         ) : (
-          <div className="cover-placeholder">
-            <img src={brandMark} alt="" width={28} height={28} />
+          <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle_at_30%_30%,rgba(232,69,112,0.08),transparent_50%),radial-gradient(circle_at_70%_70%,rgba(61,122,122,0.08),transparent_45%),var(--color-cream-deep)] text-ink-soft">
+            <img
+              className="!h-7 !w-7 max-h-7 max-w-7 object-contain opacity-55"
+              src={brandMark}
+              alt=""
+              width={28}
+              height={28}
+            />
           </div>
         )}
       </div>
 
-      <div className="detail-panel__body">
-        <div className="detail-identity">
-          <h2 className="detail-panel__title">{course.title}</h2>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-4 pt-[0.9rem] pb-4">
+        <div className="flex flex-col gap-[0.3rem]">
+          <h2 className="m-0 font-display text-[1.25rem] leading-[1.2] font-black">
+            {course.title}
+          </h2>
           {course.institution ? (
-            <div className="detail-identity__academy">
-              <InstitutionMark institution={course.institution} nameClassName="institution-name" />
+            <div className="flex min-h-[1.35rem] items-center [&_img]:!max-h-[1.35rem] [&_img]:!max-w-[7.5rem]">
+              <InstitutionMark institution={course.institution} />
             </div>
           ) : null}
         </div>
 
-        <section className="detail-resume" aria-label="Continuar">
+        <section
+          className="flex flex-col gap-[0.55rem] rounded-md border border-ink/10 bg-surface p-3 shadow-card"
+          aria-label="Continuar"
+        >
           {hasStatus ? (
-            <div className="detail-resume__status">
-              {course.isInProcess ? (
-                <span className="status-ribbon status-ribbon--inline">En curso</span>
-              ) : null}
+            <div className="flex min-h-[1.35rem] flex-wrap items-center gap-[0.35rem]">
+              {course.isInProcess ? <span className={ribbon}>En curso</span> : null}
               {course.learning?.status === 'completed' ? (
-                <span className="badge badge--done">Completado</span>
+                <span className={badgeDone}>Completado</span>
               ) : null}
               {course.learning?.isRecentlyViewed ? (
-                <span className="status-ribbon status-ribbon--inline status-ribbon--recent">
-                  Reciente
-                </span>
+                <span className={cn(ribbon, ribbonRecent)}>Reciente</span>
               ) : null}
-              {course.isNew ? <span className="badge badge--new">Nuevo</span> : null}
-              {course.missingProps ? <span className="badge badge--warn">Sin props</span> : null}
-              {showIdle ? <span className="detail-resume__idle">Sin empezar</span> : null}
+              {course.isNew ? <span className={badgeNew}>Nuevo</span> : null}
+              {course.missingProps ? <span className={badgeWarn}>Sin props</span> : null}
+              {showIdle ? <span className="text-[0.8rem] text-ink-soft">Sin empezar</span> : null}
             </div>
           ) : null}
 
           {showProgress ? (
-            <div className="detail-resume__meter">
+            <div className="flex items-center gap-2">
               <div
-                className="detail-resume__track"
+                className="h-1 flex-1 overflow-hidden rounded-full bg-ink/[0.08]"
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={percent}
                 aria-label="Progreso del curso"
               >
-                <div className="detail-resume__fill" style={{ width: `${percent}%` }} />
+                <div
+                  className="h-full rounded-[inherit] bg-teal"
+                  style={{ width: `${percent}%` }}
+                />
               </div>
-              <span className="detail-resume__percent">{percent}%</span>
+              <span className="text-xs font-bold text-teal">{percent}%</span>
             </div>
           ) : null}
 
           {course.learning?.lastLessonTitle ? (
-            <p className="detail-resume__lesson">
-              <span>Última lección</span>
-              <strong title={course.learning.lastLessonTitle}>
+            <p className="m-0 flex min-w-0 flex-col gap-[0.1rem]">
+              <span className="text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+                Última lección
+              </span>
+              <strong
+                className="line-clamp-2 text-[0.9rem] leading-[1.3] font-[650]"
+                title={course.learning.lastLessonTitle}
+              >
                 {course.learning.lastLessonTitle}
               </strong>
             </p>
           ) : null}
 
-          <button type="button" className="icon-btn detail-resume__open" onClick={handleOpenCourse}>
+          <button type="button" className={cn(iconBtn, 'w-full')} onClick={handleOpenCourse}>
             Abrir curso
           </button>
         </section>
@@ -366,21 +416,25 @@ function CourseDetailPanel({
 
         <CourseOutline course={course} onOpenLesson={handleOpenLesson} />
 
-        <section className="detail-catalog" aria-label="Ficha del curso">
+        <section className="flex flex-col gap-[0.55rem]" aria-label="Ficha del curso">
           {hasCatalog ? (
-            <dl className="detail-catalog__list">
+            <dl className="m-0 flex flex-col gap-[0.45rem]">
               {course.instructor ? (
-                <div className="detail-catalog__row">
-                  <dt>Instructor</dt>
-                  <dd>{course.instructor}</dd>
+                <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-[0.35rem]">
+                  <dt className="m-0 pt-[0.15rem] text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+                    Instructor
+                  </dt>
+                  <dd className="m-0 min-w-0 text-[0.88rem]">{course.instructor}</dd>
                 </div>
               ) : null}
               {programs.length ? (
-                <div className="detail-catalog__row detail-catalog__row--chips">
-                  <dt>Programas</dt>
-                  <dd className="chips-container">
+                <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-start gap-x-2 gap-y-[0.35rem]">
+                  <dt className="m-0 pt-[0.15rem] text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+                    Programas
+                  </dt>
+                  <dd className="m-0 flex min-w-0 flex-wrap gap-[0.3rem] text-[0.88rem]">
                     {programs.map((program, index) => (
-                      <span key={`${program}-${index}`} className="badge badge--programs">
+                      <span key={`${program}-${index}`} className={badgePrograms}>
                         {program}
                       </span>
                     ))}
@@ -388,11 +442,13 @@ function CourseDetailPanel({
                 </div>
               ) : null}
               {themes.length ? (
-                <div className="detail-catalog__row detail-catalog__row--chips">
-                  <dt>Temas</dt>
-                  <dd className="chips-container">
+                <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-start gap-x-2 gap-y-[0.35rem]">
+                  <dt className="m-0 pt-[0.15rem] text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+                    Temas
+                  </dt>
+                  <dd className="m-0 flex min-w-0 flex-wrap gap-[0.3rem] text-[0.88rem]">
                     {themes.map((theme, index) => (
-                      <span key={`${theme}-${index}`} className="badge badge--theme">
+                      <span key={`${theme}-${index}`} className={badgeTheme}>
                         {theme}
                       </span>
                     ))}
@@ -400,12 +456,17 @@ function CourseDetailPanel({
                 </div>
               ) : null}
               {hasRating ? (
-                <div className="detail-catalog__row">
-                  <dt>Valoración</dt>
-                  <dd>
-                    <span className="detail-catalog__stars" aria-label={`${course.rate} de 5`}>
+                <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-[0.35rem]">
+                  <dt className="m-0 pt-[0.15rem] text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+                    Valoración
+                  </dt>
+                  <dd className="m-0 min-w-0 text-[0.88rem]">
+                    <span
+                      className="text-[0.85rem] tracking-[0.04em] text-coral-deep"
+                      aria-label={`${course.rate} de 5`}
+                    >
                       <span aria-hidden="true">{'★'.repeat(course.rate)}</span>
-                      <span className="is-empty" aria-hidden="true">
+                      <span className="text-ink/[0.28]" aria-hidden="true">
                         {'☆'.repeat(5 - course.rate)}
                       </span>
                     </span>
@@ -414,9 +475,13 @@ function CourseDetailPanel({
               ) : null}
             </dl>
           ) : (
-            <div className="detail-catalog__empty">
-              <span>Sin ficha</span>
-              <button type="button" className="detail-util" onClick={() => onEdit(course)}>
+            <div className="flex flex-wrap items-center gap-x-[0.65rem] gap-y-[0.35rem]">
+              <span className="text-[0.85rem] text-ink-soft">Sin ficha</span>
+              <button
+                type="button"
+                className={cn(detailUtil, 'flex-none')}
+                onClick={() => onEdit(course)}
+              >
                 Editar detalles
               </button>
             </div>
@@ -424,7 +489,7 @@ function CourseDetailPanel({
           {onGenerateProps ? (
             <button
               type="button"
-              className="detail-util detail-util--accent"
+              className={cn(detailUtil, detailUtilAccent)}
               onClick={onGenerateProps}
             >
               Generar propiedades
@@ -433,21 +498,21 @@ function CourseDetailPanel({
         </section>
       </div>
 
-      <div className="detail-utils">
+      <div className="flex shrink-0 flex-wrap gap-[0.35rem] border-t border-ink/10 bg-[#f7f2ec] px-4 pt-[0.55rem] pb-3">
         {onSearchCover ? (
-          <button type="button" className="detail-util" onClick={() => onSearchCover(course)}>
+          <button type="button" className={detailUtil} onClick={() => onSearchCover(course)}>
             {course.hasCover ? 'Cambiar portada' : 'Buscar portada'}
           </button>
         ) : null}
-        <button type="button" className="detail-util" onClick={handleToggle}>
+        <button type="button" className={detailUtil} onClick={handleToggle}>
           {course.isInProcess ? 'Quitar de en curso' : 'Marcar en curso'}
         </button>
         {hasCatalog ? (
-          <button type="button" className="detail-util" onClick={() => onEdit(course)}>
+          <button type="button" className={detailUtil} onClick={() => onEdit(course)}>
             Editar detalles
           </button>
         ) : null}
-        <button type="button" className="detail-util" onClick={handleOpenFolder}>
+        <button type="button" className={detailUtil} onClick={handleOpenFolder}>
           Abrir en explorador
         </button>
       </div>

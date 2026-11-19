@@ -121,7 +121,7 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
 
   if (loading) {
     return (
-      <div className="annotations-popout annotations-popout--loading">
+      <div className="flex h-screen flex-col items-center justify-center overflow-hidden bg-white">
         <Loader />
       </div>
     )
@@ -129,7 +129,7 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
 
   if (coursePath && course?.hide === true) {
     return (
-      <div className="annotations-popout annotations-popout--loading">
+      <div className="flex h-screen flex-col items-center justify-center overflow-hidden bg-white">
         <p>Este curso está oculto.</p>
       </div>
     )
@@ -137,7 +137,7 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
 
   if (coursePath) {
     return (
-      <div className="annotations-popout">
+      <div className="flex h-screen flex-col overflow-hidden bg-white">
         <CourseAnnotationsView
           coursePath={coursePath}
           courseTitle={course?.title || coursePath}
@@ -169,7 +169,7 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
     .map((c) => ({ value: c.path, label: c.title || c.path }))
 
   return (
-    <div className="annotations-popout">
+    <div className="flex h-screen flex-col overflow-hidden bg-white">
       <AnnotationsWorkspace
         title="Anotaciones"
         subtitle={courseFilter ? titleByPath[courseFilter] || courseFilter : 'Toda la biblioteca'}
