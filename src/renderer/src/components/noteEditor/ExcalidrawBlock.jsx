@@ -1,6 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
+import { cn } from '../../ui/cn.js'
+import { btnGhost, btnPrimary } from '../../ui/classes.js'
 import { $getNodeByKey } from 'lexical'
 import { $isExcalidrawNode } from './ExcalidrawNode'
 
@@ -16,6 +18,11 @@ function ensureExcalidrawAssets() {
     window.EXCALIDRAW_ASSET_PATH = import.meta.env.BASE_URL || './'
   }
 }
+
+const exportItem =
+  'cursor-pointer rounded-[6px] border-0 bg-transparent px-[0.55rem] py-[0.4rem] text-left text-[0.82rem] font-semibold text-ink [font:inherit] hover:bg-black/5'
+
+const excalidrawPreview = 'block max-h-56 w-full bg-white object-contain'
 
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
@@ -211,15 +218,20 @@ function ExcalidrawModal({ drawingId, onClose, onSaved }) {
   const busy = saving || exporting || loading
 
   return createPortal(
-    <div className="excalidraw-modal" role="dialog" aria-modal="true" aria-label="Editor Excalidraw">
-      <div className="excalidraw-modal__chrome">
-        <div className="excalidraw-modal__title">Dibujo</div>
-        <div className="excalidraw-modal__actions">
-          {error ? <span className="excalidraw-modal__error">{error}</span> : null}
-          <div className="excalidraw-modal__export">
+    <div
+      className="fixed inset-0 z-[80] flex flex-col bg-cream"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Editor Excalidraw"
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ink/10 bg-surface px-[0.85rem] py-[0.55rem]">
+        <div className="font-display font-extrabold text-ink">Dibujo</div>
+        <div className="flex flex-wrap items-center gap-[0.45rem]">
+          {error ? <span className="mr-[0.35rem] text-[0.8rem] text-coral-deep">{error}</span> : null}
+          <div className="relative">
             <button
               type="button"
-              className="btn btn--ghost"
+              className={btnGhost}
               onClick={() => setExportOpen((v) => !v)}
               disabled={busy}
               aria-expanded={exportOpen}
@@ -227,32 +239,46 @@ function ExcalidrawModal({ drawingId, onClose, onSaved }) {
               {exporting ? 'Exportando…' : 'Exportar'}
             </button>
             {exportOpen ? (
-              <div className="excalidraw-modal__export-menu" role="menu">
-                <button type="button" role="menuitem" onClick={() => handleExport('png')}>
+              <div
+                className="absolute top-[calc(100%+0.3rem)] right-0 z-[2] flex min-w-44 flex-col gap-[0.15rem] rounded-sm border border-ink/10 bg-surface p-[0.3rem] shadow-card"
+                role="menu"
+              >
+                <button type="button" role="menuitem" className={exportItem} onClick={() => handleExport('png')}>
                   PNG
                 </button>
-                <button type="button" role="menuitem" onClick={() => handleExport('svg')}>
+                <button type="button" role="menuitem" className={exportItem} onClick={() => handleExport('svg')}>
                   SVG
                 </button>
-                <button type="button" role="menuitem" onClick={() => handleExport('excalidraw')}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={exportItem}
+                  onClick={() => handleExport('excalidraw')}
+                >
                   Excalidraw (.excalidraw)
                 </button>
               </div>
             ) : null}
           </div>
-          <button type="button" className="btn btn--ghost" onClick={onClose} disabled={saving || exporting}>
+          <button type="button" className={btnGhost} onClick={onClose} disabled={saving || exporting}>
             Cerrar
           </button>
-          <button type="button" className="btn btn--primary" onClick={handleSave} disabled={busy}>
+          <button type="button" className={btnPrimary} onClick={handleSave} disabled={busy}>
             {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </div>
       </div>
-      <div className="excalidraw-modal__canvas">
+      <div className="relative min-h-0 flex-1 [&_.excalidraw]:h-full">
         {loading ? (
-          <div className="excalidraw-modal__loading">Cargando lienzo…</div>
+          <div className="flex h-full items-center justify-center text-[0.95rem] text-ink-soft">Cargando lienzo…</div>
         ) : (
-          <Suspense fallback={<div className="excalidraw-modal__loading">Cargando Excalidraw…</div>}>
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center text-[0.95rem] text-ink-soft">
+                Cargando Excalidraw…
+              </div>
+            }
+          >
             <Excalidraw
               langCode="es-ES"
               theme="light"
@@ -292,24 +318,26 @@ export default function ExcalidrawBlock({ nodeKey, drawingId, previewSrc }) {
 
   return (
     <>
-      <div className="note-editor__excalidraw-card">
+      <div className="overflow-hidden rounded-sm border border-ink/10 bg-surface">
         <button
           type="button"
-          className="note-editor__excalidraw-hit"
+          className="m-0 block w-full cursor-pointer border-0 bg-cream p-0 text-left"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setOpen(true)}
         >
           {previewSrc ? (
-            <img src={previewSrc} alt="Dibujo Excalidraw" className="note-editor__excalidraw-preview" />
+            <img src={previewSrc} alt="Dibujo Excalidraw" className={excalidrawPreview} />
           ) : (
-            <span className="note-editor__excalidraw-empty">Lienzo vacío — clic para dibujar</span>
+            <span className="flex min-h-28 items-center justify-center p-4 text-[0.86rem] text-ink-soft">
+              Lienzo vacío — clic para dibujar
+            </span>
           )}
         </button>
-        <div className="note-editor__excalidraw-bar">
+        <div className="flex items-center justify-between gap-2 border-t border-ink/10 bg-surface px-[0.55rem] py-[0.35rem] text-[0.78rem] font-bold text-ink-soft">
           <span>Excalidraw</span>
           <button
             type="button"
-            className="btn btn--ghost"
+            className={cn(btnGhost, 'min-h-[1.6rem] px-[0.55rem] py-[0.15rem] text-[0.75rem]')}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setOpen(true)}
           >

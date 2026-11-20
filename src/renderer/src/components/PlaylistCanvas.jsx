@@ -37,6 +37,8 @@ import CoverSearchModal from './CoverSearchModal'
 import PlaylistBuilder from './PlaylistBuilder'
 import brandMark from '../assets/img/brand-mark.svg'
 import { InstitutionMark } from './InstitutionMark'
+import { cn } from '../ui/cn'
+import { btnGhost, btnPrimary } from '../ui/classes'
 import { MAX_NESTED, settleNesting } from '../../../shared/playlistNest.js'
 import { applyCoursePick, collectExportCoursePaths } from '../../../shared/courseExportSelection.js'
 import { courseCatalog, sameFolder } from '../../../shared/courseFolderMatch.js'
@@ -72,6 +74,35 @@ import {
 } from '../utils/courseFilters'
 
 const BoardActions = createContext(null)
+
+const frameIcon =
+  'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-sm border border-ink/10 bg-surface p-0 text-ink hover:shadow-lift [&_svg]:transition-transform [&_svg]:duration-[120ms] [&_svg]:ease-pop [&.is-collapsed_svg]:-rotate-90'
+const frame =
+  'relative flex h-full w-full flex-col rounded-lg border border-ink/10 bg-surface shadow-[inset_3px_0_0_var(--color-coral),var(--shadow-card)]'
+const titlePill =
+  'm-0 ml-[0.4rem] block w-max max-w-[min(64rem,72vw)] cursor-grab overflow-hidden rounded-full border border-ink/10 bg-surface px-[0.6rem] py-[0.16rem] font-display text-[0.9rem] leading-[1.2] font-extrabold text-ellipsis whitespace-nowrap text-ink shadow-lift select-none [field-sizing:content] focus:cursor-text focus:shadow-[0_0_0_2px_var(--color-coral)] focus:outline-none focus:select-text'
+const courseCard =
+  'relative flex h-full items-center gap-2 rounded-md border border-ink/10 bg-surface py-[0.35rem] pr-[0.4rem] pl-2 shadow-card cursor-grab [&>label]:absolute [&>label]:top-[0.35rem] [&>label]:left-[0.35rem] [&>label]:z-[4]'
+const courseCover =
+  'flex size-[52px] shrink-0 items-center justify-center overflow-hidden rounded-sm bg-cream-deep'
+const rowCover =
+  'flex size-[42px] shrink-0 items-center justify-center overflow-hidden rounded-sm bg-cream-deep'
+const statusMark =
+  'pointer-events-none absolute z-[2] hidden items-center rounded-full border border-chip-status-border bg-chip-status px-[0.65rem] py-[0.28rem] text-[0.7rem] font-extrabold tracking-[0.03em] text-chip-status-text uppercase'
+const pickBox =
+  'grid size-[1.45rem] shrink-0 cursor-pointer place-items-center rounded-[0.35rem] border border-ink/10 bg-surface shadow-card [&_input]:m-0 [&_input]:size-[0.95rem] [&_input]:cursor-pointer [&_input]:accent-coral'
+const menuItem =
+  'flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left text-[0.875rem] font-bold text-ink hover:bg-[rgba(42,36,56,0.05)] disabled:cursor-not-allowed disabled:opacity-50'
+const popover =
+  'absolute top-[calc(100%+6px)] right-0 z-[5] min-w-[17rem] rounded-md border border-ink/10 bg-surface p-1.5 shadow-panel'
+const searchBox =
+  'relative min-w-0 max-w-none flex-none [&_input]:h-auto [&_input]:w-full [&_input]:rounded-full [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:py-[0.7rem] [&_input]:pr-4 [&_input]:pl-[2.6rem] [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-find [&_svg]:pointer-events-none [&_svg]:absolute [&_svg]:top-1/2 [&_svg]:left-[0.95rem] [&_svg]:size-4 [&_svg]:-translate-y-1/2 [&_svg]:opacity-55'
+const chipSelect =
+  'flex min-w-0 [&_select]:min-w-0 [&_select]:flex-1 [&_select]:cursor-pointer [&_select]:rounded-full [&_select]:border [&_select]:border-ink/10 [&_select]:bg-surface [&_select]:px-3 [&_select]:py-[0.35rem] [&_select]:text-[0.82rem] [&_select]:font-semibold [&_select]:text-ink [&_select]:shadow-none'
+const filterPill =
+  'inline-flex cursor-pointer items-center gap-[0.4rem] rounded-full border border-ink/10 bg-surface px-[0.65rem] py-[0.28rem] text-[0.75rem] font-bold text-ink shadow-none aria-pressed:bg-teal aria-pressed:text-white'
+const board =
+  'flex h-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(232,69,112,0.05),transparent_40%),radial-gradient(circle_at_88%_8%,rgba(61,122,122,0.05),transparent_38%),var(--color-cream-deep)] [&_.react-flow]:size-full [&_.react-flow]:bg-transparent [&_.react-flow\\_\\_node-playlist]:cursor-default [&_.react-flow\\_\\_node-playlist]:overflow-visible [&_.react-flow\\_\\_node-playlist]:rounded-none [&_.react-flow\\_\\_node-playlist]:border-0 [&_.react-flow\\_\\_node-playlist]:bg-transparent [&_.react-flow\\_\\_node-playlist]:p-0 [&_.react-flow\\_\\_node-playlist]:text-left [&_.react-flow\\_\\_node-playlist]:text-inherit [&_.react-flow\\_\\_node-playlist]:shadow-none [&_.react-flow\\_\\_node-course]:overflow-visible [&_.react-flow\\_\\_node-course]:rounded-none [&_.react-flow\\_\\_node-course]:border-0 [&_.react-flow\\_\\_node-course]:bg-transparent [&_.react-flow\\_\\_node-course]:p-0 [&_.react-flow\\_\\_node-course]:text-left [&_.react-flow\\_\\_node-course]:text-inherit [&_.react-flow\\_\\_node-course]:shadow-none [&_.react-flow\\_\\_node-course.selected_article]:shadow-[0_0_0_2px_var(--color-coral),var(--shadow-card)] [&_.react-flow\\_\\_edge]:pointer-events-none [&_.react-flow\\_\\_controls]:overflow-hidden [&_.react-flow\\_\\_controls]:rounded-md [&_.react-flow\\_\\_controls]:border [&_.react-flow\\_\\_controls]:border-ink/10 [&_.react-flow\\_\\_controls]:shadow-card [&_.react-flow\\_\\_controls-button]:border-b-ink/10 [&_.react-flow\\_\\_controls-button]:bg-surface [&_.react-flow\\_\\_controls-button]:fill-ink [&_.react-flow\\_\\_controls-button:hover]:bg-cream [&_.react-flow\\_\\_minimap]:overflow-hidden [&_.react-flow\\_\\_minimap]:rounded-md [&_.react-flow\\_\\_minimap]:border [&_.react-flow\\_\\_minimap]:border-ink/10 [&_.react-flow\\_\\_minimap]:bg-surface [&_.react-flow\\_\\_minimap]:shadow-card [&_.react-flow\\_\\_attribution]:bg-transparent [&_.react-flow\\_\\_attribution]:text-ink-soft '
 
 function heightToStore(height, count, bigCover) {
   if (!bigCover) return height
@@ -152,7 +183,7 @@ function applyCoverWidth(nodes, playlist, width, playlists) {
 function forwardBoardDrag(id, event) {
   if (event.button !== 0) return
   const handle = document.querySelector(
-    `.playlist-frame[data-playlist-id="${CSS.escape(id)}"] .playlist-frame__drag`
+    `[data-playlist-id="${CSS.escape(id)}"] [data-playlist-drag]`
   )
   if (!handle) return
   event.stopPropagation()
@@ -205,8 +236,11 @@ function ListTitle({ id, title }) {
 
   return (
     <>
-      <div className="playlist-frame__title-slot">
-        <span className="playlist-frame__title" onDoubleClick={startEditing}>
+      <div className="relative flex min-w-0 flex-1 items-center">
+        <span
+          className="w-full min-w-0 cursor-grab overflow-hidden border-0 bg-transparent font-display text-[1.5rem] font-extrabold text-ellipsis whitespace-nowrap text-ink select-none outline-none focus:cursor-text focus:shadow-[0_1px_0_var(--color-coral)] focus:select-text"
+          onDoubleClick={startEditing}
+        >
           {draft}
         </span>
       </div>
@@ -215,7 +249,7 @@ function ListTitle({ id, title }) {
         position={Position.Top}
         align="start"
         offset={6}
-        className="playlist-title-anchor nodrag nopan nowheel"
+        className="nodrag nopan nowheel pointer-events-auto"
         style={{ zIndex: actions?.selectedId === id ? 50 : 40 }}
         onMouseDown={(event) => {
           if (editing || event.target instanceof HTMLInputElement) return
@@ -225,7 +259,7 @@ function ListTitle({ id, title }) {
         {editing ? (
           <input
             ref={inputRef}
-            className="playlist-title-pill"
+            className={titlePill}
             aria-label="Nombre de la lista"
             data-playlist-title={id}
             value={draft}
@@ -238,7 +272,7 @@ function ListTitle({ id, title }) {
             }}
           />
         ) : (
-          <span className="playlist-title-pill" onDoubleClick={startEditing}>
+          <span className={titlePill} onDoubleClick={startEditing}>
             {draft}
           </span>
         )}
@@ -254,7 +288,14 @@ function PlaylistNode({ id, data }) {
 
   return (
     <div
-      className={`playlist-frame${dropHere ? ' is-drop-target' : ''}${current ? ' is-current' : ''}${actions?.isListPicked?.(id) ? ' is-picked' : ''}`}
+      className={cn(
+        frame,
+        current &&
+          'shadow-[inset_3px_0_0_var(--color-coral),0_0_0_2px_rgba(232,69,112,0.35),var(--shadow-card)]',
+        dropHere &&
+          'shadow-[inset_3px_0_0_var(--color-coral),0_0_0_2px_var(--color-coral),var(--shadow-lift)]',
+        actions?.isListPicked?.(id) && 'outline outline-2 outline-offset-2 outline-coral'
+      )}
       data-playlist-id={id}
     >
       <NodeResizer
@@ -263,13 +304,13 @@ function PlaylistNode({ id, data }) {
         minHeight={data.minHeight}
         maxHeight={data.minHeight}
         color="#e84570"
-        lineClassName="playlist-frame__resize-line"
-        handleClassName="playlist-frame__resize-handle"
+        lineClassName=""
+        handleClassName="size-2 rounded-[2px] border border-coral bg-surface"
       />
-      <header className="playlist-frame__drag" title={data.why || undefined}>
+      <header className="flex h-14 cursor-grab items-center gap-[0.4rem] pr-[0.65rem] pl-[0.4rem]" data-playlist-drag="" title={data.why || undefined}>
         <button
           type="button"
-          className={`playlist-frame__icon playlist-frame__toggle nodrag nopan${data.collapsed ? ' is-collapsed' : ''}`}
+          className={cn(frameIcon, 'nodrag nopan', data.collapsed && 'is-collapsed')}
           aria-expanded={!data.collapsed}
           aria-label={data.collapsed ? `Expandir ${data.title}` : `Contraer ${data.title}`}
           onClick={() => actions?.toggleCollapsed(id)}
@@ -279,7 +320,7 @@ function PlaylistNode({ id, data }) {
           </svg>
         </button>
         <CoursePickBox
-          className="nodrag nopan"
+          className={cn(pickBox, 'nodrag nopan')}
           checked={Boolean(actions?.isListPicked?.(id))}
           label={`Seleccionar lista ${data.title}`}
           onPick={() => actions?.toggleListPick(id)}
@@ -288,7 +329,7 @@ function PlaylistNode({ id, data }) {
         <FrameCount count={data.count} total={data.totalCount} />
         <button
           type="button"
-          className="playlist-frame__icon nodrag nopan"
+          className={cn(frameIcon, 'nodrag nopan')}
           aria-label={`Quitar lista ${data.title}`}
           onClick={() => actions?.deletePlaylist(id)}
         >
@@ -300,14 +341,14 @@ function PlaylistNode({ id, data }) {
       {(data.nests || []).map((nest) => (
         <div
           key={nest.childId}
-          className="playlist-nest nodrag nopan"
+          className="nodrag nopan pointer-events-none absolute z-[1] box-content flex flex-col rounded-md border border-ink/10 bg-cream shadow-[inset_3px_0_0_var(--color-teal)]"
           style={{ top: nest.y, height: nest.height, left: NEST_FRAME_X, right: NEST_FRAME_X }}
           title={nest.why || undefined}
         >
-          <div className="playlist-nest__head">
+          <div className="pointer-events-auto flex h-10 shrink-0 items-center gap-[0.35rem] pr-[0.35rem] pl-[0.7rem]">
             <button
               type="button"
-              className={`playlist-frame__icon playlist-frame__toggle${nest.collapsed ? ' is-collapsed' : ''}`}
+              className={cn(frameIcon, nest.collapsed && 'is-collapsed')}
               aria-expanded={!nest.collapsed}
               aria-label={nest.collapsed ? `Expandir ${nest.title}` : `Contraer ${nest.title}`}
               onClick={() => actions?.toggleCollapsed(nest.childId)}
@@ -323,13 +364,14 @@ function PlaylistNode({ id, data }) {
               </svg>
             </button>
             <CoursePickBox
+              className={pickBox}
               checked={Boolean(actions?.isListPicked?.(nest.childId))}
               label={`Seleccionar lista ${nest.title}`}
               onPick={() => actions?.toggleListPick(nest.childId)}
             />
             <button
               type="button"
-              className="playlist-nest__title"
+              className="min-w-0 flex-1 cursor-pointer overflow-hidden border-0 bg-transparent p-0 text-left font-display text-[0.86rem] font-extrabold text-ellipsis whitespace-nowrap text-ink"
               onClick={() => actions?.selectPlaylist(nest.childId)}
             >
               {nest.title}
@@ -337,7 +379,7 @@ function PlaylistNode({ id, data }) {
             <FrameCount count={nest.count} total={nest.totalCount} />
             <button
               type="button"
-              className="playlist-frame__icon"
+              className={frameIcon}
               aria-label={`Sacar ${nest.title}`}
               onClick={() => actions?.unnestPlaylist(nest.childId)}
             >
@@ -355,7 +397,7 @@ function PlaylistNode({ id, data }) {
         </div>
       ))}
       {data.collapsed || data.count > 0 || (data.nests || []).length ? null : (
-        <p className="playlist-frame__empty">
+        <p className="mx-[0.85rem] mt-[0.35rem] rounded-md border border-dashed border-ink/16 px-3 py-[1.1rem] text-center text-[0.8rem] text-ink-soft">
           {data.filtered && data.totalCount > 0
             ? 'Ningún curso coincide'
             : 'Arrastra un curso o una lista aquí'}
@@ -419,14 +461,30 @@ function useCourseCover(coursePath, hasCover, coverStamp, eager) {
   }
 }
 
-function CourseCover({ coursePath, hasCover, coverStamp, className, eager = false }) {
+function CourseCover({ coursePath, hasCover, coverStamp, className, markClassName, fill = false, eager = false }) {
   const { ref, src, onError } = useCourseCover(coursePath, hasCover, coverStamp, eager)
   return (
     <div ref={ref} className={className}>
       {src ? (
-        <img src={src} alt="" draggable={false} onError={onError} />
+        <img
+          className={fill ? 'absolute inset-0 size-full object-cover' : 'size-full object-cover'}
+          src={src}
+          alt=""
+          draggable={false}
+          onError={onError}
+        />
       ) : (
-        <img className="is-mark" src={brandMark} alt="" draggable={false} />
+        <img
+          className={cn(
+            fill
+              ? 'absolute top-1/2 left-1/2 size-12 -translate-x-1/2 -translate-y-1/2 object-contain'
+              : 'size-[22px] object-contain',
+            markClassName
+          )}
+          src={brandMark}
+          alt=""
+          draggable={false}
+        />
       )}
     </div>
   )
@@ -443,10 +501,23 @@ function CourseNode({ data }) {
 
   return (
     <article
-      className={`playlist-course${data.missing ? ' is-missing' : ''}${data.inProcess ? ' is-active' : ''}${data.continues ? ' has-next' : ''}${data.bigCover ? ' is-cover' : ''}${actions?.detailPath === data.coursePath || actions?.detailPath === data.libraryPath ? ' is-preview' : ''}${actions?.isCoursePicked?.(data.coursePath) ? ' is-picked' : ''}`}
+      className={cn(
+        courseCard,
+        data.missing && 'bg-cream',
+        data.inProcess && 'shadow-[inset_3px_0_0_var(--color-coral),var(--shadow-card)]',
+        data.continues &&
+          "after:absolute after:top-full after:left-[1.35rem] after:h-[var(--playlist-gap)] after:w-[1.5px] after:bg-[rgba(42,36,56,0.38)] after:content-['']",
+        data.bigCover && 'flex-col items-stretch gap-0 p-0',
+        data.bigCover &&
+          data.continues &&
+          'after:left-1/2 after:-ml-[0.75px]',
+        (actions?.detailPath === data.coursePath || actions?.detailPath === data.libraryPath) &&
+          'shadow-[0_0_0_2px_var(--color-coral),var(--shadow-card)]',
+        actions?.isCoursePicked?.(data.coursePath) && 'outline outline-2 outline-offset-1 outline-coral'
+      )}
     >
       <CoursePickBox
-        className="nodrag nopan"
+        className={cn(pickBox, 'nodrag nopan')}
         checked={Boolean(actions?.isCoursePicked?.(data.coursePath))}
         label={`Seleccionar ${data.title}`}
         onPick={(pick) => actions?.toggleCoursePick(data.coursePath, pick)}
@@ -455,19 +526,30 @@ function CourseNode({ data }) {
         coursePath={data.missing ? '' : data.libraryPath || data.coursePath}
         hasCover={data.hasCover}
         coverStamp={data.coverStamp}
-        className="playlist-course__cover"
+        className={cn(
+          courseCover,
+          data.bigCover && 'h-auto w-full min-h-0 flex-1 rounded-t-[13px]'
+        )}
+        markClassName={data.bigCover ? 'size-12' : undefined}
         eager
       />
       {data.inProcess ? (
-        <span className="status-ribbon playlist-course__status">En curso</span>
+        <span className={cn(statusMark, 'top-[0.45rem] left-[0.45rem]', data.bigCover && 'inline-flex')}>
+          En curso
+        </span>
       ) : null}
-      <div className="playlist-course__text">
+      <div
+        className={cn(
+          'min-w-0 flex-1 [&_h3]:m-0 [&_h3]:truncate [&_h3]:font-display [&_h3]:text-[0.9rem] [&_h3]:font-extrabold [&_p]:m-0 [&_p]:mt-[0.1rem] [&_p]:truncate [&_p]:text-[0.72rem] [&_p]:text-ink-soft',
+          data.bigCover && 'flex-none px-[0.6rem] pt-[0.4rem] pb-[0.5rem]'
+        )}
+      >
         <h3 title={data.why ? `${data.title}. ${data.why}` : data.title}>{data.title}</h3>
         {data.missing ? (
           <p title={meta}>{meta}</p>
         ) : (
-          <p className="playlist-course__academy" title={meta}>
-            <InstitutionMark institution={data.institution} nameClassName="institution-name" />
+          <p className="flex min-w-0 items-center gap-[0.2rem]" title={meta}>
+            <InstitutionMark institution={data.institution} />
             {typeof data.percent === 'number' ? (
               <span>{`${data.institution ? ' · ' : ''}${data.percent}%`}</span>
             ) : null}
@@ -475,10 +557,15 @@ function CourseNode({ data }) {
           </p>
         )}
       </div>
-      <div className="playlist-course__actions nodrag nopan">
+      <div
+        className={cn(
+          'nodrag nopan flex flex-col gap-[0.2rem]',
+          data.bigCover && 'absolute top-[0.4rem] right-[0.4rem] flex-row'
+        )}
+      >
         <button
           type="button"
-          className="playlist-frame__icon"
+          className={cn(frameIcon, data.bigCover && 'bg-surface')}
           aria-label={`Abrir ${data.title}`}
           onClick={(event) => {
             event.stopPropagation()
@@ -491,7 +578,7 @@ function CourseNode({ data }) {
         </button>
         <button
           type="button"
-          className="playlist-frame__icon"
+          className={cn(frameIcon, data.bigCover && 'bg-surface')}
           aria-label={`Quitar ${data.title} de la lista`}
           onClick={(event) => {
             event.stopPropagation()
@@ -511,7 +598,7 @@ function FrameCount({ count, total }) {
   const narrowed = typeof total === 'number' && total !== count
   return (
     <span
-      className="playlist-frame__count"
+      className="shrink-0 rounded-full border border-ink/10 bg-cream-deep px-[0.45rem] py-[0.12rem] text-[0.72rem] font-bold text-ink-soft"
       title={narrowed ? `${count} de ${total} cursos` : undefined}
     >
       {narrowed ? `${count}/${total}` : count}
@@ -750,7 +837,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
     handle.setPointerCapture(event.pointerId)
     const startX = event.clientX
     const startWidth = sidebarWidthRef.current
-    const body = handle.closest('.playlist-board__body')
+    const body = handle.closest('[data-playlist-body]')
     const max = (body?.clientWidth || SIDEBAR_MAX) - 240
 
     const onMove = (moveEvent) => {
@@ -768,7 +855,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
     const step = event.shiftKey ? 48 : 16
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
     event.preventDefault()
-    const body = event.currentTarget.closest('.playlist-board__body')
+    const body = event.currentTarget.closest('[data-playlist-body]')
     const max = (body?.clientWidth || SIDEBAR_MAX) - 240
     const delta = event.key === 'ArrowRight' ? step : -step
     setSidebarWidth((width) => clampSidebar(width + delta, max))
@@ -1950,22 +2037,22 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
   return (
     <BoardActions.Provider value={actions}>
       <div
-        className="playlist-board"
+        className={board}
         style={{
           '--playlist-gap': `${PLAYLIST_GAP}px`,
           '--sidebar-w': `${sidebarWidth}px`
         }}
       >
-        <header className="playlist-board__header">
-          <div className="playlist-board__brand">
+        <header className="relative z-[6] flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-ink/10 bg-surface-muted px-5 py-4 backdrop-blur-[10px] [&_h1]:m-0 [&_h1]:font-display [&_h1]:text-[1.35rem] [&_h1]:font-black [&_h1]:tracking-[-0.02em]">
+          <div className="flex min-w-0 flex-col gap-[0.2rem]">
             <h1>Listas</h1>
             <AppNav active="playlists" onSelect={onNavigate} />
           </div>
-          <div className="playlist-board__actions">
-            <div className="header-menu" ref={orderMenuRef}>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <div className="relative shrink-0" ref={orderMenuRef}>
               <button
                 type="button"
-                className="btn btn--ghost"
+                className={btnGhost}
                 aria-haspopup="menu"
                 aria-expanded={orderMenuOpen}
                 onClick={() => setOrderMenuOpen((open) => !open)}
@@ -1974,10 +2061,10 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                 Ordenar
               </button>
               {orderMenuOpen ? (
-                <div className="header-popover" role="menu" aria-label="Ordenar listas">
+                <div className={popover} role="menu" aria-label="Ordenar listas">
                   <button
                     type="button"
-                    className="header-popover__item"
+                    className={cn(menuItem, '[&_small]:text-[0.75rem] [&_small]:font-medium [&_small]:text-ink-soft')}
                     role="menuitem"
                     onClick={() => orderBoard('reading')}
                   >
@@ -1986,7 +2073,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   </button>
                   <button
                     type="button"
-                    className="header-popover__item"
+                    className={cn(menuItem, '[&_small]:text-[0.75rem] [&_small]:font-medium [&_small]:text-ink-soft')}
                     role="menuitem"
                     onClick={() => orderBoard('alpha')}
                   >
@@ -1995,17 +2082,17 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   </button>
                   <button
                     type="button"
-                    className="header-popover__item"
+                    className={cn(menuItem, '[&_small]:text-[0.75rem] [&_small]:font-medium [&_small]:text-ink-soft')}
                     role="menuitem"
                     onClick={() => orderBoard('topic')}
                   >
                     <span>Por tema</span>
                     <small>Agrupa el tema más común de cada lista</small>
                   </button>
-                  <hr className="header-popover__sep" />
+                  <hr className="mx-1.5 my-1 h-px border-0 bg-ink/10" />
                   <button
                     type="button"
-                    className="header-popover__item"
+                    className={cn(menuItem, '[&_small]:text-[0.75rem] [&_small]:font-medium [&_small]:text-ink-soft')}
                     role="menuitem"
                     onClick={() => orderBoard('clean')}
                   >
@@ -2017,7 +2104,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
             </div>
             <button
               type="button"
-              className="btn btn--ghost"
+              className={btnGhost}
               onClick={() => setBuilderOpen(true)}
               disabled={!intentReady}
             >
@@ -2025,7 +2112,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
             </button>
             <button
               type="button"
-              className="btn btn--primary"
+              className={btnPrimary}
               onClick={createPlaylist}
               disabled={creating}
             >
@@ -2033,13 +2120,15 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
             </button>
           </div>
         </header>
-        <div className="playlist-board__body">
-          <aside className="playlist-board__sidebar">
-            <div className="playlist-board__sidebar-head">
-              <div className="playlist-board__sidebar-title">
-                <h2>Cursos</h2>
+        <div className="flex min-h-0 flex-1 max-[800px]:flex-col" data-playlist-body="">
+          <aside className="relative flex w-[var(--sidebar-w,320px)] shrink-0 flex-col gap-3 min-h-0 border-r border-ink/10 bg-white/45 px-[0.85rem] pt-[0.9rem] pb-4 max-[800px]:max-h-56 max-[800px]:w-full max-[800px]:border-r-0 max-[800px]:border-b">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="m-0 font-display text-[0.72rem] font-extrabold tracking-[0.08em] text-ink-soft uppercase">
+                  Cursos
+                </h2>
                 <div
-                  className="segmented playlist-board__view"
+                  className="inline-flex gap-[0.2rem] rounded-full border border-ink/10 bg-surface p-1 [&_button]:cursor-pointer [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-[0.55rem] [&_button]:py-[0.22rem] [&_button]:text-[0.72rem] [&_button]:font-bold [&_button]:text-ink-soft [&_button[aria-pressed=true]]:bg-coral [&_button[aria-pressed=true]]:text-white"
                   role="group"
                   aria-label="Vista de cursos"
                 >
@@ -2051,26 +2140,28 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   </button>
                 </div>
               </div>
-              <p>
+              <p className="mt-[0.2rem] text-[0.8rem] text-ink-soft">
                 {selectedPlaylist
                   ? `${visibleCourses.length} · añadir a «${selectedPlaylist.title}»`
                   : `${visibleCourses.length} cursos`}
               </p>
               <button
                 type="button"
-                className="btn btn--ghost playlist-board__pick"
+                className={cn(btnGhost, 'mt-[0.45rem] px-3 py-[0.35rem] text-[0.82rem] shadow-none')}
                 onClick={toggleVisibleCoursePicks}
                 disabled={!visibleCourses.length || zipExport.exporting}
               >
                 {allSidebarPicked ? 'Quitar selección' : 'Seleccionar visibles'}
               </button>
               {selectedPlaylist?.why ? (
-                <p className="playlist-board__why">{selectedPlaylist.why}</p>
+                <p className="m-0 line-clamp-3 text-[0.78rem] leading-[1.35] text-ink-soft">
+                  {selectedPlaylist.why}
+                </p>
               ) : null}
             </div>
-            <div className="search-field playlist-board__search">
+            <div className={searchBox}>
               <svg
-                className="search-field__icon"
+                className="pointer-events-none"
                 viewBox="0 0 24 24"
                 fill="currentColor"
                 aria-hidden="true"
@@ -2086,8 +2177,8 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                 title="Buscar (Ctrl+F)"
               />
             </div>
-            <div className="playlist-board__filters">
-              <div className="chip-select">
+            <div className="flex shrink-0 flex-col gap-[0.4rem]">
+              <div className={cn(chipSelect, '[&_label]:text-[0.75rem] [&_label]:font-bold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase')}>
                 <label htmlFor="playlist-institution">Academia</label>
                 <select
                   id="playlist-institution"
@@ -2102,7 +2193,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   ))}
                 </select>
               </div>
-              <div className="chip-select">
+              <div className={cn(chipSelect, '[&_label]:text-[0.75rem] [&_label]:font-bold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase')}>
                 <label htmlFor="playlist-program">Programa</label>
                 <select
                   id="playlist-program"
@@ -2117,10 +2208,10 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   ))}
                 </select>
               </div>
-              <div className="playlist-board__pills">
+              <div className="flex flex-wrap gap-[0.35rem]">
                 <button
                   type="button"
-                  className="filter-pill"
+                  className={filterPill}
                   aria-pressed={inProcessOnly}
                   onClick={() => setInProcessOnly((value) => !value)}
                 >
@@ -2128,7 +2219,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                 </button>
                 <button
                   type="button"
-                  className="filter-pill"
+                  className={filterPill}
                   aria-pressed={unlistedOnly}
                   onClick={() => setUnlistedOnly((value) => !value)}
                 >
@@ -2136,9 +2227,16 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                 </button>
               </div>
             </div>
-            <div className={`playlist-board__courses${bigCover ? ' is-covers' : ''}`} role="list">
+            <div
+              className={cn(
+                'flex min-h-0 flex-1 flex-col gap-[0.45rem] overflow-auto pr-[0.15rem]',
+                bigCover &&
+                  'grid auto-rows-max grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] content-start items-start'
+              )}
+              role="list"
+            >
               {visibleCourses.length === 0 ? (
-                <p className="playlist-board__courses-empty">Ningún curso coincide.</p>
+                <p className="mx-[0.15rem] my-2 text-[0.85rem] text-ink-soft">Ningún curso coincide.</p>
               ) : (
                 visibleCourses.map((course) => {
                   const member = inSelected.has(course.path)
@@ -2146,7 +2244,15 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   return (
                     <div
                       key={course.path}
-                      className={`playlist-course-row${member ? ' is-member' : ''}${detailPath === course.path ? ' is-preview' : ''}${pickedCourses.has(course.path) ? ' is-picked' : ''}`}
+                      className={cn(
+                        'flex shrink-0 cursor-grab items-center gap-[0.45rem] rounded-md border border-ink/10 bg-surface px-2 py-[0.45rem] shadow-card',
+                        bigCover &&
+                          'relative h-max min-h-min flex-col items-stretch gap-0 self-start overflow-hidden p-0',
+                        member && 'shadow-[inset_3px_0_0_var(--color-teal),var(--shadow-card)]',
+                        detailPath === course.path &&
+                          'shadow-[inset_3px_0_0_var(--color-coral),var(--shadow-card)]',
+                        pickedCourses.has(course.path) && 'outline outline-2 outline-offset-1 outline-coral'
+                      )}
                       role="listitem"
                       draggable
                       onClick={(event) => {
@@ -2168,6 +2274,10 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                       }}
                     >
                       <CoursePickBox
+                        className={cn(
+                          pickBox,
+                          bigCover && 'absolute top-[0.35rem] left-[0.35rem] z-[4]'
+                        )}
                         checked={pickedCourses.has(course.path)}
                         label={`Seleccionar ${course.title || course.path}`}
                         onPick={(pick) => toggleCoursePick(course.path, pick)}
@@ -2176,16 +2286,30 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                         coursePath={course.path}
                         hasCover={course.hasCover}
                         coverStamp={course.coverStamp}
-                        className="playlist-course-row__cover"
+                        className={cn(
+                          rowCover,
+                          bigCover && 'relative aspect-[16/10] h-auto w-full flex-none rounded-none'
+                        )}
+                        fill={bigCover}
                       />
                       {course.isInProcess ? (
-                        <span className="status-ribbon playlist-course-row__status">En curso</span>
+                        <span className={cn(statusMark, bigCover && 'top-[0.45rem] left-[0.45rem] inline-flex')}>En curso</span>
                       ) : null}
-                      <div className="playlist-course-row__text">
-                        <span className="playlist-course-row__title">
+                      <div
+                        className={cn(
+                          'flex min-w-0 flex-1 flex-col gap-[0.1rem]',
+                          bigCover && 'flex-none px-[0.65rem] pt-[0.45rem] pb-[0.55rem]'
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'truncate font-display text-[0.86rem] font-extrabold',
+                            bigCover && 'line-clamp-2 whitespace-normal'
+                          )}
+                        >
                           {course.title || course.path}
                         </span>
-                        <span className="playlist-course-row__meta">
+                        <span className="truncate text-[0.72rem] text-ink-soft">
                           {member ? (
                             'En esta lista'
                           ) : count > 0 ? (
@@ -2193,7 +2317,6 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                           ) : (
                             <InstitutionMark
                               institution={course.institution}
-                              nameClassName="institution-name"
                               emptyLabel="Arrastrar"
                             />
                           )}
@@ -2201,7 +2324,10 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                       </div>
                       <button
                         type="button"
-                        className="playlist-course-row__add"
+                        className={cn(
+                          'shrink-0 cursor-pointer rounded-sm border border-ink/10 bg-cream px-2 py-[0.28rem] text-[0.72rem] font-bold text-ink disabled:cursor-default disabled:opacity-45',
+                          bigCover && 'absolute top-[0.45rem] right-[0.45rem] bg-surface'
+                        )}
                         disabled={member}
                         onMouseDown={(event) => event.stopPropagation()}
                         onClick={() => addCourse(null, course.path)}
@@ -2214,7 +2340,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
               )}
             </div>
             <div
-              className="playlist-board__resizer"
+              className="absolute top-0 -right-1 z-[3] h-full w-2 cursor-col-resize touch-none hover:bg-[rgba(232,69,112,0.45)] focus-visible:bg-[rgba(232,69,112,0.45)] focus-visible:outline-none max-[800px]:hidden"
               role="separator"
               aria-orientation="vertical"
               aria-label="Ancho de la lista de cursos"
@@ -2226,10 +2352,10 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
               onKeyDown={onSidebarResizeKey}
             />
           </aside>
-          <div className="playlist-board__stage">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <CourseFilterBar
               idPrefix="board"
-              className="course-filter-bar--board"
+              board
               showSearch
               query={boardQuery}
               onQueryChange={setBoardQuery}
@@ -2256,7 +2382,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
               courseTotal={boardStats.total}
             />
             <div
-              className="playlist-board__canvas"
+              className="min-h-0 min-w-0 flex-1"
               ref={canvasRef}
               onDragLeave={(event) => {
                 if (event.currentTarget.contains(event.relatedTarget)) return
@@ -2308,12 +2434,12 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   nodeStrokeWidth={2}
                 />
                 {!loading && playlists.length === 0 ? (
-                  <Panel position="top-center" className="playlist-board__hint">
+                  <Panel position="top-center" className="mt-3 rounded-md border border-ink/10 bg-surface px-[0.95rem] py-[0.7rem] text-[0.88rem] text-ink-soft shadow-card">
                     Crea una lista, o usa Armar para agrupar cursos parecidos.
                   </Panel>
                 ) : null}
                 {loading ? (
-                  <Panel position="top-center" className="playlist-board__hint">
+                  <Panel position="top-center" className="mt-3 rounded-md border border-ink/10 bg-surface px-[0.95rem] py-[0.7rem] text-[0.88rem] text-ink-soft shadow-card">
                     Cargando listas…
                   </Panel>
                 ) : null}
@@ -2322,6 +2448,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
           </div>
           {detailCourse ? (
             <CourseDetailPanel
+              dock
               course={detailCourse}
               onClose={() => setDetailPath(null)}
               onOpenCourse={(course, target) => onOpenCourse?.(course, target)}

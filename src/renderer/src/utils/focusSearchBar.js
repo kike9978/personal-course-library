@@ -1,6 +1,6 @@
-const FLASH_CLASS = 'is-find-target'
+const FLASH_CLASS = 'animate-search-highlight'
 
-const SEARCH_SELECTOR = '.search-field input, input.import-props__search'
+const SEARCH_SELECTOR = '[data-search-field]'
 
 function isVisibleSearch(input, view) {
   if (!input || input.disabled || input.hidden) return false

@@ -3,6 +3,22 @@ import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import { InstitutionMark } from './InstitutionMark'
 import CoursePickBox from './CoursePickBox'
 import brandMark from '../assets/img/brand-mark.svg'
+import { cn } from '../ui/cn'
+
+const badge = 'rounded-full border px-[0.55rem] py-[0.18rem] text-[0.7rem] font-bold'
+const badgeNew = cn(badge, 'border-[#1a6b5c] bg-[#d8f3ec] text-[#0f4a40]')
+const badgeWarn = cn(badge, 'border-[#a66b1a] bg-[#ffe8c2] text-[#6b4508]')
+const badgePrograms = cn(
+  badge,
+  'border-chip-programs-border bg-chip-programs text-chip-programs-text'
+)
+const badgeTheme = cn(badge, 'border-[#5a4a7a] bg-[#ece6f7] text-[#3d3258]')
+const badgeDone = cn(badge, 'border-chip-status-border bg-chip-status text-chip-status-text')
+const ribbon =
+  'static rounded-full border border-chip-status-border bg-chip-status px-[0.65rem] py-[0.28rem] text-[0.7rem] font-extrabold tracking-[0.03em] text-chip-status-text uppercase'
+const ribbonRecent = 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
+const cardAction =
+  'grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-ink/10 bg-surface shadow-card hover:bg-coral hover:text-white'
 
 function useCoverImage(coursePath, hasCover, coverStamp) {
   const fallbackCover = absoluteAssetUrl(getCoverFallback())
@@ -155,7 +171,13 @@ function CourseCard({
   return (
     <article
       ref={ref}
-      className={`course-card${isSelected ? ' is-selected' : ''}${isPicked ? ' is-picked' : ''}`}
+      className={cn(
+        'group relative flex cursor-pointer flex-col overflow-hidden rounded-lg border border-ink/10 bg-surface text-left shadow-card outline-none transition-[transform,box-shadow] duration-[140ms] ease-pop [content-visibility:auto] [contain-intrinsic-size:360px] focus-visible:-translate-y-0.5 focus-visible:shadow-[0_0_0_2px_rgba(232,69,112,0.4),0_4px_12px_rgba(42,36,56,0.1)]',
+        !isSelected && 'hover:-translate-y-0.5 hover:shadow-lift',
+        isSelected &&
+          '-translate-y-0.5 shadow-[0_0_0_2px_rgba(232,69,112,0.4),0_4px_12px_rgba(42,36,56,0.1)]',
+        isPicked && 'outline outline-2 outline-offset-1 outline-coral'
+      )}
       onClick={handleSelect}
       onDoubleClick={(e) => {
         e.preventDefault()
@@ -165,40 +187,54 @@ function CourseCard({
       tabIndex={tabIndex ?? 0}
       data-course-path={coursePath}
     >
-      <div className="course-card__cover">
+      <div className="relative aspect-[16/10] overflow-hidden bg-linear-to-br from-cream-deep to-[#e8d5c4]">
         {hasCover ? (
-          <img src={coverSrc} alt="" onError={onCoverError} />
+          <img
+            className="block h-full w-full object-cover"
+            src={coverSrc}
+            alt=""
+            onError={onCoverError}
+          />
         ) : (
-          <div className="cover-placeholder">
-            <img src={brandMark} alt="" width={28} height={28} />
+          <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle_at_30%_30%,rgba(232,69,112,0.08),transparent_50%),radial-gradient(circle_at_70%_70%,rgba(61,122,122,0.08),transparent_45%),var(--color-cream-deep)] text-ink-soft">
+            <img
+              className="!h-7 !w-7 max-h-7 max-w-7 object-contain opacity-55"
+              src={brandMark}
+              alt=""
+              width={28}
+              height={28}
+            />
           </div>
         )}
 
         <CoursePickBox
+          className="absolute bottom-[0.55rem] left-[0.55rem] z-[3]"
           checked={isPicked}
           label={`Seleccionar ${courseTitle || coursePath}`}
           onPick={(pick) => onTogglePick?.(course, pick)}
         />
 
-        <div className="course-card__marks">
+        <div className="absolute top-[0.65rem] right-[7.2rem] left-[0.65rem] z-[2] flex flex-wrap items-start gap-[0.35rem]">
           <button
             type="button"
-            className={`status-ribbon${isInProcess ? '' : ' status-ribbon--off'}`}
+            className={cn(
+              ribbon,
+              !isInProcess &&
+                'hidden border-ink bg-white/90 text-ink-soft group-hover:inline-flex group-focus-within:inline-flex'
+            )}
             onMouseDown={stopCardEvent}
             onClick={toggleInProcess}
             title={isInProcess ? 'Quitar de en curso' : 'Marcar en curso'}
           >
             {isInProcess ? 'En curso' : '+ En curso'}
           </button>
-          {isRecentlyViewed ? (
-            <span className="status-ribbon status-ribbon--recent">Reciente</span>
-          ) : null}
+          {isRecentlyViewed ? <span className={cn(ribbon, ribbonRecent)}>Reciente</span> : null}
         </div>
 
-        <div className="course-card__actions">
+        <div className="absolute top-[0.55rem] right-[0.55rem] z-[3] flex gap-[0.35rem]">
           <button
             type="button"
-            className="card-action"
+            className={cardAction}
             onMouseDown={stopCardEvent}
             onClick={handleOpenCourse}
             title="Abrir curso"
@@ -209,7 +245,7 @@ function CourseCard({
           </button>
           <button
             type="button"
-            className="card-action"
+            className={cardAction}
             onMouseDown={stopCardEvent}
             onClick={handleOpenFolder}
             title="Abrir en explorador"
@@ -220,7 +256,7 @@ function CourseCard({
           </button>
           <button
             type="button"
-            className="card-action"
+            className={cardAction}
             onMouseDown={stopCardEvent}
             onClick={handleEdit}
             title="Editar"
@@ -232,53 +268,59 @@ function CourseCard({
         </div>
       </div>
 
-      <div className="course-card__body">
-        <h3 className="course-card__title" title={courseTitle}>
+      <div className="flex flex-1 flex-col gap-[0.55rem] px-[0.95rem] pt-[0.85rem] pb-4">
+        <h3
+          className="m-0 line-clamp-2 font-display text-base leading-[1.25] font-extrabold"
+          title={courseTitle}
+        >
           {courseTitle}
         </h3>
         {showLearningMeta && course.learning?.lastLessonTitle ? (
-          <p className="course-card__resume" title={course.learning.lastLessonTitle}>
+          <p
+            className="m-0 truncate text-[0.78rem] text-ink-soft"
+            title={course.learning.lastLessonTitle}
+          >
             {course.learning.status === 'completed'
               ? 'Completado'
               : `Continuar: ${course.learning.lastLessonTitle}`}
           </p>
         ) : null}
-        <div className="course-card__meta">
-          <InstitutionMark institution={institution} nameClassName="institution-name" />
+        <div className="flex min-h-6 items-center gap-2">
+          <InstitutionMark institution={institution} />
           {typeof course.rate === 'number' && course.rate > 0 ? (
-            <span className="course-card__rate" title={`${course.rate}/5`}>
+            <span className="text-xs tracking-[0.05em] text-coral-deep" title={`${course.rate}/5`}>
               {'★'.repeat(course.rate)}
             </span>
           ) : null}
           {showLearningMeta &&
           typeof course.learning?.percent === 'number' &&
           course.learning.playableCount > 0 ? (
-            <span className="course-card__percent">{course.learning.percent}%</span>
+            <span className="ml-auto text-xs font-bold text-teal">{course.learning.percent}%</span>
           ) : null}
         </div>
         {showLearningMeta && course.learning?.playableCount > 0 ? (
-          <div className="course-card__progress" aria-hidden="true">
+          <div className="h-1 overflow-hidden rounded-full bg-ink/[0.08]" aria-hidden="true">
             <div
-              className="course-card__progress-bar"
+              className="h-full rounded-[inherit] bg-teal"
               style={{ width: `${Math.min(100, course.learning.percent || 0)}%` }}
             />
           </div>
         ) : null}
-        <div className="chips-container">
-          {course.isNew ? <span className="badge badge--new">Nuevo</span> : null}
-          {course.missingProps ? <span className="badge badge--warn">Sin props</span> : null}
+        <div className="flex flex-wrap gap-[0.3rem]">
+          {course.isNew ? <span className={badgeNew}>Nuevo</span> : null}
+          {course.missingProps ? <span className={badgeWarn}>Sin props</span> : null}
           {(programs || []).slice(0, 3).map((program, index) => (
-            <span key={`${program}-${index}`} className="badge badge--programs">
+            <span key={`${program}-${index}`} className={badgePrograms}>
               {program}
             </span>
           ))}
           {(course.theme || []).slice(0, 2).map((theme, index) => (
-            <span key={`theme-${theme}-${index}`} className="badge badge--theme">
+            <span key={`theme-${theme}-${index}`} className={badgeTheme}>
               {theme}
             </span>
           ))}
           {course.learning?.status === 'completed' ? (
-            <span className="badge badge--done">Completado</span>
+            <span className={badgeDone}>Completado</span>
           ) : null}
         </div>
       </div>

@@ -93,6 +93,7 @@ import {
 import { MentionNode } from './noteEditor/MentionNode'
 import { NOTE_TRANSFORMERS } from './noteEditor/markdownTransformers'
 import { NoteEditorContext } from './noteEditor/NoteEditorContext'
+import { cn } from '../ui/cn.js'
 import FloatingLinkEditorPlugin from './noteEditor/FloatingLinkEditor'
 import SlashMenuPlugin from './noteEditor/SlashMenuPlugin'
 import MentionsPlugin from './noteEditor/MentionsPlugin'
@@ -100,71 +101,103 @@ import HashtagMenuPlugin from './noteEditor/HashtagMenuPlugin'
 
 const AUTO_LINK_MATCHERS = [autoLinkUrlMatcher, autoLinkEmailMatcher]
 
+const mono = '[font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace]'
+const tokenAttr = 'text-[#0b6e4f]'
+const tokenLiteral = 'text-[#9a3412]'
+const tokenFn = 'text-[#1d4ed8]'
+const tokenComment = 'text-ink-soft italic'
+const tokenKeyword = 'text-[#a21caf]'
+const tokenString = 'text-[#b45309]'
+const tokenPlain = 'text-ink'
+
+const checkBox =
+  "relative ml-[0.15rem] pl-[1.45rem] list-none outline-none before:content-[''] before:absolute before:top-[0.2em] before:left-0 before:block before:h-[0.9em] before:w-[0.9em] before:cursor-pointer before:rounded-[3px] before:border before:bg-cover"
+const checkMark =
+  "after:content-[''] after:absolute after:top-[0.35em] after:left-[0.28em] after:block after:h-[0.5em] after:w-[0.28em] after:cursor-pointer after:rotate-45 after:border-solid after:border-white after:border-t-0 after:border-l-0 after:border-r-[0.12em] after:border-b-[0.12em]"
+
 const theme = {
-  paragraph: 'note-editor__p',
-  quote: 'note-editor__quote',
-  heading: { h2: 'note-editor__h2', h3: 'note-editor__h3' },
-  code: 'note-editor__code-block',
+  paragraph: 'mb-[0.35rem]',
+  quote: 'my-[0.35rem] border-l-[3px] border-l-ink/16 pl-[0.65rem] text-ink-soft',
+  heading: {
+    h2: 'mt-[0.55rem] mb-[0.35rem] text-[1.15rem] leading-[1.3] font-extrabold text-ink',
+    h3: 'mt-[0.45rem] mb-[0.3rem] text-base leading-[1.35] [font-weight:750] text-ink'
+  },
+  code: `my-[0.45rem] block overflow-x-auto rounded-[6px] bg-black/6 px-[0.65rem] py-[0.55rem] text-[0.82rem] leading-[1.45] whitespace-pre-wrap [tab-size:2] ${mono}`,
   codeHighlight: {
-    atrule: 'note-editor__token-attr',
-    attr: 'note-editor__token-attr',
-    boolean: 'note-editor__token-bool',
-    builtin: 'note-editor__token-builtin',
-    cdata: 'note-editor__token-comment',
-    char: 'note-editor__token-string',
-    class: 'note-editor__token-class',
-    'class-name': 'note-editor__token-class',
-    comment: 'note-editor__token-comment',
-    constant: 'note-editor__token-const',
-    deleted: 'note-editor__token-deleted',
-    doctype: 'note-editor__token-comment',
-    entity: 'note-editor__token-operator',
-    function: 'note-editor__token-function',
-    important: 'note-editor__token-important',
-    inserted: 'note-editor__token-inserted',
-    keyword: 'note-editor__token-keyword',
-    namespace: 'note-editor__token-namespace',
-    number: 'note-editor__token-number',
-    operator: 'note-editor__token-operator',
-    prolog: 'note-editor__token-comment',
-    property: 'note-editor__token-property',
-    punctuation: 'note-editor__token-punct',
-    regex: 'note-editor__token-regex',
-    selector: 'note-editor__token-selector',
-    string: 'note-editor__token-string',
-    symbol: 'note-editor__token-symbol',
-    tag: 'note-editor__token-tag',
-    url: 'note-editor__token-url',
-    variable: 'note-editor__token-variable'
+    atrule: tokenAttr,
+    attr: tokenAttr,
+    boolean: tokenLiteral,
+    builtin: tokenFn,
+    cdata: tokenComment,
+    char: tokenString,
+    class: tokenFn,
+    'class-name': tokenFn,
+    comment: tokenComment,
+    constant: tokenLiteral,
+    deleted: tokenPlain,
+    doctype: tokenComment,
+    entity: tokenPlain,
+    function: tokenFn,
+    important: tokenKeyword,
+    inserted: tokenPlain,
+    keyword: tokenKeyword,
+    namespace: tokenFn,
+    number: tokenLiteral,
+    operator: tokenPlain,
+    prolog: tokenComment,
+    property: tokenAttr,
+    punctuation: tokenPlain,
+    regex: tokenString,
+    selector: tokenAttr,
+    string: tokenString,
+    symbol: tokenLiteral,
+    tag: tokenKeyword,
+    url: tokenString,
+    variable: tokenAttr
   },
-  image: 'note-editor__image',
-  excalidraw: 'note-editor__excalidraw',
-  timestamp: 'note-editor__timestamp-wrap',
-  mention: 'note-editor__mention',
-  hashtag: 'note-editor__hashtag',
-  hr: 'note-editor__hr',
-  table: 'note-editor__table',
-  tableCell: 'note-editor__table-cell',
-  tableCellHeader: 'note-editor__table-cell-header',
-  tableRow: 'note-editor__table-row',
+  image: 'my-[0.45rem] block',
+  excalidraw: 'my-[0.45rem] block',
+  timestamp: 'inline',
+  mention:
+    'inline rounded-[4px] bg-black/6 px-[0.25em] py-[0.05em] font-semibold text-ink data-[mention-type=note]:cursor-pointer',
+  hashtag: 'font-semibold text-coral-deep',
+  hr: 'my-3 border-x-0 border-b-0 border-t border-t-ink/16',
+  table: 'my-2 w-full table-fixed border-collapse overflow-hidden border-spacing-0',
+  tableCell:
+    'relative min-w-[4.5rem] border border-ink/16 px-[0.45rem] py-[0.35rem] text-left align-top outline-none',
+  tableCellHeader:
+    'relative min-w-[4.5rem] border border-ink/16 bg-black/4 px-[0.45rem] py-[0.35rem] text-left align-top font-bold outline-none',
+  tableRow: '',
   list: {
-    ul: 'note-editor__ul',
-    ol: 'note-editor__ol',
-    checklist: 'note-editor__checklist',
-    listitem: 'note-editor__li',
-    listitemChecked: 'note-editor__li--checked',
-    listitemUnchecked: 'note-editor__li--unchecked',
-    nested: { listitem: 'note-editor__li--nested' }
+    ul: 'mt-[0.2rem] mb-[0.45rem] pl-5',
+    ol: 'mt-[0.2rem] mb-[0.45rem] pl-5',
+    checklist: 'mt-[0.2rem] mb-[0.45rem] list-none pl-1',
+    listitem: 'my-[0.1rem]',
+    listitemChecked: `${checkBox} text-ink-soft line-through before:border-coral before:bg-coral ${checkMark}`,
+    listitemUnchecked: `${checkBox} before:border-ink/16`,
+    nested: { listitem: 'list-none before:!hidden after:!hidden' }
   },
-  link: 'note-editor__link',
+  link: 'text-coral-deep underline',
   text: {
-    bold: 'note-editor__bold',
-    italic: 'note-editor__italic',
-    underline: 'note-editor__underline',
-    strikethrough: 'note-editor__strike',
-    code: 'note-editor__code'
+    bold: 'font-extrabold',
+    italic: 'italic',
+    underline: 'underline',
+    strikethrough: 'line-through',
+    code: `rounded-[4px] bg-black/6 px-[0.35em] py-[0.1em] text-[0.86em] text-ink ${mono}`
   }
 }
+
+const toolbarBtn =
+  'h-7 min-w-7 cursor-pointer rounded-[6px] border border-transparent bg-transparent px-[0.4rem] text-[0.78rem] font-extrabold text-ink-soft hover:border-ink/10 hover:text-ink'
+const toolbarBtnOn =
+  'border-coral bg-coral/8 text-coral-deep hover:border-coral hover:text-coral-deep'
+
+function toolBtn(active) {
+  return cn(toolbarBtn, active && toolbarBtnOn)
+}
+
+const linkInputClass =
+  'h-7 min-w-0 flex-1 rounded-[6px] border border-ink/10 bg-cream px-[0.45rem] text-[0.78rem] font-medium text-ink outline-none focus:border-coral'
 
 const editorNodes = [
   HeadingNode,
@@ -474,7 +507,7 @@ function EditorApiPlugin({ apiRef }) {
   return null
 }
 
-function ToolbarPlugin({ compact = false }) {
+function ToolbarPlugin({ compact = false, variant = 'compact' }) {
   const [editor] = useLexicalComposerContext()
   const [formats, setFormats] = useState(emptyToolbarState)
   const [linkOpen, setLinkOpen] = useState(false)
@@ -639,16 +672,18 @@ function ToolbarPlugin({ compact = false }) {
 
   return (
     <div
-      className={`note-editor__toolbar${compact ? ' note-editor__toolbar--compact' : ''}${
-        compact && !toolsOpen ? ' is-collapsed' : ''
-      }`}
+      className={cn(
+        'flex flex-wrap gap-[0.2rem] border-b border-ink/10 bg-surface px-[0.4rem] py-[0.35rem]',
+        variant === 'document' && 'mb-2 bg-transparent',
+        compact && !toolsOpen && 'justify-end px-[0.3rem] py-[0.2rem]'
+      )}
       role="toolbar"
       aria-label="Formato"
     >
       {compact ? (
         <button
           type="button"
-          className={toolsOpen ? 'is-active' : ''}
+          className={toolBtn(toolsOpen)}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setToolsOpen((open) => !open)}
           title="Formato"
@@ -662,7 +697,7 @@ function ToolbarPlugin({ compact = false }) {
         <>
       <button
         type="button"
-        className={formats.bold ? 'is-active' : ''}
+        className={toolBtn(formats.bold)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => formatText('bold')}
         title="Negrita"
@@ -672,7 +707,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
-        className={formats.italic ? 'is-active' : ''}
+        className={toolBtn(formats.italic)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => formatText('italic')}
         title="Cursiva"
@@ -682,7 +717,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
-        className={formats.underline ? 'is-active' : ''}
+        className={toolBtn(formats.underline)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => formatText('underline')}
         title="Subrayado"
@@ -692,7 +727,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
-        className={formats.strikethrough ? 'is-active' : ''}
+        className={toolBtn(formats.strikethrough)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => formatText('strikethrough')}
         title="Tachado"
@@ -702,7 +737,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
-        className={formats.code ? 'is-active' : ''}
+        className={toolBtn(formats.code)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => formatText('code')}
         title="Código en línea"
@@ -710,10 +745,10 @@ function ToolbarPlugin({ compact = false }) {
       >
         {'</>'}
       </button>
-      <span className="note-editor__toolbar-sep" aria-hidden="true" />
+      <span className="mx-[0.2rem] w-px self-stretch bg-ink/10" aria-hidden="true" />
       <button
         type="button"
-        className={formats.block === 'h2' ? 'is-active' : ''}
+        className={toolBtn(formats.block === 'h2')}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setBlock('h2')}
         title="Título"
@@ -723,7 +758,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
-        className={formats.block === 'h3' ? 'is-active' : ''}
+        className={toolBtn(formats.block === 'h3')}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setBlock('h3')}
         title="Subtítulo"
@@ -733,7 +768,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
-        className={formats.block === 'quote' ? 'is-active' : ''}
+        className={toolBtn(formats.block === 'quote')}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setBlock('quote')}
         title="Cita"
@@ -743,7 +778,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
-        className={formats.block === 'code' ? 'is-active' : ''}
+        className={toolBtn(formats.block === 'code')}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setBlock('code')}
         title="Bloque de código"
@@ -751,10 +786,10 @@ function ToolbarPlugin({ compact = false }) {
       >
         Código
       </button>
-      <span className="note-editor__toolbar-sep" aria-hidden="true" />
+      <span className="mx-[0.2rem] w-px self-stretch bg-ink/10" aria-hidden="true" />
       <button
         type="button"
-        className={formats.block === 'ul' ? 'is-active' : ''}
+        className={toolBtn(formats.block === 'ul')}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => toggleList('ul')}
         title="Lista"
@@ -764,7 +799,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
-        className={formats.block === 'ol' ? 'is-active' : ''}
+        className={toolBtn(formats.block === 'ol')}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => toggleList('ol')}
         title="Lista numerada"
@@ -774,7 +809,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
-        className={formats.block === 'check' ? 'is-active' : ''}
+        className={toolBtn(formats.block === 'check')}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => toggleList('check')}
         title="Lista de tareas"
@@ -782,9 +817,10 @@ function ToolbarPlugin({ compact = false }) {
       >
         ☐
       </button>
-      <span className="note-editor__toolbar-sep" aria-hidden="true" />
+      <span className="mx-[0.2rem] w-px self-stretch bg-ink/10" aria-hidden="true" />
       <button
         type="button"
+        className={toolBtn(false)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={insertHr}
         title="Separador"
@@ -793,7 +829,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
-        className={formats.link || linkOpen ? 'is-active' : ''}
+        className={toolBtn(formats.link || linkOpen)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => (linkOpen ? setLinkOpen(false) : openLinkEditor())}
         title="Enlace"
@@ -803,6 +839,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
+        className={toolBtn(false)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={insertImage}
         title="Adjuntar imagen"
@@ -811,6 +848,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
+        className={toolBtn(false)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={insertExcalidraw}
         title="Dibujo Excalidraw"
@@ -819,6 +857,7 @@ function ToolbarPlugin({ compact = false }) {
       </button>
       <button
         type="button"
+        className={toolBtn(false)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={insertTable}
         title="Insertar tabla"
@@ -829,7 +868,7 @@ function ToolbarPlugin({ compact = false }) {
       )}
       {linkOpen && (!compact || toolsOpen) ? (
         <form
-          className="note-editor__link-form"
+          className="ml-[0.15rem] flex min-w-40 flex-[1_1_12rem] items-center gap-1"
           onSubmit={(e) => {
             e.preventDefault()
             applyLink()
@@ -837,7 +876,7 @@ function ToolbarPlugin({ compact = false }) {
         >
           <input
             ref={linkInputRef}
-            className="note-editor__link-input"
+            className={linkInputClass}
             type="text"
             inputMode="url"
             value={linkUrl}
@@ -846,15 +885,15 @@ function ToolbarPlugin({ compact = false }) {
             placeholder="https://"
             aria-label="URL del enlace"
           />
-          <button type="submit" title="Aplicar enlace">
+          <button type="submit" className={toolBtn(false)} title="Aplicar enlace">
             OK
           </button>
           {formats.link ? (
-            <button type="button" onClick={removeLink} title="Quitar enlace">
+            <button type="button" className={toolBtn(false)} onClick={removeLink} title="Quitar enlace">
               Quitar
             </button>
           ) : null}
-          <button type="button" onClick={() => setLinkOpen(false)} title="Cancelar">
+          <button type="button" className={toolBtn(false)} onClick={() => setLinkOpen(false)} title="Cancelar">
             ✕
           </button>
         </form>
@@ -874,10 +913,10 @@ function AutoFocusPlugin() {
   return null
 }
 
-const DRAGGABLE_BLOCK_MENU_CLASSNAME = 'note-editor__drag-handle'
+const DRAG_HANDLE = '[data-drag-handle]'
 
 function isOnDragMenu(element) {
-  return Boolean(element.closest(`.${DRAGGABLE_BLOCK_MENU_CLASSNAME}`))
+  return Boolean(element.closest(DRAG_HANDLE))
 }
 
 /** Lexical experimental block reorder handle (hover grip + drop line). */
@@ -896,15 +935,22 @@ function DraggableBlocksPlugin({ anchorElem }) {
       menuComponent={
         <div
           ref={menuRef}
-          className={DRAGGABLE_BLOCK_MENU_CLASSNAME}
+          data-drag-handle=""
+          className="absolute top-0 left-0 z-[4] hidden h-5 w-5 cursor-grab items-center justify-center rounded-[4px] p-[0.1rem] text-ink-soft opacity-0 will-change-[transform,opacity] hover:bg-black/6 hover:text-ink active:cursor-grabbing"
           title="Arrastrar bloque"
           aria-label="Arrastrar bloque"
         >
-          <span className="note-editor__drag-handle-icon" aria-hidden="true" />
+          <span
+            className="block h-[0.9rem] w-[0.7rem] bg-[radial-gradient(circle,currentColor_1.1px,transparent_1.25px)] bg-[length:0.35rem_0.35rem] bg-center opacity-[0.55]"
+            aria-hidden="true"
+          />
         </div>
       }
       targetLineComponent={
-        <div ref={targetLineRef} className="note-editor__drag-line" />
+        <div
+          ref={targetLineRef}
+          className="pointer-events-none absolute top-0 left-0 z-[5] h-[3px] rounded-[2px] bg-coral opacity-0 will-change-transform"
+        />
       }
     />
   )
@@ -931,7 +977,7 @@ function BlockCaretPlugin() {
     const onMouseDown = (event) => {
       const target = event.target
       if (!(target instanceof Element)) return
-      if (target.closest('button, a, input, textarea, .note-editor__figure')) return
+      if (target.closest('button, a, input, textarea, [data-image-key]')) return
       const host = target.closest('[data-lexical-decorator="true"]')
       if (!host || !editor.getRootElement()?.contains(host)) return
       event.preventDefault()
@@ -964,7 +1010,7 @@ function MentionClickPlugin({ onOpenMention }) {
   useEffect(() => {
     if (!onOpenMention) return undefined
     const onClick = (event) => {
-      const chip = event.target?.closest?.('.note-editor__mention')
+      const chip = event.target?.closest?.('[data-mention-id]')
       if (!chip || chip.dataset.mentionType !== 'note' || !chip.dataset.mentionId) return
       event.preventDefault()
       onOpenMention({ type: chip.dataset.mentionType, id: chip.dataset.mentionId })
@@ -1036,12 +1082,22 @@ function NoteEditor({
 
   return (
     <NoteEditorContext.Provider value={editorContext}>
-      <div className={`note-editor${variant === 'document' ? ' note-editor--document' : ''}`}>
+      <div
+        className={cn(
+          'overflow-hidden rounded-sm border border-ink/10 bg-cream',
+          variant === 'document' && 'rounded-none border-0 bg-transparent'
+        )}
+      >
         <LexicalComposer initialConfig={initialConfig}>
-          <ToolbarPlugin compact={compactToolbar} />
-          <div className="note-editor__shell">
+          <ToolbarPlugin compact={compactToolbar} variant={variant} />
+          <div
+            className={cn(
+              'relative min-h-[5.5rem] max-h-56 overflow-auto',
+              variant === 'document' && 'min-h-64 max-h-none'
+            )}
+          >
             <div
-              className="note-editor__anchor"
+              className="relative min-h-[inherit] [&>div[aria-hidden='true']]:pointer-events-none [&>div[aria-hidden='true']]:absolute [&>div[aria-hidden='true']]:inset-0 [&>div[aria-hidden='true']]:z-0"
               ref={(el) => {
                 if (el) setAnchorElem(el)
               }}
@@ -1049,9 +1105,17 @@ function NoteEditor({
               <RichTextPlugin
                 contentEditable={
                   <ContentEditable
-                    className="note-editor__input"
+                    className={cn(
+                      'relative z-[1] min-h-[5.5rem] cursor-text overflow-visible py-[0.55rem] pr-[0.65rem] pl-[1.85rem] text-[0.88rem] leading-[1.45] text-ink caret-coral-deep select-text [font:inherit] outline-none',
+                      variant === 'document' &&
+                        'min-h-64 max-h-none py-[0.35rem] pr-[0.35rem] pl-[1.85rem] text-base leading-[1.55]'
+                    )}
                     aria-placeholder={placeholder}
-                    placeholder={<div className="note-editor__placeholder">{placeholder}</div>}
+                    placeholder={
+                      <div className="pointer-events-none absolute top-[0.55rem] left-[1.85rem] text-[0.88rem] text-ink-soft opacity-70">
+                        {placeholder}
+                      </div>
+                    }
                     spellCheck={false}
                     onFocus={onFocus}
                     onBlur={onBlur}
@@ -1116,12 +1180,17 @@ function stripImageTime(markdown) {
 function NoteBody({ body }) {
   const markdown = stripImageTime(String(body || '').trim())
   if (!markdown) {
-    return <p className="note-body note-body--muted">Sin texto</p>
+    return <p className="mb-[0.45rem] text-[0.86rem] leading-[1.4] italic opacity-55">Sin texto</p>
   }
 
   marked.setOptions({ gfm: true, breaks: true })
   const html = marked.parse(markdown)
-  return <div className="note-body note-body--md" dangerouslySetInnerHTML={{ __html: html }} />
+  return (
+    <div
+      className="mb-[0.45rem] text-[0.86rem] leading-[1.4] whitespace-normal [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_a]:text-coral-deep [&_blockquote]:mb-[0.45rem] [&_code]:rounded-[4px] [&_code]:bg-black/6 [&_code]:px-[0.35em] [&_code]:py-[0.1em] [&_code]:text-[0.86em] [&_code]:[font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace] [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-[6px] [&_img]:border [&_img]:border-ink/10 [&_ol]:mb-[0.45rem] [&_p]:mb-[0.45rem] [&_pre]:mb-[0.45rem] [&_pre]:overflow-auto [&_pre]:rounded-[6px] [&_pre]:bg-black/6 [&_pre]:px-[0.55rem] [&_pre]:py-[0.45rem] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:mb-[0.45rem]"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
 }
 
 export { NoteBody }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
+import { cn } from '../../ui/cn.js'
 import { useNoteEditorContext } from './NoteEditorContext'
 import { formatTimestampLabel } from './TimestampNode'
 import {
@@ -11,6 +12,12 @@ import {
 } from 'lexical'
 
 export const INSERT_IMAGE_COMMAND = createCommand('INSERT_IMAGE_COMMAND')
+
+const linkInputClass =
+  'h-7 min-w-0 flex-1 rounded-[6px] border border-ink/10 bg-cream px-[0.45rem] text-[0.78rem] font-medium text-ink outline-none focus:border-coral'
+const imgClass = 'block h-auto max-w-full rounded-[6px] border border-ink/10'
+const imageFormBtn =
+  'h-7 cursor-pointer rounded-[6px] border border-ink/10 bg-surface px-[0.55rem] text-[0.75rem] font-bold whitespace-nowrap text-ink [font:inherit] hover:border-coral hover:text-coral-deep focus-visible:border-coral focus-visible:text-coral-deep'
 
 /**
  * Lexical DecoratorNode for note image attachments.
@@ -78,7 +85,7 @@ export class ImageNode extends DecoratorNode {
     const img = document.createElement('img')
     img.setAttribute('src', this.__src)
     img.setAttribute('alt', this.__altText)
-    img.setAttribute('class', 'note-editor__img')
+    img.setAttribute('class', imgClass)
     return { element: img }
   }
 
@@ -86,7 +93,7 @@ export class ImageNode extends DecoratorNode {
     const span = document.createElement('span')
     const className = config.theme?.image
     if (className) span.className = className
-    else span.className = 'note-editor__image'
+    else span.className = 'my-[0.45rem] block'
     return span
   }
 
@@ -207,10 +214,10 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
   }
 
   return (
-    <figure className={`note-editor__figure${open ? ' is-selected' : ''}`} data-image-key={nodeKey}>
+    <figure className="group m-0" data-image-key={nodeKey}>
       <button
         type="button"
-        className="note-editor__image-hit"
+        className="m-0 block w-full cursor-pointer border-0 bg-transparent p-0 text-left"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {
           if (timed) onSeekTimestamp?.(timeSec)
@@ -226,11 +233,11 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
         }
         title={timed ? `Ir a ${formatTimestampLabel(timeSec)}` : undefined}
       >
-        <img src={src} alt={altText || ''} className="note-editor__img" draggable={false} />
+        <img src={src} alt={altText || ''} className={cn(imgClass, open && 'border-coral')} draggable={false} />
       </button>
       <button
         type="button"
-        className="note-editor__image-edit"
+        className="mt-[0.3rem] cursor-pointer rounded-sm border border-ink/10 bg-surface px-[0.45rem] py-[0.15rem] text-[0.72rem] font-bold text-ink-soft hover:border-coral hover:text-coral-deep"
         aria-expanded={open}
         aria-label="Editar imagen"
         title="Editar imagen"
@@ -239,19 +246,21 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
       >
         Editar
       </button>
-      {footer ? <figcaption className="note-editor__caption">{footer}</figcaption> : null}
+      {footer ? (
+        <figcaption className="mt-[0.35rem] text-[0.82rem] leading-[1.4] text-ink-soft">{footer}</figcaption>
+      ) : null}
       {open ? (
         <form
-          className="note-editor__image-form"
+          className="mt-[0.45rem] flex flex-col gap-[0.4rem] rounded-sm border border-ink/10 bg-surface p-[0.55rem]"
           onSubmit={(event) => event.preventDefault()}
           onMouseDown={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
           onBeforeInput={(event) => event.stopPropagation()}
         >
-          <label>
+          <label className="flex flex-col gap-[0.2rem] text-[0.72rem] [font-weight:650] text-ink-soft">
             Pie de foto
             <input
-              className="note-editor__link-input"
+              className={linkInputClass}
               value={footer}
               onChange={(event) => {
                 const value = event.target.value
@@ -261,10 +270,10 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
               placeholder="Texto bajo la imagen"
             />
           </label>
-          <label>
+          <label className="flex flex-col gap-[0.2rem] text-[0.72rem] [font-weight:650] text-ink-soft">
             Texto alternativo
             <input
-              className="note-editor__link-input"
+              className={linkInputClass}
               value={alt}
               onChange={(event) => {
                 const value = event.target.value
@@ -274,11 +283,11 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
               placeholder="Describe la imagen"
             />
           </label>
-          <label>
+          <label className="flex flex-col gap-[0.2rem] text-[0.72rem] [font-weight:650] text-ink-soft">
             Enlace
-            <span className="note-editor__image-source">
+            <span className="flex items-center gap-[0.35rem]">
               <input
-                className="note-editor__link-input"
+                className={linkInputClass}
                 value={source}
                 onChange={(event) => {
                   const value = event.target.value
@@ -288,7 +297,7 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
                 placeholder="course-media:// o https://"
                 spellCheck={false}
               />
-              <button type="button" onClick={replaceFile}>
+              <button type="button" className={imageFormBtn} onClick={replaceFile}>
                 Reemplazar
               </button>
             </span>
@@ -297,7 +306,10 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
       ) : null}
       <button
         type="button"
-        className="note-editor__image-gap"
+        className={cn(
+          'mt-[0.15rem] block h-[0.7rem] w-full cursor-text rounded-[4px] border-0 bg-transparent p-0 group-hover:bg-coral/12 focus-visible:bg-coral/12',
+          open && 'bg-coral/12'
+        )}
         aria-label="Añadir línea debajo"
         title="Añadir línea debajo"
         onMouseDown={(event) => {

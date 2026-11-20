@@ -10,6 +10,12 @@ import {
 import { formatTime } from './StudySidePanel'
 import LinkProjectMenu from './LinkProjectMenu'
 import { isTransportStream, transportPlaylistUrl, useTransportStream } from './useTransportStream'
+import { cn } from '../ui/cn'
+
+const playIconBtn =
+  'cursor-pointer rounded-[8px] border border-white/20 bg-white/6 px-[0.55rem] py-[0.35rem] text-[0.68rem] font-bold whitespace-nowrap text-[#f5f2ee] enabled:hover:border-[rgba(232,69,112,0.55)] enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-35'
+
+const playIconDone = 'border-[rgba(46,160,140,0.55)] bg-[rgba(46,160,140,0.22)] text-[#d7fff4]'
 import { watchedDelta } from '../../../shared/progress.js'
 
 const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
@@ -474,7 +480,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
 
   const onTrackPointerDown = (e) => {
     if (e.button != null && e.button !== 0) return
-    if (e.target.closest?.('.playhead__mark')) return
+    if (e.target.closest?.('[data-playhead-mark]')) return
     const next = timeFromClientX(e.clientX)
     if (next == null) return
     e.preventDefault()
@@ -769,7 +775,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
 
   if (!lesson) {
     return (
-      <div className="lesson-player lesson-player--empty">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden bg-[#0c0a10] text-ink-soft">
         <p>Selecciona una lección para reproducir.</p>
       </div>
     )
@@ -779,14 +785,29 @@ const LessonPlayer = forwardRef(function LessonPlayer(
   const volumeLabel = muted || volume === 0 ? 'Mute' : volume < 0.4 ? 'Vol·' : 'Vol'
 
   return (
-    <div className="lesson-player">
-      <div className={`lesson-player__media${isFullscreen ? ' is-fullscreen' : ''}`} ref={stageRef}>
-        <div className="lesson-player__header">
-          <h2 className="lesson-player__title" title={lesson.relativePath}>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0c0a10] text-[#f5f2ee]">
+      <div
+        className={cn(
+          'relative isolate min-h-0 flex-1 overflow-hidden bg-[#0c0a10]',
+          '[&:fullscreen]:h-full [&:fullscreen]:w-full [&:fullscreen]:overflow-hidden [&:fullscreen]:rounded-none [&:fullscreen_video]:rounded-none',
+          isFullscreen && 'h-full w-full overflow-hidden rounded-none [&_video]:rounded-none'
+        )}
+        ref={stageRef}
+      >
+        <div
+          className={cn(
+            'absolute inset-x-0 top-0 z-[6] flex items-center gap-3 bg-gradient-to-b from-[rgba(12,10,16,0.82)] to-transparent px-[0.95rem] pt-[0.7rem] pb-[1.6rem]'
+          )}
+        >
+          <h2
+            className="m-0 min-w-0 flex-1 overflow-hidden font-display text-[0.95rem] font-bold text-ellipsis whitespace-nowrap text-[#f5f2ee]"
+            title={lesson.relativePath}
+          >
             {lesson.title}
           </h2>
           {onToggleProjectLink ? (
             <LinkProjectMenu
+              tone="media"
               projects={projects}
               activePath={lesson.relativePath}
               sectionId={linkSectionId}
@@ -797,16 +818,18 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             />
           ) : null}
         </div>
-        <div className="lesson-player__stage">
-          {loading ? <div className="lesson-player__status">Cargando…</div> : null}
+        <div className="absolute inset-0 z-[1] flex items-center justify-center px-3 pt-[2.75rem] pb-[3.5rem]">
+          {loading ? (
+            <div className="absolute z-[2] text-[rgba(245,242,238,0.8)]">Cargando…</div>
+          ) : null}
           {error ? (
-            <div className="lesson-player__status lesson-player__status--error">{error}</div>
+            <div className="absolute z-[2] text-[#ff8fa3]">{error}</div>
           ) : null}
           {src ? (
             <video
               key={src}
               ref={videoRef}
-              className="lesson-player__video"
+              className="h-full w-full max-h-full max-w-full cursor-pointer bg-black object-contain"
               src={transport ? undefined : src}
               autoPlay={!transport}
               crossOrigin="anonymous"
@@ -850,10 +873,10 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           ) : null}
         </div>
 
-        <div className="playhead">
+        <div className="absolute inset-x-0 bottom-0 z-[6] flex flex-nowrap items-center gap-x-2 gap-y-[0.4rem] overflow-visible bg-[linear-gradient(180deg,transparent,rgba(12,10,16,0.94)_28%)] px-[0.85rem] pt-[0.55rem] pb-[0.7rem]">
           <button
             type="button"
-            className="playhead__play"
+            className="h-8 w-8 cursor-pointer rounded-[8px] border border-white/20 bg-white/6 text-[0.7rem] text-[#f5f2ee]"
             onClick={togglePlay}
             aria-label={playing ? 'Pausar' : 'Reproducir'}
             title={playing ? 'Pausar (Espacio)' : 'Reproducir (Espacio)'}
@@ -862,7 +885,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           </button>
           <button
             type="button"
-            className="playhead__icon-btn"
+            className={playIconBtn}
             onClick={onPrev}
             disabled={!hasPrev}
             aria-label="Lección anterior"
@@ -872,7 +895,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           </button>
           <button
             type="button"
-            className="playhead__icon-btn"
+            className={playIconBtn}
             onClick={onNext}
             disabled={!hasNext}
             aria-label="Lección siguiente"
@@ -881,12 +904,15 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             ›
           </button>
 
-          <span className="playhead__time">
+          <span className="text-[0.75rem] whitespace-nowrap text-[rgba(245,242,238,0.75)] tabular-nums">
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
 
           <div
-            className={`playhead__track${scrubbing ? ' is-scrubbing' : ''}`}
+            className={cn(
+              'relative flex h-[1.35rem] min-w-[6rem] flex-1 cursor-pointer touch-none items-center select-none',
+              scrubbing && 'cursor-grabbing'
+            )}
             ref={trackRef}
             role="slider"
             aria-valuemin={0}
@@ -901,14 +927,28 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             onPointerUp={finishScrub}
             onPointerCancel={finishScrub}
           >
-            <div className="playhead__fill" style={{ width: `${progressPct}%` }} />
-            <div className="playhead__thumb" style={{ left: `${progressPct}%` }} />
+            <span className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/15" />
+            <div
+              className="absolute top-1/2 left-0 z-[1] h-1 -translate-y-1/2 rounded-full bg-coral"
+              style={{ width: `${progressPct}%` }}
+            />
+            <div
+              className={cn(
+                'absolute top-1/2 z-[3] -translate-y-1/2 cursor-grab rounded-full bg-white shadow-[0_0_0_2px_rgba(232,69,112,0.45)] after:absolute after:-inset-2 after:content-[\'\']',
+                scrubbing ? 'h-[14px] w-[14px] -ml-[7px] cursor-grabbing' : 'h-3 w-3 -ml-1.5'
+              )}
+              style={{ left: `${progressPct}%` }}
+            />
 
             {stackedMarks.map((mark) => (
               <button
                 key={`${mark.kind}-${mark.id}`}
                 type="button"
-                className={`playhead__mark playhead__mark--${mark.kind} is-${mark.color || 'coral'}`}
+                data-playhead-mark=""
+                className={cn(
+                  'absolute top-1/2 z-[2] h-2.5 w-2.5 -mt-[5px] -ml-[5px] cursor-pointer rounded-[2px] border-0 p-0',
+                  (mark.kind === 'note' || mark.kind === 'annotation') && 'bg-coral'
+                )}
                 style={{
                   left: `${mark.pct}%`,
                   transform: `translateY(${mark.stack * -8}px) rotate(45deg)`,
@@ -925,17 +965,24 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             ))}
 
             {hoverMark ? (
-              <div className="playhead__tooltip" style={{ left: `${hoverMark.pct}%` }}>
+              <div
+                className="pointer-events-none absolute bottom-[calc(100%+6px)] z-[8] flex min-w-[8rem] max-w-[14rem] -translate-x-1/2 flex-col gap-[0.15rem] rounded-[8px] bg-[#1a1423] px-[0.55rem] py-[0.4rem] text-[0.7rem] text-[#fff4e8]"
+                style={{ left: `${hoverMark.pct}%` }}
+              >
                 <strong>{formatTime(hoverMark.timeSec)}</strong>
                 <span>Anotación</span>
-                {hoverMark.title ? <em>{hoverMark.title}</em> : null}
+                {hoverMark.title ? (
+                  <em className="overflow-hidden text-ellipsis whitespace-nowrap not-italic opacity-85">
+                    {hoverMark.title}
+                  </em>
+                ) : null}
               </div>
             ) : null}
           </div>
 
           <button
             type="button"
-            className="playhead__icon-btn"
+            className={playIconBtn}
             onClick={cycleRate}
             title="Velocidad (, .)"
           >
@@ -943,7 +990,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           </button>
           <button
             type="button"
-            className={`playhead__icon-btn${isCompleted ? ' is-done' : ''}`}
+            className={cn(playIconBtn, isCompleted && playIconDone)}
             onClick={() => onToggleComplete?.(!isCompleted)}
             title={isCompleted ? 'Completada (M)' : 'Marcar completada (M)'}
             aria-pressed={isCompleted}
@@ -951,10 +998,10 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             {isCompleted ? '✓' : '○'}
           </button>
           {subtitleTracks.length > 0 ? (
-            <div className="playhead__subs" ref={subsMenuRef}>
+            <div className="relative" ref={subsMenuRef}>
               <button
                 type="button"
-                className={`playhead__icon-btn${subPref.enabled && activeSubtitle ? ' is-done' : ''}`}
+                className={cn(playIconBtn, subPref.enabled && activeSubtitle && playIconDone)}
                 onClick={() => setSubsMenuOpen((open) => !open)}
                 title={
                   subPref.enabled && activeSubtitle
@@ -970,12 +1017,18 @@ const LessonPlayer = forwardRef(function LessonPlayer(
                   : 'CC'}
               </button>
               {subsMenuOpen ? (
-                <div className="playhead__subs-menu" role="menu">
+                <div
+                  className="absolute right-0 bottom-[calc(100%+0.35rem)] z-[9] max-h-[14rem] min-w-[12rem] max-w-[18rem] overflow-auto rounded-[8px] bg-[#1a1423] p-[0.3rem] shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
+                  role="menu"
+                >
                   <button
                     type="button"
                     role="menuitemradio"
                     aria-checked={!subPref.enabled}
-                    className={`playhead__subs-option${!subPref.enabled ? ' is-active' : ''}`}
+                    className={cn(
+                      'block w-full cursor-pointer rounded-[6px] border-0 bg-transparent px-[0.55rem] py-[0.4rem] text-left text-[0.75rem] font-[650] text-[#fff4e8] hover:bg-[rgba(46,160,140,0.28)] hover:text-[#d7fff4]',
+                      !subPref.enabled && 'bg-[rgba(46,160,140,0.28)] text-[#d7fff4]'
+                    )}
                     onClick={() => chooseSubtitle(null)}
                   >
                     Sin subtítulos
@@ -988,7 +1041,10 @@ const LessonPlayer = forwardRef(function LessonPlayer(
                         type="button"
                         role="menuitemradio"
                         aria-checked={selected}
-                        className={`playhead__subs-option${selected ? ' is-active' : ''}`}
+                        className={cn(
+                          'block w-full cursor-pointer rounded-[6px] border-0 bg-transparent px-[0.55rem] py-[0.4rem] text-left text-[0.75rem] font-[650] text-[#fff4e8] hover:bg-[rgba(46,160,140,0.28)] hover:text-[#d7fff4]',
+                          selected && 'bg-[rgba(46,160,140,0.28)] text-[#d7fff4]'
+                        )}
                         onClick={() => chooseSubtitle(track)}
                       >
                         {subtitleOptionLabel(track, subtitleSources)}
@@ -1000,10 +1056,10 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             </div>
           ) : null}
 
-          <div className="playhead__volume">
+          <div className="flex min-w-[7.5rem] items-center gap-[0.35rem]">
             <button
               type="button"
-              className="playhead__icon-btn"
+              className={playIconBtn}
               onClick={toggleMute}
               aria-label={muted || volume === 0 ? 'Activar sonido' : 'Silenciar'}
               title={
@@ -1016,7 +1072,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             </button>
             <input
               type="range"
-              className="playhead__volume-slider"
+              className="w-[4.5rem] cursor-pointer accent-coral"
               min={0}
               max={1}
               step={0.05}
@@ -1028,7 +1084,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
 
           <button
             type="button"
-            className="playhead__icon-btn"
+            className={playIconBtn}
             onClick={toggleFullscreen}
             aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
             title={isFullscreen ? 'Salir de pantalla completa (F o Esc)' : 'Pantalla completa (F)'}

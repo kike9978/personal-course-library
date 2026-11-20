@@ -6,6 +6,14 @@ import {
   MenuOption
 } from '@lexical/react/LexicalTypeaheadMenuPlugin'
 import { $createMentionNode } from './MentionNode'
+import { cn } from '../../ui/cn.js'
+
+const typeaheadMenu =
+  'z-40 flex max-h-56 min-w-48 max-w-72 flex-col gap-[0.1rem] overflow-auto rounded-sm border border-ink/10 bg-surface p-1 shadow-card'
+const typeaheadItem =
+  'm-0 flex w-full cursor-pointer flex-col items-start gap-[0.1rem] rounded-[6px] border-0 bg-transparent px-[0.5rem] py-[0.4rem] text-left text-[0.84rem] font-semibold text-ink [font:inherit] hover:bg-black/6'
+const typeaheadTitle = 'block max-w-full overflow-hidden text-ellipsis whitespace-nowrap'
+const typeaheadSub = 'block text-[0.72rem] font-semibold tracking-[0.02em] text-ink-soft uppercase'
 import { $createTextNode, $getNodeByKey } from 'lexical'
 
 function bracketTrigger(text) {
@@ -132,19 +140,19 @@ export default function MentionsPlugin({ mentionItems = [], onCreateTopic }) {
       menuRenderFn={(anchorElementRef, { options: opts, selectedIndex, selectOptionAndCleanUp, setHighlightedIndex }) => {
         if (!anchorElementRef.current || !opts.length) return null
         return createPortal(
-          <div className="note-editor__typeahead" role="listbox">
+          <div className={typeaheadMenu} role="listbox">
             {opts.map((option, i) => (
               <button
                 key={option.key}
                 type="button"
                 role="option"
                 aria-selected={selectedIndex === i}
-                className={selectedIndex === i ? 'is-active' : ''}
+                className={cn(typeaheadItem, selectedIndex === i && 'bg-black/6')}
                 onMouseEnter={() => setHighlightedIndex(i)}
                 onClick={() => selectOptionAndCleanUp(option)}
               >
-                <span className="note-editor__typeahead-title">{option.title}</span>
-                <span className="note-editor__typeahead-sub">{option.subtitle}</span>
+                <span className={typeaheadTitle}>{option.title}</span>
+                <span className={typeaheadSub}>{option.subtitle}</span>
               </button>
             ))}
           </div>,

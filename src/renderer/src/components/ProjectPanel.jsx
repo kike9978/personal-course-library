@@ -1,5 +1,22 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
+import { cn } from '../ui/cn'
+import { btnGhost, btnPrimary } from '../ui/classes'
+
+const control =
+  '[&_:is(input,select,textarea)]:w-full [&_:is(input,select,textarea)]:border [&_:is(input,select,textarea)]:border-ink/10 [&_:is(input,select,textarea)]:rounded-sm [&_:is(input,select,textarea)]:bg-surface [&_:is(input,select,textarea)]:px-3 [&_:is(input,select,textarea)]:py-[0.6rem] [&_:is(input,select,textarea)]:font-medium [&_:is(input,select,textarea)]:tracking-normal [&_:is(input,select,textarea)]:text-ink [&_:is(input,select,textarea)]:shadow-none [&_:is(input,select,textarea)]:outline-none [&_:is(input,select,textarea)]:transition-[box-shadow,border-color] [&_:is(input,select,textarea)]:duration-[120ms] [&_:is(input,select,textarea)]:focus:border-[rgba(232,69,112,0.45)] [&_:is(input,select,textarea)]:focus:shadow-[0_0_0_3px_rgba(232,69,112,0.18)] [&_textarea]:min-h-[5rem] [&_textarea]:resize-y [&_textarea]:leading-[1.45]'
+const field = cn(
+  control,
+  'flex flex-col gap-[0.4rem] text-[0.78rem] font-bold tracking-[0.02em] text-ink-soft'
+)
+
+function statusTone(status) {
+  if (status === 'in_progress') {
+    return 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
+  }
+  if (status === 'done') return 'border-chip-status-border bg-chip-status text-chip-status-text'
+  return 'border-ink/16 bg-cream-deep text-ink-soft'
+}
 
 const STATUS_OPTIONS = [
   { value: 'todo', label: 'Por hacer' },
@@ -154,7 +171,8 @@ function ProjectPanel({
   courseResourceSections = [],
   onSaved,
   onDeleted,
-  onCancelCreate
+  onCancelCreate,
+  plain = false
 }) {
   const isNew = !project?.id
   const [title, setTitle] = useState(project?.title || '')
@@ -303,31 +321,50 @@ function ProjectPanel({
   const hasLink = Boolean(linkedFolderPath)
 
   return (
-    <div className="project-panel">
-      <div className="project-panel__header">
-        <div className="project-panel__heading">
-          <h2>{isNew ? 'Nuevo proyecto' : project.title}</h2>
+    <div
+      className={cn(
+        'flex min-h-0 flex-1 flex-col text-ink',
+        plain
+          ? 'bg-surface'
+          : 'bg-[radial-gradient(circle_at_8%_0%,rgba(232,69,112,0.04),transparent_42%),radial-gradient(circle_at_92%_6%,rgba(61,122,122,0.04),transparent_40%),var(--color-cream-deep)]'
+      )}
+    >
+      <div className="border-b border-ink/10 bg-surface-muted px-5 py-4 backdrop-blur-[10px]">
+        <div className="flex flex-wrap items-center gap-[0.65rem]">
+          <h2 className="m-0 font-display text-[1.2rem] font-black tracking-[-0.02em] text-ink">
+            {isNew ? 'Nuevo proyecto' : project.title}
+          </h2>
           {!isNew ? (
-            <span className={`project-panel__status is-${project.status || 'todo'}`}>
+            <span
+              className={cn(
+                'inline-flex items-center rounded-full border px-[0.6rem] py-[0.22rem] text-[0.68rem] font-extrabold tracking-[0.05em] uppercase',
+                statusTone(project.status)
+              )}
+            >
               {statusLabel(project.status)}
             </span>
           ) : null}
         </div>
       </div>
 
-      <div className="project-panel__body">
+      <div className="flex max-w-[40rem] min-h-0 flex-1 flex-col gap-[0.95rem] overflow-auto px-5 pt-[1.15rem] pb-7">
         {linkBroken ? (
-          <div className="project-panel__warn" role="alert">
-            <p>La carpeta vinculada no existe o se movió. Vuelve a vincularla para seguir.</p>
-            <button type="button" className="btn btn--primary" onClick={pickFolder}>
+          <div
+            className="flex flex-wrap items-center gap-[0.65rem] rounded-md border border-[rgba(232,69,112,0.28)] bg-[rgba(232,69,112,0.07)] px-[0.95rem] py-[0.85rem] shadow-card"
+            role="alert"
+          >
+            <p className="m-0 min-w-[12rem] flex-1 text-[0.88rem] font-medium text-ink">
+              La carpeta vinculada no existe o se movió. Vuelve a vincularla para seguir.
+            </p>
+            <button type="button" className={btnPrimary} onClick={pickFolder}>
               Volver a vincular
             </button>
           </div>
         ) : null}
 
-        <div className="project-panel__field">
+        <div className={field}>
           <span>Carpeta vinculada</span>
-          <div className="project-panel__path-row">
+          <div className="flex gap-[0.45rem] [&_input]:min-w-0 [&_input]:flex-1">
             <input
               type="text"
               value={linkedFolderPath}
@@ -335,16 +372,16 @@ function ProjectPanel({
               placeholder="Elige una carpeta fuera del curso…"
               spellCheck={false}
             />
-            <button type="button" className="btn btn--ghost" onClick={pickFolder}>
+            <button type="button" className={btnGhost} onClick={pickFolder}>
               Elegir…
             </button>
           </div>
-          <p className="project-panel__hint">
+          <p className="m-0 text-[0.75rem] font-medium text-ink-soft">
             Puede estar en cualquier disco. No se mueve ni se copia nada del curso.
           </p>
         </div>
 
-        <label className="project-panel__field">
+        <label className={field}>
           <span>Título</span>
           <input
             type="text"
@@ -354,7 +391,7 @@ function ProjectPanel({
           />
         </label>
 
-        <label className="project-panel__field">
+        <label className={field}>
           <span>Estado</span>
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
             {STATUS_OPTIONS.map((opt) => (
@@ -365,7 +402,7 @@ function ProjectPanel({
           </select>
         </label>
 
-        <label className="project-panel__field">
+        <label className={field}>
           <span>Anclar a</span>
           <select value={anchor} onChange={(e) => setAnchor(e.target.value)}>
             <option value="">Proyectos (grupo general)</option>
@@ -387,12 +424,12 @@ function ProjectPanel({
               </optgroup>
             ))}
           </select>
-          <p className="project-panel__hint">
+          <p className="m-0 text-[0.75rem] font-medium text-ink-soft">
             El proyecto puede quedar en una sección o junto a un archivo o video.
           </p>
         </label>
 
-        <label className="project-panel__field">
+        <label className={field}>
           <span>Notas</span>
           <textarea
             rows={5}
@@ -402,31 +439,31 @@ function ProjectPanel({
           />
         </label>
 
-        <div className="project-panel__actions">
+        <div className="mt-[0.15rem] flex flex-wrap gap-2 border-t border-ink/10 pt-2">
           {hasLink && project?.id && !project.linkMissing ? (
             <>
-              <button type="button" className="btn btn--primary" onClick={openLink}>
+              <button type="button" className={btnPrimary} onClick={openLink}>
                 Abrir carpeta del proyecto
               </button>
-              <button type="button" className="btn btn--ghost" onClick={revealLink}>
+              <button type="button" className={btnGhost} onClick={revealLink}>
                 Mostrar en explorador
               </button>
             </>
           ) : null}
-          <button type="button" className="btn btn--primary" onClick={save} disabled={saving}>
+          <button type="button" className={btnPrimary} onClick={save} disabled={saving}>
             {isNew ? 'Crear' : 'Guardar'}
           </button>
           {hasLink ? (
-            <button type="button" className="btn btn--ghost" onClick={unlink} disabled={saving}>
+            <button type="button" className={btnGhost} onClick={unlink} disabled={saving}>
               Quitar vínculo
             </button>
           ) : null}
           {isNew ? (
-            <button type="button" className="btn btn--ghost" onClick={onCancelCreate}>
+            <button type="button" className={btnGhost} onClick={onCancelCreate}>
               Cancelar
             </button>
           ) : (
-            <button type="button" className="btn btn--ghost" onClick={remove}>
+            <button type="button" className={btnGhost} onClick={remove}>
               Borrar proyecto
             </button>
           )}

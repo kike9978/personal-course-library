@@ -29,7 +29,7 @@ export function focusLiveElement(doc = document, { force = false } = {}) {
   ) {
     return active
   }
-  const target = doc.querySelector?.('.annotations-page-list, .annotations-doc-pane') || doc.body
+  const target = doc.querySelector?.('[data-annotations-list], [data-annotations-doc]') || doc.body
   if (!target || typeof target.focus !== 'function') return null
   if (!target.hasAttribute?.('tabindex')) target.setAttribute?.('tabindex', '-1')
   focusOptions(target)
@@ -50,30 +50,35 @@ export function askConfirm({
   return new Promise((resolve) => {
     let settled = false
     const dialog = doc.createElement('dialog')
-    dialog.className = 'dialog dialog--confirm'
+    dialog.className =
+      'w-[calc(100%-2rem)] max-w-[460px] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel open:flex open:flex-col backdrop:bg-[rgba(26,20,35,0.45)]'
 
     const form = doc.createElement('form')
-    form.className = 'dialog__form'
+    form.className = 'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem]'
     form.addEventListener('submit', (event) => event.preventDefault())
 
     const heading = doc.createElement('h3')
+    heading.className = 'm-0 font-display text-[1.2rem] font-black'
     heading.textContent = title
 
     const lead = doc.createElement('p')
-    lead.className = 'dialog__lead'
+    lead.className = 'm-0 mt-[0.35rem] text-[0.85rem] leading-[1.4] text-ink-soft'
     lead.textContent = message
 
     const actions = doc.createElement('div')
-    actions.className = 'dialog__actions'
+    actions.className = 'flex justify-end gap-2 pt-[0.35rem]'
+    actions.setAttribute('data-confirm-actions', '')
 
     const cancel = doc.createElement('button')
     cancel.type = 'button'
-    cancel.className = 'btn btn--ghost'
+    cancel.className =
+      'cursor-pointer rounded-full border border-ink/10 bg-surface px-[1.1rem] py-[0.55rem] font-extrabold text-ink shadow-card'
     cancel.textContent = cancelLabel
 
     const confirm = doc.createElement('button')
     confirm.type = 'button'
-    confirm.className = 'btn btn--primary'
+    confirm.className =
+      'cursor-pointer rounded-full border border-ink/10 bg-coral px-[1.1rem] py-[0.55rem] font-extrabold text-white shadow-card disabled:cursor-not-allowed disabled:opacity-55'
     confirm.textContent = confirmLabel
 
     const finish = (value) => {

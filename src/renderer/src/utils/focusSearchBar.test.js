@@ -41,7 +41,7 @@ function docFrom({ inputs, dialogs = [], active = null }) {
     },
     querySelectorAll(selector) {
       if (selector === 'dialog[open]') return dialogs
-      if (selector.includes('search-field') || selector.includes('import-props__search')) {
+      if (selector.includes('data-search-field')) {
         return rootInputs
       }
       return []
@@ -82,7 +82,7 @@ describe('focusSearchOnShortcut', () => {
     assert.equal(event.prevented, true)
     assert.equal(field.focused, true)
     assert.equal(field.selected, true)
-    assert.equal(field.classList.contains('is-find-target'), true)
+    assert.equal(field.classList.contains('animate-search-highlight'), true)
   })
 
   it('does nothing when the screen has no search bar', () => {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { cn } from '../ui/cn'
 
 function CheckIcon() {
   return (
@@ -10,17 +11,32 @@ function CheckIcon() {
 
 function CaretIcon() {
   return (
-    <svg className="caret" viewBox="0 0 24 24" aria-hidden="true">
+    <svg
+      className="h-[18px] w-[18px] shrink-0 transition-transform duration-[120ms] ease-[ease] group-aria-expanded:rotate-180"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
       <path fill="currentColor" d="M7 10l5 5 5-5H7z" />
     </svg>
   )
 }
 
-function FilterChip({ pressed, onClick, title, className = '', children }) {
+const chipBase =
+  'inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-sm border border-border-strong bg-surface px-3 text-[0.8125rem] font-[650] whitespace-nowrap text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus has-[svg]:px-2 [&_svg]:h-[18px] [&_svg]:w-[18px] [&_svg]:shrink-0'
+
+function FilterChip({ pressed, onClick, title, tone = 'status', children }) {
   return (
     <button
       type="button"
-      className={`m3-chip${className ? ` ${className}` : ''}`}
+      className={cn(
+        chipBase,
+        tone === 'status' &&
+          'aria-pressed:border-chip-status-border aria-pressed:bg-chip-status aria-pressed:text-chip-status-text',
+        tone === 'program' &&
+          'font-bold text-ink-soft aria-pressed:border-chip-programs-border aria-pressed:bg-chip-programs aria-pressed:text-chip-programs-text',
+        tone === 'theme' &&
+          'aria-pressed:border-[#5a4a7a] aria-pressed:bg-[#ece6f7] aria-pressed:text-[#3d3058]'
+      )}
       aria-pressed={pressed}
       title={title}
       onClick={onClick}
@@ -31,7 +47,17 @@ function FilterChip({ pressed, onClick, title, className = '', children }) {
   )
 }
 
+const programsRail =
+  'flex min-w-[4.5rem] flex-[1_1_auto] items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+
+const popoverLabel =
+  'mt-3 flex flex-col gap-1 text-[0.72rem] font-bold tracking-[0.04em] text-ink-soft uppercase'
+
+const popoverSelect =
+  'rounded-sm border border-border-strong bg-surface px-2 py-1.5 text-[0.85rem] font-semibold tracking-normal text-ink normal-case focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus'
+
 function CourseFilterBar({
+  board = false,
   idPrefix = 'library',
   className = '',
   showSearch = false,
@@ -69,6 +95,8 @@ function CourseFilterBar({
   const institutionId = `${idPrefix}-institution-filter`
   const rateId = `${idPrefix}-min-rate-filter`
   const themeLabelId = `${idPrefix}-theme-filter-label`
+  const passed = className || ''
+  const extraClass = passed.replace(/\bcourse-filter-bar(--board)?\b/g, '').trim()
 
   const extraFilterCount =
     Number(recentlyViewedOnly) +
@@ -138,11 +166,28 @@ function CourseFilterBar({
   const narrowed = typeof courseTotal === 'number' && courseTotal !== courseCount
 
   return (
-    <div className={`course-filter-bar${className ? ` ${className}` : ''}`}>
+    <div
+      className={cn(
+        board
+          ? 'relative z-[4] flex min-w-0 flex-wrap items-center gap-2 border-b border-ink/10 bg-surface-muted px-3 py-[0.55rem]'
+          : 'contents',
+        extraClass
+      )}
+    >
       {showSearch ? (
-        <div className="search-field">
+        <div
+          className={cn(
+            'relative',
+            board
+              ? 'min-w-[9rem] max-w-[22rem] flex-[0_1_18rem]'
+              : 'min-w-[200px] max-w-[420px] flex-1'
+          )}
+        >
           <svg
-            className="search-field__icon"
+            className={cn(
+              'pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 opacity-55',
+              board ? 'left-3' : 'left-[0.95rem]'
+            )}
             viewBox="0 0 24 24"
             fill="currentColor"
             aria-hidden="true"
@@ -151,6 +196,13 @@ function CourseFilterBar({
           </svg>
           <input
             type="search"
+            data-search-field=""
+            className={cn(
+              'w-full rounded-full border border-ink/10 bg-surface text-ink shadow-none outline-none transition-[box-shadow,transform] duration-[120ms] ease-[ease] focus:shadow-find motion-reduce:animate-none',
+              board
+                ? 'h-8 py-0 pr-[0.85rem] pl-[2.15rem] text-[0.8125rem]'
+                : 'py-[0.7rem] pr-4 pl-[2.6rem]'
+            )}
             value={query}
             placeholder="Buscar título, academia, instructor, temas, notas…"
             onChange={(event) => onQueryChange(event.target.value)}
@@ -173,9 +225,13 @@ function CourseFilterBar({
 
       {programs.length > 0 ? (
         <>
-          <span className="header-divider" aria-hidden="true" />
+          <span className="h-[18px] w-px shrink-0 bg-border-strong" aria-hidden="true" />
           <div
-            className={`header-programs${programsOverflow ? ' is-overflowing' : ''}`}
+            className={cn(
+              programsRail,
+              programsOverflow &&
+                'pr-7 [mask-image:linear-gradient(90deg,#000_0,#000_calc(100%-28px),transparent)] [-webkit-mask-image:linear-gradient(90deg,#000_0,#000_calc(100%-28px),transparent)]'
+            )}
             role="group"
             aria-label="Programas"
             ref={programsRef}
@@ -183,7 +239,7 @@ function CourseFilterBar({
             {programs.map((program) => (
               <FilterChip
                 key={program}
-                className="m3-chip--program"
+                tone="program"
                 pressed={programFilter === program}
                 onClick={() => onProgramFilterChange(programFilter === program ? '' : program)}
               >
@@ -193,13 +249,19 @@ function CourseFilterBar({
           </div>
         </>
       ) : (
-        <span className="header-programs header-programs--empty" />
+        <span className={cn(programsRail, 'min-w-0 p-0')} />
       )}
 
-      <div className="header-menu" ref={filtersRef}>
+      <div className="relative shrink-0" ref={filtersRef}>
         <button
           type="button"
-          className={`m3-chip m3-chip--menu${extraFilterCount ? ' is-active' : ''}`}
+          className={cn(
+            chipBase,
+            'group',
+            extraFilterCount
+              ? 'border-chip-status-border bg-chip-status text-chip-status-text'
+              : null
+          )}
           aria-expanded={filtersOpen}
           aria-haspopup="dialog"
           aria-controls={panelId}
@@ -218,11 +280,11 @@ function CourseFilterBar({
         {filtersOpen ? (
           <div
             id={panelId}
-            className="header-popover header-popover--filters"
+            className="absolute top-[calc(100%+6px)] right-0 z-[5] max-h-[min(70vh,480px)] w-[320px] overflow-auto rounded-md border border-ink/10 bg-surface p-3 shadow-panel"
             role="dialog"
             aria-label="Filtros"
           >
-            <div className="header-popover__chips" role="group" aria-label="Estado">
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Estado">
               <FilterChip
                 pressed={recentlyViewedOnly}
                 title="Cursos abiertos en los últimos 14 días"
@@ -239,10 +301,11 @@ function CourseFilterBar({
               </FilterChip>
             </div>
 
-            <label htmlFor={institutionId}>
+            <label className={popoverLabel} htmlFor={institutionId}>
               Academia
               <select
                 id={institutionId}
+                className={popoverSelect}
                 value={institutionFilter}
                 onChange={(event) => onInstitutionFilterChange(event.target.value)}
               >
@@ -255,10 +318,11 @@ function CourseFilterBar({
               </select>
             </label>
 
-            <label htmlFor={rateId}>
+            <label className={popoverLabel} htmlFor={rateId}>
               Mín. ★
               <select
                 id={rateId}
+                className={popoverSelect}
                 value={minRate}
                 onChange={(event) => onMinRateChange(Number(event.target.value))}
               >
@@ -270,15 +334,15 @@ function CourseFilterBar({
             </label>
 
             {themes.length > 0 ? (
-              <div className="header-popover__section">
-                <span className="header-popover__label" id={themeLabelId}>
+              <div className="mt-3">
+                <span className={cn(popoverLabel, 'mt-0 mb-2')} id={themeLabelId}>
                   Temas
                 </span>
-                <div className="header-popover__chips" role="group" aria-labelledby={themeLabelId}>
+                <div className="flex flex-wrap gap-2" role="group" aria-labelledby={themeLabelId}>
                   {themes.map((theme) => (
                     <FilterChip
                       key={theme}
-                      className="m3-chip--theme"
+                      tone="theme"
                       pressed={themeFilter === theme}
                       onClick={() => onThemeFilterChange(themeFilter === theme ? '' : theme)}
                     >
@@ -290,7 +354,11 @@ function CourseFilterBar({
             ) : null}
 
             {extraFilterCount > 0 ? (
-              <button type="button" className="header-popover__clear" onClick={clearExtraFilters}>
+              <button
+                type="button"
+                className="mt-3 h-8 w-full cursor-pointer rounded-sm border border-border-strong bg-transparent font-bold text-ink hover:bg-ink/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                onClick={clearExtraFilters}
+              >
                 Limpiar
               </button>
             ) : null}
@@ -299,7 +367,10 @@ function CourseFilterBar({
       </div>
 
       {typeof courseCount === 'number' ? (
-        <span className="header-count" aria-live="polite">
+        <span
+          className="shrink-0 text-[0.8rem] font-[650] whitespace-nowrap text-ink-soft"
+          aria-live="polite"
+        >
           {narrowed
             ? `${courseCount} de ${courseTotal} cursos`
             : `${courseCount} ${courseCount === 1 ? 'curso' : 'cursos'}`}

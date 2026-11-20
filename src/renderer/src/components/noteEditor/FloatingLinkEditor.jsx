@@ -10,6 +10,9 @@ import {
   SELECTION_CHANGE_COMMAND
 } from 'lexical'
 
+const floatBtn =
+  'shrink-0 cursor-pointer rounded-[4px] border-0 bg-transparent px-[0.35rem] py-[0.2rem] text-[0.75rem] font-bold text-ink [font:inherit] hover:bg-black/6'
+
 function normalizeLinkUrl(raw) {
   const url = String(raw || '').trim()
   if (!url) return null
@@ -111,7 +114,7 @@ export default function FloatingLinkEditorPlugin({ anchorElem }) {
 
   return createPortal(
     <div
-      className="note-editor__link-float"
+      className="absolute z-[35] flex max-w-[min(22rem,100%)] items-center gap-[0.3rem] rounded-sm border border-ink/10 bg-surface px-[0.4rem] py-[0.3rem] shadow-card"
       style={{ top: pos.top, left: pos.left }}
       onMouseDown={(e) => e.preventDefault()}
     >
@@ -119,7 +122,7 @@ export default function FloatingLinkEditorPlugin({ anchorElem }) {
         <>
           <input
             ref={inputRef}
-            className="note-editor__link-float-input"
+            className="min-w-32 flex-1 rounded-[4px] border border-ink/10 bg-cream px-[0.4rem] py-[0.25rem] text-[0.8rem] [font:inherit]"
             value={linkUrl}
             onChange={(e) => setLinkUrl(e.target.value)}
             onKeyDown={(e) => {
@@ -131,25 +134,29 @@ export default function FloatingLinkEditorPlugin({ anchorElem }) {
             }}
             placeholder="https://"
           />
-          <button type="button" onClick={apply}>
+          <button type="button" className={floatBtn} onClick={apply}>
             OK
           </button>
-          <button type="button" onClick={() => setIsEdit(false)}>
+          <button type="button" className={floatBtn} onClick={() => setIsEdit(false)}>
             ✕
           </button>
         </>
       ) : (
         <>
-          <a className="note-editor__link-float-url" href={linkUrl} onClick={(e) => e.preventDefault()}>
+          <a
+            className="min-w-0 flex-1 overflow-hidden text-[0.78rem] text-ellipsis whitespace-nowrap text-coral-deep underline"
+            href={linkUrl}
+            onClick={(e) => e.preventDefault()}
+          >
             {linkUrl.length > 36 ? `${linkUrl.slice(0, 36)}…` : linkUrl}
           </a>
-          <button type="button" onClick={open} title="Abrir">
+          <button type="button" className={floatBtn} onClick={open} title="Abrir">
             Abrir
           </button>
-          <button type="button" onClick={() => setIsEdit(true)} title="Editar">
+          <button type="button" className={floatBtn} onClick={() => setIsEdit(true)} title="Editar">
             Editar
           </button>
-          <button type="button" onClick={remove} title="Quitar">
+          <button type="button" className={floatBtn} onClick={remove} title="Quitar">
             Quitar
           </button>
         </>

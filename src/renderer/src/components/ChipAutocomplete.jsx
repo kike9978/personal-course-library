@@ -1,4 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { cn } from '../ui/cn'
+import { fieldLabel } from '../ui/classes'
 
 /**
  * Multi-select autocomplete that stores values as chips.
@@ -139,23 +141,29 @@ function ChipAutocomplete({
   const showList = open && (flatItems.length > 0 || query.trim())
 
   return (
-    <div className="field chip-autocomplete" ref={rootRef}>
+    <div className="relative" ref={rootRef}>
       {label ? (
-        <label htmlFor={id} id={`${id}-label`}>
+        <label className={fieldLabel} htmlFor={id} id={`${id}-label`}>
           {label}
         </label>
       ) : null}
 
       <div
-        className={`chip-autocomplete__control${open ? ' is-open' : ''}`}
+        className={cn(
+          'flex min-h-[2.75rem] w-full cursor-text flex-wrap items-center gap-[0.35rem] rounded-md border border-ink/10 bg-surface px-[0.55rem] py-[0.4rem] focus-within:shadow-focus',
+          open && 'shadow-focus'
+        )}
         onClick={() => inputRef.current?.focus()}
       >
         {selected.map((value) => (
-          <span key={value} className="chip-autocomplete__chip">
-            <span>{value}</span>
+          <span
+            key={value}
+            className="inline-flex max-w-full items-center gap-[0.2rem] rounded-full border border-chip-programs-border bg-chip-programs py-[0.2rem] pr-[0.35rem] pl-[0.55rem] text-[0.78rem] font-bold text-chip-programs-text"
+          >
+            <span className="truncate">{value}</span>
             <button
               type="button"
-              className="chip-autocomplete__remove"
+              className="grid h-[1.2rem] w-[1.2rem] cursor-pointer place-items-center rounded-full border-0 bg-transparent text-base leading-none text-inherit hover:bg-[rgba(26,20,35,0.08)]"
               aria-label={`Quitar ${value}`}
               onClick={(e) => {
                 e.stopPropagation()
@@ -175,7 +183,7 @@ function ChipAutocomplete({
           aria-controls={listboxId}
           aria-autocomplete="list"
           aria-labelledby={label ? `${id}-label` : undefined}
-          className="chip-autocomplete__input"
+          className="min-w-[120px] flex-[1_1_120px] border-0 bg-transparent px-1 py-[0.35rem] text-inherit text-ink shadow-none outline-none"
           value={query}
           placeholder={selected.length ? '' : placeholder}
           onChange={(e) => {
@@ -188,9 +196,15 @@ function ChipAutocomplete({
       </div>
 
       {showList ? (
-        <ul id={listboxId} className="chip-autocomplete__list" role="listbox">
+        <ul
+          id={listboxId}
+          className="absolute top-[calc(100%+0.35rem)] right-0 left-0 z-50 m-0 max-h-[220px] list-none overflow-auto rounded-md border border-ink/10 bg-surface p-[0.35rem] shadow-panel"
+          role="listbox"
+        >
           {flatItems.length === 0 ? (
-            <li className="chip-autocomplete__empty">Sin coincidencias</li>
+            <li className="px-[0.65rem] py-[0.65rem] text-[0.85rem] text-ink-soft">
+              Sin coincidencias
+            </li>
           ) : (
             flatItems.map((item, index) => (
               <li
@@ -200,7 +214,10 @@ function ChipAutocomplete({
               >
                 <button
                   type="button"
-                  className={`chip-autocomplete__option${index === activeIndex ? ' is-active' : ''}`}
+                  className={cn(
+                    'flex w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] border-0 bg-transparent px-[0.65rem] py-[0.55rem] text-left font-[inherit] text-ink hover:bg-coral/10',
+                    index === activeIndex && 'bg-coral/10'
+                  )}
                   onMouseEnter={() => setActiveIndex(index)}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => commitValue(item.label)}
@@ -213,7 +230,7 @@ function ChipAutocomplete({
                     <span>{item.label}</span>
                   )}
                   {selectedKeys.has(item.label.toLowerCase()) ? (
-                    <span className="chip-autocomplete__check" aria-hidden="true">
+                    <span className="font-extrabold text-teal" aria-hidden="true">
                       ✓
                     </span>
                   ) : null}

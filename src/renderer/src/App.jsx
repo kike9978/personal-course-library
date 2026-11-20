@@ -37,6 +37,19 @@ import {
   useDebouncedValue
 } from './utils/courseFilters'
 import { focusSearchOnShortcut } from './utils/focusSearchBar'
+import { cn } from './ui/cn'
+import { btnGhost, btnPrimary, iconBtn, statCard, statLabel, statValue } from './ui/classes'
+
+const sectionHeading = 'mb-[0.85rem] flex items-center gap-[0.65rem]'
+const sectionTitle = 'm-0 font-display text-[1.35rem] font-black tracking-[-0.02em]'
+const sectionMeta = 'text-[0.85rem] font-semibold text-ink-soft'
+const banner =
+  'mb-4 flex flex-wrap items-center justify-between gap-4 rounded-md border border-ink/10 bg-[#fff8ee] px-4 py-[0.85rem] [&_code]:text-[0.85em]'
+const bannerActions = 'flex flex-wrap items-center gap-[0.45rem]'
+const dismissBtn =
+  'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-ink-soft hover:bg-ink/[0.06] hover:text-ink focus-visible:bg-ink/[0.06] focus-visible:text-ink [&_svg]:h-[18px] [&_svg]:w-[18px]'
+const clearBtn = cn(btnGhost, 'ml-auto min-h-8 px-[0.7rem] py-1 text-[0.78rem]')
+const setupShell = 'flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center'
 
 const COVER_BANNER_DISMISS_KEY = 'pcl.banner.dismiss.covers'
 const DESCRIPTION_BANNER_DISMISS_KEY = 'pcl.banner.dismiss.descriptions'
@@ -68,7 +81,7 @@ function BannerDismiss({ onClick }) {
   return (
     <button
       type="button"
-      className="catalog-banner__dismiss"
+      className={dismissBtn}
       onClick={onClick}
       aria-label="Ocultar aviso"
       title="Ocultar aviso"
@@ -85,10 +98,16 @@ function BannerDismiss({ onClick }) {
 
 function DesktopShellNotice() {
   return (
-    <div className="library-setup">
-      <img src={brandMark} alt="" width={72} height={72} className="library-setup__mark" />
-      <h1>Abre la ventana de la app</h1>
-      <p>
+    <div className={setupShell}>
+      <img
+        src={brandMark}
+        alt=""
+        width={72}
+        height={72}
+        className="rounded-lg border border-ink/10 shadow-card"
+      />
+      <h1 className="m-0 font-display text-[2rem] font-black">Abre la ventana de la app</h1>
+      <p className="m-0 max-w-[28rem] text-ink-soft">
         Esta página en el navegador no tiene acceso a la biblioteca. Usa la ventana de escritorio
         que abre <strong>bun dev</strong>.
       </p>
@@ -115,11 +134,19 @@ function LibrarySetup({ onPathSet }) {
   }
 
   return (
-    <div className="library-setup">
-      <img src={brandMark} alt="" width={72} height={72} className="library-setup__mark" />
-      <h1>Catálogo de cursos</h1>
-      <p>Elige la carpeta que contiene tus cursos para empezar.</p>
-      <button type="button" className="icon-btn" onClick={handlePick} disabled={isPicking}>
+    <div className={setupShell}>
+      <img
+        src={brandMark}
+        alt=""
+        width={72}
+        height={72}
+        className="rounded-lg border border-ink/10 shadow-card"
+      />
+      <h1 className="m-0 font-display text-[2rem] font-black">Catálogo de cursos</h1>
+      <p className="m-0 max-w-[28rem] text-ink-soft">
+        Elige la carpeta que contiene tus cursos para empezar.
+      </p>
+      <button type="button" className={iconBtn} onClick={handlePick} disabled={isPicking}>
         {isPicking ? 'Abriendo…' : 'Elegir carpeta'}
       </button>
     </div>
@@ -130,14 +157,14 @@ function ContinueHub({ courses, onSelect, onOpenCourse, onOpenModal, onToggleInP
   if (!courses.length) return null
 
   return (
-    <section className="continue-hub" aria-label="Continuar aprendiendo">
-      <div className="section-heading">
-        <h2>Continuar aprendiendo</h2>
-        <span>
+    <section className="mb-6" aria-label="Continuar aprendiendo">
+      <div className={sectionHeading}>
+        <h2 className={sectionTitle}>Continuar aprendiendo</h2>
+        <span className={sectionMeta}>
           {courses.length} reciente{courses.length === 1 ? '' : 's'}
         </span>
       </div>
-      <div className="continue-rail">
+      <div className="grid auto-cols-[minmax(220px,260px)] grid-flow-col gap-4 overflow-x-auto px-[0.15rem] pt-[0.35rem] pb-4 [scroll-snap-type:x_mandatory] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[rgba(26,20,35,0.25)]">
         {courses.slice(0, 12).map((course) => (
           <CourseCard
             key={`hub-${course.path}`}
@@ -507,7 +534,7 @@ function FilterableCoursesGrid({
   }, [courses, sortedCourses, selectedPath])
 
   return (
-    <div className="app-shell">
+    <div className="flex h-screen flex-col overflow-hidden">
       <LibraryHeader
         filterText={filterText}
         onFilterTextChange={setFilterText}
@@ -551,62 +578,63 @@ function FilterableCoursesGrid({
         onWriteDescriptions={handleOpenDescriptionBatch}
       />
 
-      <div className={`app-main${selectedCourse ? ' app-main--with-detail' : ''}`}>
-        <div className="app-content">
+      <div
+        className={cn(
+          'flex min-h-0 min-w-0 flex-1 items-stretch',
+          selectedCourse && 'max-[900px]:flex-col'
+        )}
+      >
+        <div className="w-full min-w-0 flex-auto overflow-x-hidden overflow-y-auto px-6 pt-5 pb-10">
           {isLoading && courses.length === 0 ? (
-            <div className="loader-container">
+            <div className="flex h-[55vh] w-full items-center justify-center">
               <Loader />
             </div>
           ) : (
             <>
-              <div className="stats-row">
-                <div className="stat-card">
+              <div className="mb-5 flex flex-wrap gap-[0.65rem]">
+                <div className={statCard}>
                   <div>
-                    <div className="stat-card__value">{courses.length}</div>
-                    <div className="stat-card__label">Total</div>
+                    <div className={statValue}>{courses.length}</div>
+                    <div className={statLabel}>Total</div>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className={statCard}>
                   <div>
-                    <div className="stat-card__value">{inProgressCourses.length}</div>
-                    <div className="stat-card__label">En curso</div>
+                    <div className={statValue}>{inProgressCourses.length}</div>
+                    <div className={statLabel}>En curso</div>
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className={statCard}>
                   <div>
-                    <div className="stat-card__value">{institutions.length}</div>
-                    <div className="stat-card__label">Academias</div>
+                    <div className={statValue}>{institutions.length}</div>
+                    <div className={statLabel}>Academias</div>
                   </div>
                 </div>
                 {missingPropsCourses.length > 0 ? (
-                  <div className="stat-card">
+                  <div className={statCard}>
                     <div>
-                      <div className="stat-card__value">{missingPropsCourses.length}</div>
-                      <div className="stat-card__label">Sin props</div>
+                      <div className={statValue}>{missingPropsCourses.length}</div>
+                      <div className={statLabel}>Sin props</div>
                     </div>
                   </div>
                 ) : null}
               </div>
 
               {missingPropsCourses.length > 0 && !missingPropsOnly ? (
-                <div className="catalog-banner">
+                <div className={banner}>
                   <div>
                     <strong>{missingPropsCourses.length}</strong> curso
                     {missingPropsCourses.length === 1 ? '' : 's'} sin <code>courseProps.json</code>
                   </div>
-                  <div className="catalog-banner__actions">
+                  <div className={bannerActions}>
                     <button
                       type="button"
-                      className="btn btn--ghost"
+                      className={btnGhost}
                       onClick={() => setMissingPropsOnly(true)}
                     >
                       Verlos
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn--primary"
-                      onClick={handleOpenImportMissing}
-                    >
+                    <button type="button" className={btnPrimary} onClick={handleOpenImportMissing}>
                       Elegir e importar
                     </button>
                   </div>
@@ -614,17 +642,13 @@ function FilterableCoursesGrid({
               ) : null}
 
               {showCoverBanner ? (
-                <div className="catalog-banner">
+                <div className={banner}>
                   <div>
                     <strong>{missingCoverCourses.length}</strong> curso
                     {missingCoverCourses.length === 1 ? '' : 's'} sin portada
                   </div>
-                  <div className="catalog-banner__actions">
-                    <button
-                      type="button"
-                      className="btn btn--primary"
-                      onClick={handleOpenCoverSearch}
-                    >
+                  <div className={bannerActions}>
+                    <button type="button" className={btnPrimary} onClick={handleOpenCoverSearch}>
                       Buscar portadas
                     </button>
                     <BannerDismiss onClick={dismissCoverBanner} />
@@ -633,15 +657,15 @@ function FilterableCoursesGrid({
               ) : null}
 
               {showDescriptionBanner ? (
-                <div className="catalog-banner">
+                <div className={banner}>
                   <div>
                     <strong>{missingDescriptionCourses.length}</strong> curso
                     {missingDescriptionCourses.length === 1 ? '' : 's'} sin descripción
                   </div>
-                  <div className="catalog-banner__actions">
+                  <div className={bannerActions}>
                     <button
                       type="button"
-                      className="btn btn--primary"
+                      className={btnPrimary}
                       onClick={handleOpenDescriptionBatch}
                     >
                       Escribir descripciones
@@ -670,14 +694,14 @@ function FilterableCoursesGrid({
                   />
                 )}
 
-              <div className="section-heading">
-                <h2>Biblioteca</h2>
-                <span>
+              <div className={sectionHeading}>
+                <h2 className={sectionTitle}>Biblioteca</h2>
+                <span className={sectionMeta}>
                   {sortedCourses.length} resultado{sortedCourses.length === 1 ? '' : 's'}
                 </span>
                 <button
                   type="button"
-                  className="btn btn--ghost course-table__clear"
+                  className={clearBtn}
                   onClick={toggleVisiblePicks}
                   disabled={!sortedCourses.length || zipExport.exporting}
                 >
@@ -686,7 +710,7 @@ function FilterableCoursesGrid({
                 {!isCardLayout && hasColumnFilters(columnFilters) ? (
                   <button
                     type="button"
-                    className="btn btn--ghost course-table__clear"
+                    className={clearBtn}
                     onClick={() => setColumnFilters(EMPTY_COLUMN_FILTERS)}
                   >
                     Limpiar columnas
@@ -695,13 +719,9 @@ function FilterableCoursesGrid({
               </div>
 
               {missingPropsOnly && missingPropsCourses.length > 0 ? (
-                <div className="catalog-banner catalog-banner--compact">
+                <div className={cn(banner, 'mb-3 px-[0.85rem] py-[0.65rem]')}>
                   <span>Elige carpetas y genera propiedades desde el nombre.</span>
-                  <button
-                    type="button"
-                    className="btn btn--primary"
-                    onClick={handleOpenImportMissing}
-                  >
+                  <button type="button" className={btnPrimary} onClick={handleOpenImportMissing}>
                     Elegir e importar
                   </button>
                 </div>

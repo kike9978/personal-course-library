@@ -190,7 +190,7 @@ function LibraryStudyView({
   }
 
   return (
-    <div className="library-study library-study--workspace">
+    <div className="flex h-screen flex-col overflow-hidden bg-white">
       <AnnotationsWorkspace
         title="Anotaciones"
         subtitle={courseFilter ? titleByPath[courseFilter] || courseFilter : 'Toda la biblioteca'}

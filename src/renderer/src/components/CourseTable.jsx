@@ -4,6 +4,28 @@ import { InstitutionMark } from './InstitutionMark'
 import CoursePickBox from './CoursePickBox'
 import brandMark from '../assets/img/brand-mark.svg'
 import { courseViewedAt, formatCourseDate } from '../utils/courseTable'
+import { cn } from '../ui/cn'
+import { cardLg } from '../ui/classes'
+
+const badge = 'rounded-full border px-[0.55rem] py-[0.18rem] text-[0.7rem] font-bold'
+const badgeNew = cn(badge, 'border-[#1a6b5c] bg-[#d8f3ec] text-[#0f4a40]')
+const badgeWarn = cn(badge, 'border-[#a66b1a] bg-[#ffe8c2] text-[#6b4508]')
+const badgePrograms = cn(
+  badge,
+  'border-chip-programs-border bg-chip-programs text-chip-programs-text'
+)
+const badgeTheme = cn(badge, 'border-[#5a4a7a] bg-[#ece6f7] text-[#3d3258]')
+const badgeDone = cn(badge, 'border-chip-status-border bg-chip-status text-chip-status-text')
+const ribbon =
+  'static rounded-full border border-chip-status-border bg-chip-status px-[0.65rem] py-[0.28rem] text-[0.7rem] font-extrabold tracking-[0.03em] text-chip-status-text uppercase'
+const ribbonRecent = 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
+const cell =
+  'border-b border-ink/10 px-[0.55rem] py-[0.45rem] text-left align-middle whitespace-nowrap'
+const headCell = cn(cell, 'sticky top-0 z-[2] bg-cream align-top')
+const filterControl =
+  'w-full min-w-0 rounded-sm border border-ink/10 bg-surface px-[0.4rem] py-[0.22rem] text-xs text-ink focus:shadow-[0_0_0_2px_rgba(232,69,112,0.28)] focus:outline-none'
+const cardAction =
+  'grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-ink/10 bg-surface shadow-card hover:bg-coral hover:text-white'
 
 const COLUMNS = [
   { key: 'cover', label: '', filter: null },
@@ -71,13 +93,20 @@ function Thumb({ coursePath, hasCover }) {
 
   if (!hasCover || failed) {
     return (
-      <div className="cover-placeholder course-table__thumb-fallback">
-        <img src={brandMark} alt="" width={18} height={18} />
+      <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle_at_30%_30%,rgba(232,69,112,0.08),transparent_50%),radial-gradient(circle_at_70%_70%,rgba(61,122,122,0.08),transparent_45%),var(--color-cream-deep)] text-ink-soft">
+        <img
+          className="!h-7 !w-7 max-h-7 max-w-7 !object-contain opacity-55"
+          src={brandMark}
+          alt=""
+          width={18}
+          height={18}
+        />
       </div>
     )
   }
   return (
     <img
+      className="block h-full w-full object-cover"
       src={src}
       alt=""
       onError={() => {
@@ -89,13 +118,21 @@ function Thumb({ coursePath, hasCover }) {
 }
 
 function SortButton({ column, columnSort, onColumnSort }) {
-  if (!column.kind) return <span className="course-table__label">{column.label}</span>
+  if (!column.kind)
+    return (
+      <span className="text-[0.68rem] font-extrabold tracking-[0.04em] text-ink-soft uppercase">
+        {column.label}
+      </span>
+    )
   const active = columnSort?.key === column.key
   const arrow = !active ? '' : columnSort.dir === 'asc' ? ' ↑' : ' ↓'
   return (
     <button
       type="button"
-      className={`course-table__sort${active ? ' is-active' : ''}`}
+      className={cn(
+        'cursor-pointer border-0 bg-transparent p-0 text-left text-[0.68rem] font-extrabold tracking-[0.04em] text-ink-soft uppercase',
+        active && 'text-coral-deep'
+      )}
       onClick={() => onColumnSort(column.key, column.kind)}
     >
       {column.label}
@@ -112,7 +149,7 @@ function ColumnFilter({ column, filters, onColumnFilter, institutions, programs,
   if (column.filter === 'text') {
     return (
       <input
-        className="course-table__filter"
+        className={filterControl}
         type="search"
         value={value}
         placeholder="Filtrar"
@@ -131,7 +168,7 @@ function ColumnFilter({ column, filters, onColumnFilter, institutions, programs,
           : themes
     return (
       <select
-        className="course-table__filter"
+        className={filterControl}
         value={value}
         aria-label={`Filtrar ${column.label}`}
         onChange={(event) => set(event.target.value)}
@@ -149,7 +186,7 @@ function ColumnFilter({ column, filters, onColumnFilter, institutions, programs,
   if (column.filter === 'rate') {
     return (
       <select
-        className="course-table__filter"
+        className={filterControl}
         value={value}
         aria-label="Valoración mínima"
         onChange={(event) => set(Number(event.target.value))}
@@ -165,7 +202,7 @@ function ColumnFilter({ column, filters, onColumnFilter, institutions, programs,
   if (column.filter === 'status') {
     return (
       <select
-        className="course-table__filter"
+        className={filterControl}
         value={value}
         aria-label="Filtrar estado"
         onChange={(event) => set(event.target.value)}
@@ -182,7 +219,7 @@ function ColumnFilter({ column, filters, onColumnFilter, institutions, programs,
 
   return (
     <select
-      className="course-table__filter"
+      className={filterControl}
       value={value}
       aria-label={`Filtrar ${column.label}`}
       onChange={(event) => set(event.target.value)}
@@ -196,18 +233,16 @@ function ColumnFilter({ column, filters, onColumnFilter, institutions, programs,
 
 function StatusCell({ course }) {
   return (
-    <div className="course-table__status">
-      {course.isInProcess ? (
-        <span className="status-ribbon status-ribbon--inline">En curso</span>
-      ) : null}
+    <div className="flex max-w-[12rem] flex-wrap gap-1 whitespace-normal">
+      {course.isInProcess ? <span className={ribbon}>En curso</span> : null}
       {course.learning?.isRecentlyViewed ? (
-        <span className="status-ribbon status-ribbon--inline status-ribbon--recent">Reciente</span>
+        <span className={cn(ribbon, ribbonRecent)}>Reciente</span>
       ) : null}
-      {course.isNew ? <span className="badge badge--new">Nuevo</span> : null}
+      {course.isNew ? <span className={badgeNew}>Nuevo</span> : null}
       {course.learning?.status === 'completed' ? (
-        <span className="badge badge--done">Completado</span>
+        <span className={badgeDone}>Completado</span>
       ) : null}
-      {course.missingProps ? <span className="badge badge--warn">Sin props</span> : null}
+      {course.missingProps ? <span className={badgeWarn}>Sin props</span> : null}
     </div>
   )
 }
@@ -218,13 +253,13 @@ function ChipList({ items, className }) {
   const shown = list.slice(0, 2)
   const extra = list.length - shown.length
   return (
-    <div className="course-table__chips">
+    <div className="flex items-center gap-1">
       {shown.map((item, index) => (
         <span key={`${item}-${index}`} className={className}>
           {item}
         </span>
       ))}
-      {extra > 0 ? <span className="course-table__more">+{extra}</span> : null}
+      {extra > 0 ? <span className="text-[0.72rem] font-bold text-ink-soft">+{extra}</span> : null}
     </div>
   )
 }
@@ -276,7 +311,11 @@ function TableRow({
 
   return (
     <tr
-      className={`course-table__row${isSelected ? ' is-selected' : ''}${isPicked ? ' is-picked' : ''}`}
+      className={cn(
+        'cursor-pointer hover:bg-[#fff7f4] focus-visible:bg-[#fff7f4]',
+        isSelected && 'bg-[#fff7f4] shadow-[inset_3px_0_0_#e84570]',
+        isPicked && 'outline outline-2 outline-offset-1 outline-coral'
+      )}
       data-course-path={course.path}
       tabIndex={tabIndex ?? -1}
       onClick={(event) => {
@@ -300,68 +339,70 @@ function TableRow({
         }
       }}
     >
-      <td className="course-table__pick">
+      <td className={cn(cell, 'w-10 text-center')}>
         <CoursePickBox
           checked={isPicked}
           label={`Seleccionar ${course.title || course.path}`}
           onPick={(pick) => onTogglePick?.(course, pick)}
         />
       </td>
-      <td className="course-table__cover">
-        <div className="course-table__thumb">
+      <td className={cell}>
+        <div className="h-10 w-16 overflow-hidden rounded-[8px] border border-ink/10 bg-cream-deep">
           <Thumb coursePath={course.path} hasCover={course.hasCover} />
         </div>
       </td>
-      <td>
-        <div className="course-table__title" title={course.title}>
+      <td className={cell}>
+        <div className="max-w-[18rem] truncate font-display font-extrabold" title={course.title}>
           {course.title}
         </div>
       </td>
-      <td>
-        <div className="course-table__academy">
+      <td className={cell}>
+        <div className="flex max-w-[10rem] items-center gap-[0.35rem] [&_span]:min-w-0 [&_span]:truncate">
           <InstitutionMark institution={course.institution} emptyLabel="—" />
         </div>
       </td>
-      <td>{course.instructor || '—'}</td>
-      <td>
-        <ChipList items={course.programs} className="badge badge--programs" />
+      <td className={cell}>{course.instructor || '—'}</td>
+      <td className={cell}>
+        <ChipList items={course.programs} className={badgePrograms} />
       </td>
-      <td>
-        <ChipList items={course.theme} className="badge badge--theme" />
+      <td className={cell}>
+        <ChipList items={course.theme} className={badgeTheme} />
       </td>
-      <td className="course-table__num">
+      <td className={cn(cell, 'tabular-nums')}>
         {course.rate > 0 ? (
-          <span className="course-card__rate">{'★'.repeat(course.rate)}</span>
+          <span className="text-xs tracking-[0.05em] text-coral-deep">
+            {'★'.repeat(course.rate)}
+          </span>
         ) : (
           '—'
         )}
       </td>
-      <td className="course-table__num">
+      <td className={cn(cell, 'tabular-nums')}>
         {percent == null ? (
           '—'
         ) : (
-          <span className="course-table__progress" title={course.learning?.lastLessonTitle || ''}>
+          <span className="font-bold text-teal" title={course.learning?.lastLessonTitle || ''}>
             {percent}%
           </span>
         )}
       </td>
-      <td>
+      <td className={cell}>
         <StatusCell course={course} />
       </td>
-      <td className="course-table__date">
+      <td className={cn(cell, 'tabular-nums')}>
         <DateCell ms={course.addedAt} />
       </td>
-      <td className="course-table__date">
+      <td className={cn(cell, 'tabular-nums')}>
         <DateCell ms={course.folderMtimeMs} />
       </td>
-      <td className="course-table__date">
+      <td className={cn(cell, 'tabular-nums')}>
         <DateCell ms={viewedAt} />
       </td>
-      <td>
-        <div className="course-row__actions">
+      <td className={cell}>
+        <div className="flex gap-[0.35rem]">
           <button
             type="button"
-            className="card-action"
+            className={cardAction}
             title={isInProcess ? 'Quitar de en curso' : 'Marcar en curso'}
             onMouseDown={stopRowEvent}
             onClick={toggleInProcess}
@@ -372,7 +413,7 @@ function TableRow({
           </button>
           <button
             type="button"
-            className="card-action"
+            className={cardAction}
             title="Abrir curso"
             onMouseDown={stopRowEvent}
             onClick={(event) => {
@@ -386,7 +427,7 @@ function TableRow({
           </button>
           <button
             type="button"
-            className="card-action"
+            className={cardAction}
             title="Abrir en explorador"
             onMouseDown={stopRowEvent}
             onClick={openFolder}
@@ -397,7 +438,7 @@ function TableRow({
           </button>
           <button
             type="button"
-            className="card-action"
+            className={cardAction}
             title="Editar"
             onMouseDown={stopRowEvent}
             onClick={(event) => {
@@ -438,11 +479,11 @@ export default function CourseTable({
   themes = []
 }) {
   return (
-    <div className="course-table-wrap">
-      <table className="course-table">
+    <div className={cn(cardLg, 'w-full overflow-x-auto')}>
+      <table className="w-full min-w-[1280px] border-separate border-spacing-0 text-[0.84rem]">
         <thead>
           <tr>
-            <th scope="col" className="course-table__pick">
+            <th scope="col" className={cn(headCell, 'w-10 text-center')}>
               <CoursePickBox
                 checked={allVisiblePicked}
                 indeterminate={someVisiblePicked && !allVisiblePicked}
@@ -456,6 +497,7 @@ export default function CourseTable({
                 <th
                   key={column.key}
                   scope="col"
+                  className={headCell}
                   aria-sort={
                     !column.kind
                       ? undefined
@@ -467,7 +509,10 @@ export default function CourseTable({
                   }
                 >
                   <div
-                    className={`course-table__head${column.filter ? '' : ' course-table__head--plain'}`}
+                    className={cn(
+                      'flex min-w-[6.5rem] flex-col items-stretch gap-[0.28rem]',
+                      !column.filter && 'min-w-0'
+                    )}
                   >
                     <SortButton
                       column={column}
@@ -491,7 +536,13 @@ export default function CourseTable({
         <tbody>
           {courses.length === 0 ? (
             <tr>
-              <td className="course-table__empty" colSpan={COLUMNS.length + 1}>
+              <td
+                className={cn(
+                  cell,
+                  'px-[0.8rem] py-[1.4rem] text-center whitespace-normal text-ink-soft'
+                )}
+                colSpan={COLUMNS.length + 1}
+              >
                 Ningún curso coincide con estos filtros.
               </td>
             </tr>

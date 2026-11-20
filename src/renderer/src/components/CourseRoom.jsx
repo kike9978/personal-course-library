@@ -10,6 +10,11 @@ import StudySidePanel, { formatTime } from './StudySidePanel'
 import { InstitutionMark } from './InstitutionMark'
 import { collectCourseFacets } from '../utils/courseFilters'
 import Loader from './Loader'
+import { cn } from '../ui/cn'
+import { iconBtn, iconBtnGhost } from '../ui/classes'
+
+const roomPopoverItem =
+  'flex w-full cursor-pointer flex-col items-start gap-[2px] rounded-[8px] border-0 bg-transparent px-[10px] py-2 text-left text-[0.875rem] font-bold text-ink hover:enabled:bg-ink/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral disabled:cursor-not-allowed disabled:opacity-50'
 
 const SIDEBAR_OPEN_KEY = 'course-sidebar-open'
 
@@ -1201,26 +1206,30 @@ function CourseRoom({
     !creatingProject
 
   return (
-    <div className="course-room">
-      <header className="course-room__header">
-        <button type="button" className="icon-btn icon-btn--ghost" onClick={onBack}>
+    <div className="flex h-screen flex-col overflow-hidden bg-cream-deep">
+      <header className="z-20 flex min-h-[52px] flex-wrap items-center justify-between gap-4 border-b border-ink/10 bg-surface px-[0.9rem] py-[0.45rem]">
+        <button type="button" className={cn(iconBtn, iconBtnGhost)} onClick={onBack}>
           ← {backLabel}
         </button>
-        <div className="course-room__heading">
-          <h1 title={[course.title, course.instructor].filter(Boolean).join(' ')}>
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-[0.12rem]">
+          <h1
+            className="m-0 overflow-hidden font-display text-[1.15rem] leading-[1.15] font-extrabold text-ellipsis whitespace-nowrap"
+            title={[course.title, course.instructor].filter(Boolean).join(' ')}
+          >
             {course.title || 'Curso'}
-            {course.instructor ? <span>{course.instructor}</span> : null}
+            {course.instructor ? <span className="ml-[0.4rem] font-bold">{course.instructor}</span> : null}
           </h1>
           <InstitutionMark
             institution={course.institution}
-            nameClassName="course-room__institution"
+            markClassName="mt-[0.12rem] block max-h-[1.45rem] max-w-[8.5rem] object-[left_center]"
+            nameClassName="mt-[0.12rem] block overflow-hidden font-display text-[1.02rem] leading-none font-extrabold tracking-[0.06em] text-ellipsis whitespace-nowrap text-[#ff3b1f] uppercase"
           />
         </div>
-        <div className="course-room__actions">
-          <div className="header-menu" ref={moreMenuRef}>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative z-[4] shrink-0" ref={moreMenuRef}>
             <button
               type="button"
-              className="icon-btn icon-btn--ghost"
+              className={cn(iconBtn, iconBtnGhost)}
               aria-haspopup="menu"
               aria-expanded={moreOpen}
               onClick={() => setMoreOpen((open) => !open)}
@@ -1229,10 +1238,14 @@ function CourseRoom({
               ···
             </button>
             {moreOpen ? (
-              <div className="header-popover" role="menu" aria-label="Acciones del curso">
+              <div
+                className="absolute top-[calc(100%+6px)] right-0 z-[5] min-w-[17rem] rounded-md border border-ink/10 bg-surface p-[6px] shadow-panel"
+                role="menu"
+                aria-label="Acciones del curso"
+              >
                 <button
                   type="button"
-                  className="header-popover__item"
+                  className={roomPopoverItem}
                   role="menuitem"
                   disabled={loading}
                   onClick={() => {
@@ -1241,11 +1254,11 @@ function CourseRoom({
                   }}
                 >
                   <span>Rescanear</span>
-                  <small>Vuelve a leer la carpeta del curso</small>
+                  <small className="text-xs font-medium text-ink-soft">Vuelve a leer la carpeta del curso</small>
                 </button>
                 <button
                   type="button"
-                  className="header-popover__item"
+                  className={roomPopoverItem}
                   role="menuitem"
                   onClick={() => {
                     setMoreOpen(false)
@@ -1253,7 +1266,7 @@ function CourseRoom({
                   }}
                 >
                   <span>Abrir en explorador</span>
-                  <small>Archivos reales de esta carpeta</small>
+                  <small className="text-xs font-medium text-ink-soft">Archivos reales de esta carpeta</small>
                 </button>
               </div>
             ) : null}
@@ -1262,40 +1275,50 @@ function CourseRoom({
       </header>
 
       {loading && !tree ? (
-        <div className="loader-container">
+        <div className="flex h-[55vh] w-full items-center justify-center">
           <Loader />
         </div>
       ) : error ? (
-        <div className="course-room__empty">
-          <h2>No se pudo abrir el curso</h2>
-          <p>{error}</p>
-          <button type="button" className="icon-btn" onClick={handleOpenExplorer}>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <h2 className="m-0 font-display">No se pudo abrir el curso</h2>
+          <p className="m-0 max-w-[28rem] text-ink-soft">{error}</p>
+          <button type="button" className={iconBtn} onClick={handleOpenExplorer}>
             Abrir en explorador
           </button>
         </div>
       ) : emptyContent ? (
-        <div className="course-room__empty">
-          <h2>Carpeta vacía</h2>
-          <p>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <h2 className="m-0 font-display">Carpeta vacía</h2>
+          <p className="m-0 max-w-[28rem] text-ink-soft">
             No hay lecciones ni recursos que mostrar. Puedes vincular un proyecto o abrir el
             explorador.
           </p>
-          <div className="course-room__empty-actions">
-            <button type="button" className="icon-btn" onClick={handleAddProject}>
+          <div className="flex flex-wrap justify-center gap-2">
+            <button type="button" className={iconBtn} onClick={handleAddProject}>
               + Proyecto
             </button>
-            <button type="button" className="icon-btn icon-btn--ghost" onClick={handleOpenExplorer}>
+            <button type="button" className={cn(iconBtn, iconBtnGhost)} onClick={handleOpenExplorer}>
               Abrir en explorador
             </button>
           </div>
         </div>
       ) : (
         <div
-          className={`course-room__body course-room__body--study${
-            studyOpen ? '' : ' course-room__body--study-collapsed'
-          }${sidebarOpen ? '' : ' course-room__body--sidebar-collapsed'}`}
+          data-course-room=""
+          className={cn(
+            'grid min-h-0 flex-1 items-stretch gap-[0.7rem] overflow-hidden p-[0.7rem]',
+            sidebarOpen
+              ? 'grid-cols-[minmax(260px,340px)_1fr] max-[900px]:grid-cols-1 max-[900px]:grid-rows-[minmax(140px,28vh)_minmax(0,1fr)]'
+              : 'grid-cols-[2.75rem_minmax(0,1fr)] max-[900px]:grid-cols-1 max-[900px]:grid-rows-[2.75rem_minmax(0,1fr)]'
+          )}
         >
-          <aside className={`course-room__sidebar${sidebarOpen ? '' : ' is-collapsed'}`}>
+          <aside
+            className={cn(
+              'min-h-0 overflow-auto rounded-[16px] bg-surface shadow-card',
+              !sidebarOpen &&
+                'flex flex-col items-center overflow-hidden pt-[0.7rem] max-[900px]:flex-row max-[900px]:items-center max-[900px]:px-[0.65rem] max-[900px]:pt-0'
+            )}
+          >
             <LessonTree
               collapsed={!sidebarOpen}
               onToggleCollapsed={() => {
@@ -1330,10 +1353,11 @@ function CourseRoom({
               playableCount={progress?.playableCount ?? 0}
             />
           </aside>
-          <div className="course-room__stage">
-          <main className="course-room__main">
+          <div className="flex min-h-0 min-w-0 overflow-hidden rounded-[16px] bg-surface shadow-card max-[900px]:flex-col">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
             {panelMode === 'project' ? (
               <ProjectPanel
+                plain
                 coursePath={coursePath}
                 project={creatingProject ? projectDraft : selectedProject}
                 sections={tree?.sections || []}

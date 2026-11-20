@@ -1,5 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
+import { btnGhost, btnPrimary } from '../ui/classes'
+
+const descriptionDialog =
+  'w-[calc(100%-2rem)] max-h-[min(90vh,48rem)] max-w-[40rem] overflow-auto rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel [&:modal]:flex [&:modal]:flex-col [&::backdrop]:bg-[rgba(26,20,35,0.45)] [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55'
+const dialogForm =
+  'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem] [&_h3]:m-0 [&_h3]:font-display [&_h3]:text-[1.2rem] [&_h3]:font-black'
+const dialogLead = 'mt-[0.35rem] text-[0.85rem] leading-[1.4] text-ink-soft [&_code]:text-[0.8em]'
+const actions = 'flex justify-end gap-2 pt-[0.35rem]'
+const actionsSpread = 'flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]'
+const actionsBtns = 'flex gap-2'
+const field =
+  '[&_label]:mb-[0.3rem] [&_label]:block [&_label]:text-[0.78rem] [&_label]:font-extrabold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:px-3 [&_input]:py-[0.65rem] [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-focus [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:border-ink/10 [&_textarea]:bg-surface [&_textarea]:px-3 [&_textarea]:py-[0.65rem] [&_textarea]:text-ink [&_textarea]:outline-none [&_textarea]:focus:shadow-focus'
+const section =
+  'mt-[0.85rem] flex flex-col gap-[0.45rem] [&_h4]:m-0 [&_h4]:font-display [&_h4]:text-[0.95rem]'
+const filterPill =
+  'inline-flex cursor-pointer items-center gap-[0.4rem] rounded-full border border-ink/10 bg-surface px-[0.9rem] py-[0.45rem] text-[0.82rem] font-bold text-ink shadow-none aria-pressed:bg-teal aria-pressed:text-white'
+const note = 'text-[0.75rem] text-ink-soft'
+const brief = '!min-h-[8rem] text-[0.78rem] leading-[1.45]'
+const paste = '!min-h-[6.5rem] text-[0.78rem] leading-[1.45]'
+const segmented =
+  'inline-flex max-w-full flex-wrap gap-[0.2rem] rounded-full border border-ink/10 bg-surface p-1 shadow-none [&_button]:max-w-[16rem] [&_button]:cursor-pointer [&_button]:truncate [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-[0.85rem] [&_button]:py-[0.4rem] [&_button]:text-[0.82rem] [&_button]:font-bold [&_button]:text-ink-soft [&_button[aria-pressed=true]]:bg-coral [&_button[aria-pressed=true]]:text-white'
+const review =
+  'flex max-h-[16rem] flex-col gap-[0.45rem] overflow-auto [&_fieldset]:m-0 [&_fieldset]:rounded-sm [&_fieldset]:border [&_fieldset]:border-ink/10 [&_fieldset]:px-[0.6rem] [&_fieldset]:pt-[0.4rem] [&_fieldset]:pb-2 [&_legend]:px-1 [&_legend]:text-[0.75rem] [&_legend]:font-extrabold [&_label]:my-[0.2rem] [&_label]:flex [&_label]:items-start [&_label]:gap-[0.4rem] [&_label]:text-[0.82rem] [&_label>span]:flex [&_label>span]:min-w-0 [&_label>span]:flex-col [&_small]:text-[0.75rem] [&_small]:text-ink-soft'
 import {
   buildCourseDescriptionBatchBrief,
   coursesForDescriptionBatch,
@@ -411,7 +434,7 @@ function PlaylistBuilder({
   return (
     <dialog
       ref={dialogRef}
-      className="dialog dialog--description"
+      className={descriptionDialog}
       aria-labelledby="playlist-builder-title"
       onCancel={(event) => {
         event.preventDefault()
@@ -422,23 +445,23 @@ function PlaylistBuilder({
       }}
     >
       <form
-        className="dialog__form"
+        className={dialogForm}
         onSubmit={(event) => {
           event.preventDefault()
           handleSave()
         }}
       >
         <h3 id="playlist-builder-title">Armar listas</h3>
-        <p className="dialog__lead">
+        <p className={dialogLead}>
           Parecidos arma una lista con los cursos que comparten palabras. Crear camino parte ese
           grupo en listas anidadas. El encargo se copia a tu chat y puede volver como listas nuevas,
           cursos para una lista, o los cursos sueltos en las listas de ahora. Guardar no marca
           ningún curso.
         </p>
 
-        <div className="playlist-builder__section">
+        <div className={section}>
           <h4>Meta</h4>
-          <div className="field">
+          <div className={field}>
             <label htmlFor="playlist-goal">Qué quieres aprender</label>
             <input
               id="playlist-goal"
@@ -455,12 +478,12 @@ function PlaylistBuilder({
             />
           </div>
           {vocabulary.length ? (
-            <div className="playlist-builder__chips" role="group" aria-label="Intereses">
+            <div className="flex flex-wrap gap-[0.4rem]" role="group" aria-label="Intereses">
               {vocabulary.map((name) => (
                 <button
                   key={name}
                   type="button"
-                  className="filter-pill"
+                  className={filterPill}
                   aria-pressed={interests.includes(name)}
                   onClick={() => toggleInterest(name)}
                 >
@@ -469,15 +492,15 @@ function PlaylistBuilder({
               ))}
             </div>
           ) : (
-            <p className="course-description__note">
+            <p className={note}>
               Los intereses salen de los programas y temas del catálogo.
             </p>
           )}
         </div>
 
-        <div className="playlist-builder__section">
+        <div className={section}>
           <h4>Parecidos</h4>
-          <div className="field">
+          <div className={field}>
             <label htmlFor="playlist-semantic">Buscar por palabras del curso</label>
             <input
               id="playlist-semantic"
@@ -494,7 +517,7 @@ function PlaylistBuilder({
             />
           </div>
           {seedCourse ? (
-            <label className="playlist-builder__seed">
+            <label className="flex items-center gap-[0.4rem] text-[0.82rem]">
               <input
                 type="checkbox"
                 checked={useSeed}
@@ -503,10 +526,10 @@ function PlaylistBuilder({
               Partir de «{seedCourse.title || seedCourse.path}»
             </label>
           ) : null}
-          <div className="dialog__actions">
+          <div className={actions}>
             <button
               type="button"
-              className="btn btn--ghost"
+              className={btnGhost}
               onClick={handleSearch}
               disabled={!query.trim() && !goal.trim() && !(useSeed && seedCourse)}
             >
@@ -514,7 +537,7 @@ function PlaylistBuilder({
             </button>
             <button
               type="button"
-              className="btn btn--ghost"
+              className={btnGhost}
               onClick={handleCreateNeighbors}
               disabled={!neighbors?.courses?.length || saving}
             >
@@ -522,7 +545,7 @@ function PlaylistBuilder({
             </button>
             <button
               type="button"
-              className="btn btn--primary"
+              className={btnPrimary}
               onClick={handleCreatePath}
               disabled={!neighbors?.courses?.length || saving}
             >
@@ -531,24 +554,30 @@ function PlaylistBuilder({
           </div>
           {neighbors ? (
             neighbors.courses.length ? (
-              <ul className="playlist-builder__neighbors" aria-label="Cursos parecidos">
+              <ul
+                className="m-0 flex max-h-[9rem] list-none flex-col gap-[0.35rem] overflow-auto p-0"
+                aria-label="Cursos parecidos"
+              >
                 {neighbors.courses.map((course) => (
-                  <li key={course.path} className="playlist-builder__neighbor">
+                  <li
+                    key={course.path}
+                    className="flex flex-col gap-[0.05rem] text-[0.82rem] [&_span]:text-[0.75rem] [&_span]:text-ink-soft"
+                  >
                     <strong>{course.title || course.path}</strong>
                     <span>{course.institution || course.path}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="course-description__note">Ningún curso se parece a eso.</p>
+              <p className={note}>Ningún curso se parece a eso.</p>
             )
           ) : null}
         </div>
 
-        <div className="playlist-builder__section">
+        <div className={section}>
           <h4>Encargo</h4>
-          <div className="playlist-builder__modes">
-            <div className="segmented" role="group" aria-label="Qué guardar">
+          <div className="flex flex-wrap gap-[0.4rem]">
+            <div className={segmented} role="group" aria-label="Qué guardar">
               <button
                 type="button"
                 aria-pressed={mode === 'create'}
@@ -581,7 +610,7 @@ function PlaylistBuilder({
               </button>
             </div>
           </div>
-          <p className="course-description__note">
+          <p className={note}>
             {mode === 'update'
               ? loose.length === 1
                 ? 'El chat coloca el curso que no está en ninguna lista.'
@@ -589,14 +618,14 @@ function PlaylistBuilder({
               : `El chat reparte los cursos que encajan en varias listas. El catálogo tiene ${courses.length}.`}
           </p>
           {mode === 'update' && undescribed.length ? (
-            <div className="playlist-builder__describe">
-              <p className="course-description__note">
+            <div className="flex flex-col gap-[0.45rem]">
+              <p className={note}>
                 {`${undescribed.length} ${undescribed.length === 1 ? 'curso suelto no tiene' : 'cursos sueltos no tienen'} descripción. Describirlos ayuda al chat a ubicarlos. Puedes generar el encargo igual.`}
               </p>
-              <div className="dialog__actions">
+              <div className={actions}>
                 <button
                   type="button"
-                  className="btn btn--ghost"
+                  className={btnGhost}
                   onClick={handleDescribe}
                   disabled={describing || savingDesc}
                 >
@@ -604,11 +633,11 @@ function PlaylistBuilder({
                 </button>
               </div>
               {descBrief ? (
-                <div className="field">
+                <div className={field}>
                   <label htmlFor="playlist-desc-brief">Encargo de descripciones</label>
                   <textarea
                     id="playlist-desc-brief"
-                    className="course-description__brief"
+                    className={brief}
                     readOnly
                     spellCheck={false}
                     value={descBrief}
@@ -616,11 +645,11 @@ function PlaylistBuilder({
                 </div>
               ) : null}
               {descBrief ? (
-                <div className="field">
+                <div className={field}>
                   <label htmlFor="playlist-desc-paste">Respuesta de descripciones</label>
                   <textarea
                     id="playlist-desc-paste"
-                    className="course-description__paste"
+                    className={paste}
                     spellCheck={false}
                     value={descPaste}
                     placeholder="Pega aquí el JSON de las descripciones"
@@ -632,13 +661,13 @@ function PlaylistBuilder({
                 </div>
               ) : null}
               {descBrief ? (
-                <div className="dialog__actions">
-                  <button type="button" className="btn btn--ghost" onClick={handleCopyDescriptions}>
+                <div className={actions}>
+                  <button type="button" className={btnGhost} onClick={handleCopyDescriptions}>
                     {descCopied ? 'Copiado' : 'Copiar'}
                   </button>
                   <button
                     type="button"
-                    className="btn btn--ghost"
+                    className={btnGhost}
                     onClick={handleSaveDescriptions}
                     disabled={savingDesc || describing || !descPaste.trim()}
                   >
@@ -647,7 +676,7 @@ function PlaylistBuilder({
                 </div>
               ) : null}
               {descSkips.length ? (
-                <ul className="course-description__strays">
+                <ul className="m-0 flex flex-col gap-[0.2rem] pl-[1.1rem] text-[0.78rem] leading-[1.35] text-coral-deep">
                   {descSkips.map((skip) => (
                     <li key={`${skip.path || skip.title}-${skip.reason}`}>
                       <strong>{skip.title || skip.path || 'Sin nombre'}</strong>
@@ -658,29 +687,29 @@ function PlaylistBuilder({
                 </ul>
               ) : null}
               {descError ? (
-                <p className="course-description__error" role="alert">
+                <p className="m-0 text-[0.82rem] leading-[1.4] text-coral-deep" role="alert">
                   {descError}
                 </p>
               ) : null}
             </div>
           ) : null}
-          <div className="field">
+          <div className={field}>
             <label htmlFor="playlist-brief">Encargo</label>
             <textarea
               id="playlist-brief"
               ref={briefRef}
-              className="course-description__brief"
+              className={brief}
               readOnly
               spellCheck={false}
               value={brief || 'Pulsa Generar encargo.'}
             />
           </div>
-          <div className="dialog__actions dialog__actions--spread">
-            <span className="course-description__note">{copyNote}</span>
-            <div className="dialog__actions-btns">
+          <div className={actionsSpread}>
+            <span className={note}>{copyNote}</span>
+            <div className={actionsBtns}>
               <button
                 type="button"
-                className="btn btn--primary"
+                className={btnPrimary}
                 onClick={handleGenerate}
                 disabled={
                   !courses.length ||
@@ -692,7 +721,7 @@ function PlaylistBuilder({
               </button>
               <button
                 type="button"
-                className="btn btn--ghost"
+                className={btnGhost}
                 onClick={handleCopy}
                 disabled={!brief}
               >
@@ -700,11 +729,11 @@ function PlaylistBuilder({
               </button>
             </div>
           </div>
-          <div className="field">
+          <div className={field}>
             <label htmlFor="playlist-paste">Respuesta</label>
             <textarea
               id="playlist-paste"
-              className="course-description__paste"
+              className={paste}
               spellCheck={false}
               value={paste}
               placeholder="Pega aquí el JSON del chat"
@@ -716,8 +745,8 @@ function PlaylistBuilder({
             />
           </div>
           {mode === 'update' && groups.length ? (
-            <div className="playlist-builder__review">
-              <p className="course-description__note">
+            <div className={review}>
+              <p className={note}>
                 Revisa qué se guarda. Lo que desmarques se queda fuera.
               </p>
               {groups.map((group) => (
@@ -743,7 +772,7 @@ function PlaylistBuilder({
             </div>
           ) : null}
           {(mode === 'update' && placement?.ok ? placement.skips || [] : skips).length ? (
-            <ul className="course-description__strays">
+            <ul className="m-0 flex flex-col gap-[0.2rem] pl-[1.1rem] text-[0.78rem] leading-[1.35] text-coral-deep">
               {(mode === 'update' && placement?.ok ? placement.skips || [] : skips).map((skip) => (
                 <li key={`${skip.title}-${skip.reason}`}>
                   <strong>{skip.title || 'Sin nombre'}</strong>
@@ -754,17 +783,17 @@ function PlaylistBuilder({
             </ul>
           ) : null}
           {error ? (
-            <p className="course-description__error" role="alert">
+            <p className="m-0 text-[0.82rem] leading-[1.4] text-coral-deep" role="alert">
               {error}
             </p>
           ) : null}
         </div>
 
-        <div className="dialog__actions">
-          <button type="button" className="btn btn--ghost" onClick={handleClose} disabled={saving}>
+              <div className={actions}>
+          <button type="button" className={btnGhost} onClick={handleClose} disabled={saving}>
             Cerrar
           </button>
-          <button type="submit" className="btn btn--primary" disabled={saving || !paste.trim()}>
+          <button type="submit" className={btnPrimary} disabled={saving || !paste.trim()}>
             {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </div>
