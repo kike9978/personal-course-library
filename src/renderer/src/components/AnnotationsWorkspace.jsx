@@ -31,7 +31,16 @@ const pageBodyCollapsed =
   'grid-cols-[3rem_minmax(280px,1fr)_minmax(280px,min(var(--annotations-graph-w,34%),70%))]'
 const headerIcon =
   'inline-flex size-9 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent text-ink hover:bg-[rgba(42,36,56,0.06)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral disabled:cursor-not-allowed disabled:opacity-45 [&_svg]:size-5'
-const menu = 'menu relative shrink-0'
+const menu = 'relative z-[8] shrink-0'
+const docStack = 'mx-auto max-w-[46rem] px-7 pt-5 pb-12'
+const docTitle = 'm-0 font-display text-[1.6rem] text-ink'
+const docList = 'm-0 flex list-none flex-col gap-[0.45rem] p-0'
+const docLink =
+  'flex w-full cursor-pointer flex-col items-start gap-[0.15rem] rounded-md border border-ink/10 bg-surface px-[0.85rem] py-[0.7rem] text-left font-[inherit] text-ink shadow-card hover:-translate-y-px hover:shadow-lift [&_strong]:font-display [&_strong]:text-[0.95rem] [&_span]:text-[0.78rem] [&_span]:text-ink-soft'
+const relatedLink =
+  'flex w-full cursor-pointer flex-col items-start gap-[0.1rem] rounded-sm border border-chip-status-border bg-chip-status px-[0.55rem] py-[0.15rem] text-left font-[inherit] text-[0.78rem] text-chip-status-text [&_span]:text-[0.75rem] [&_span]:text-ink-soft'
+const graphOption =
+  'flex w-full cursor-pointer flex-col items-start gap-[0.05rem] rounded-sm border-0 bg-transparent px-2 py-[0.35rem] text-left font-[inherit] text-ink hover:bg-cream-deep [&.is-active]:bg-cream-deep [&_span]:max-w-full [&_span]:truncate [&_small]:text-[0.68rem] [&_small]:text-ink-soft'
 const popover =
   'absolute top-[calc(100%+6px)] right-0 z-[5] min-w-[17rem] rounded-md border border-ink/10 bg-surface p-1.5 shadow-panel'
 const popoverScroll = cn(popover, 'max-h-[min(60vh,22rem)] overflow-auto')
@@ -45,7 +54,7 @@ const iconOn = 'border-coral bg-[rgba(232,69,112,0.12)] text-coral-deep'
 const toolBtn =
   'inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent p-0 font-bold text-ink-soft hover:border-transparent hover:bg-transparent aria-pressed:text-coral-deep'
 const listItem =
-  'annotations-page-list__item mt-[0.02rem] mb-[0.02rem] ml-[var(--ann-indent)] box-border flex w-[calc(100%-var(--ann-indent))] min-w-0 cursor-pointer flex-row items-baseline justify-between gap-[0.55rem] rounded-md border-0 bg-transparent px-[var(--ann-pad-x)] py-[0.2rem] text-left font-[inherit] text-ink hover:bg-[rgba(42,36,56,0.045)] [&.is-active]:bg-[rgba(42,36,56,0.08)] [&.is-active]:shadow-none [&.is-active:hover]:bg-[rgba(42,36,56,0.08)] [&_small]:text-[0.68rem] [&_small]:text-coral-deep [&.is-active_span_span]:font-[650]'
+  'mt-[0.02rem] mb-[0.02rem] ml-[var(--ann-indent)] box-border flex w-[calc(100%-var(--ann-indent))] min-w-0 cursor-pointer flex-row items-baseline justify-between gap-[0.55rem] rounded-md border-0 bg-transparent px-[var(--ann-pad-x)] py-[0.2rem] text-left font-[inherit] text-ink hover:bg-[rgba(42,36,56,0.045)] [&.is-active]:bg-[rgba(42,36,56,0.08)] [&.is-active]:shadow-none [&.is-active:hover]:bg-[rgba(42,36,56,0.08)] [&_small]:text-[0.68rem] [&_small]:text-coral-deep [&.is-active_span_span]:font-[650]'
 const savePill =
   'inline-flex appearance-none items-center gap-[0.3rem] rounded-full border border-ink/16 bg-cream px-[0.55rem] py-[0.18rem] font-body text-[0.7rem] leading-[1.2] font-bold text-ink-soft shadow-none'
 const saveWarm = 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
@@ -53,12 +62,14 @@ const saveCool = 'border-chip-status-border bg-chip-status text-chip-status-text
 const propLabel = 'text-[0.8rem] font-[650] text-ink-soft'
 const topicChip =
   'cursor-pointer rounded-full border border-chip-status-border bg-chip-status px-[0.55rem] py-[0.15rem] font-[inherit] text-[0.78rem] text-chip-status-text'
-const docEditor =
-  '[&_.note-editor--document]:rounded-none [&_.note-editor--document]:border-0 [&_.note-editor--document]:bg-transparent [&_.note-editor--document_.note-editor__toolbar]:mb-2 [&_.note-editor--document_.note-editor__toolbar]:border-b [&_.note-editor--document_.note-editor__toolbar]:border-ink/10 [&_.note-editor--document_.note-editor__toolbar]:bg-transparent [&_.note-editor--document_.note-editor__shell]:max-h-none [&_.note-editor--document_.note-editor__shell]:min-h-[16rem] [&_.note-editor--document_.note-editor__input]:max-h-none [&_.note-editor--document_.note-editor__input]:min-h-[16rem] [&_.note-editor--document_.note-editor__input]:py-[0.35rem] [&_.note-editor--document_.note-editor__input]:pr-[0.35rem] [&_.note-editor--document_.note-editor__input]:pl-[1.85rem] [&_.note-editor--document_.note-editor__input]:text-base [&_.note-editor--document_.note-editor__input]:leading-[1.55]'
 const searchInList =
   'relative w-full min-w-0 max-w-none flex-none [&_input]:h-8 [&_input]:w-full [&_input]:rounded-full [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:py-0 [&_input]:pr-[0.85rem] [&_input]:pl-[2.15rem] [&_input]:text-[0.82rem] [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-find [&_svg]:pointer-events-none [&_svg]:absolute [&_svg]:top-1/2 [&_svg]:left-[0.7rem] [&_svg]:size-[0.9rem] [&_svg]:-translate-y-1/2 [&_svg]:opacity-55'
 const graphPanel =
-  'absolute top-[3.15rem] right-[0.65rem] z-[6] flex max-h-[calc(100%-4rem)] w-[min(16.5rem,calc(100%-1.3rem))] flex-col gap-[0.65rem] overflow-auto rounded-md border border-ink/10 bg-surface px-[0.85rem] py-3 text-[0.75rem] font-medium text-ink-soft shadow-lift [&_label]:grid [&_label]:grid-cols-[5.6rem_minmax(0,1fr)_auto] [&_label]:items-center [&_label]:gap-[0.45rem] [&_input[type=range]]:w-full [&_input[type=range]]:min-w-0 [&_input[type=range]]:accent-coral [&_label>span:last-child]:min-w-[1.6rem] [&_label>span:last-child]:text-right [&_label>span:last-child]:text-ink [&_label>span:last-child]:tabular-nums [&_.check]:grid-cols-[auto_1fr] [&_.check]:justify-start [&_.check_input]:accent-coral'
+  'absolute top-[3.15rem] right-[0.65rem] z-[6] flex max-h-[calc(100%-4rem)] w-[min(16.5rem,calc(100%-1.3rem))] flex-col gap-[0.65rem] overflow-auto rounded-md border border-ink/10 bg-surface px-[0.85rem] py-3 text-[0.75rem] font-medium text-ink-soft shadow-lift'
+const rangeLabel =
+  'grid grid-cols-[5.6rem_minmax(0,1fr)_auto] items-center gap-[0.45rem] [&_input]:w-full [&_input]:min-w-0 [&_input]:accent-coral [&>span:last-child]:min-w-[1.6rem] [&>span:last-child]:text-right [&>span:last-child]:text-ink [&>span:last-child]:tabular-nums'
+const checkLabel =
+  'grid grid-cols-[auto_1fr] items-center justify-start gap-[0.45rem] [&_input]:accent-coral'
 import { groupAnnotationsByTarget, groupAnnotationsByWeek } from '../utils/annotationGroups'
 import { buildAnnotationTree, openIdsForItem } from '../utils/annotationTree'
 import {
@@ -167,6 +178,7 @@ function AnnotationBranch({
           <button
             key={`${node.id}-${item.coursePath || 'local'}-${item.id}`}
             type="button"
+            data-annotation-item=""
             className={cn(listItem, isRowActive(item) && 'is-active')}
             title={parts.name}
             onClick={() => onOpen(item)}
@@ -533,7 +545,7 @@ function AnnotationsWorkspace({
   useEffect(() => {
     if (!graphQuery.trim()) return undefined
     const onPointerDown = (event) => {
-      if (event.target.closest?.('.annotations-graph-pane__finder')) return
+      if (event.target.closest?.('[data-graph-finder]')) return
       setGraphQuery('')
       setGraphQueryIndex(0)
     }
@@ -870,7 +882,7 @@ function AnnotationsWorkspace({
   const didScrollActive = useRef(false)
   useLayoutEffect(() => {
     if (didScrollActive.current || loading) return
-    const active = listItemsRef.current?.querySelector('.annotations-page-list__item.is-active')
+    const active = listItemsRef.current?.querySelector('[data-annotation-item].is-active')
     if (!active) return
     active.scrollIntoView({ block: 'center', inline: 'nearest' })
     didScrollActive.current = true
@@ -1552,7 +1564,8 @@ function AnnotationsWorkspace({
         }}
       >
         <aside
-          className="annotations-page-list relative flex min-h-0 min-w-0 flex-col border-r border-ink/10 bg-cream [--ann-chevron-gap:0.3rem] [--ann-chevron:0.7rem] [--ann-indent:calc(var(--ann-chevron)+var(--ann-chevron-gap))] [--ann-pad-x:0.35rem]"
+          className="relative flex min-h-0 min-w-0 flex-col border-r border-ink/10 bg-cream [--ann-chevron-gap:0.3rem] [--ann-chevron:0.7rem] [--ann-indent:calc(var(--ann-chevron)+var(--ann-chevron-gap))] [--ann-pad-x:0.35rem]"
+          data-annotations-list=""
           aria-label="Lista de anotaciones"
         >
           {!listCollapsed ? (
@@ -1758,9 +1771,9 @@ function AnnotationsWorkspace({
           ) : null}
         </aside>
 
-        <main className="annotations-doc-pane relative min-h-0 overflow-auto bg-white">
+        <main className="relative min-h-0 overflow-auto bg-white" data-annotations-doc="">
           {tagViewId ? (
-            <div className="mx-auto max-w-[46rem] px-7 pt-5 pb-12 [&_h2]:m-0 [&_h2]:font-display [&_h2]:text-[1.6rem] [&_h2]:text-ink [&_ul]:m-0 [&_ul]:flex [&_ul]:list-none [&_ul]:flex-col [&_ul]:gap-[0.45rem] [&_ul]:p-0 [&_button:not([class])]:flex [&_button:not([class])]:w-full [&_button:not([class])]:cursor-pointer [&_button:not([class])]:flex-col [&_button:not([class])]:items-start [&_button:not([class])]:gap-[0.15rem] [&_button:not([class])]:rounded-md [&_button:not([class])]:border [&_button:not([class])]:border-ink/10 [&_button:not([class])]:bg-surface [&_button:not([class])]:px-[0.85rem] [&_button:not([class])]:py-[0.7rem] [&_button:not([class])]:text-left [&_button:not([class])]:font-[inherit] [&_button:not([class])]:text-ink [&_button:not([class])]:shadow-card [&_button:not([class])]:hover:-translate-y-px [&_button:not([class])]:hover:shadow-lift [&_button:not([class])_strong]:font-display [&_button:not([class])_strong]:text-[0.95rem] [&_button:not([class])_span]:text-[0.78rem] [&_button:not([class])_span]:text-ink-soft">
+            <div className={docStack}>
               <div className="mb-[0.85rem] flex items-center justify-between gap-3 text-[0.78rem] font-bold text-ink-soft">
                 <button type="button" className={btnGhost} onClick={() => setTagViewId(null)}>
                   Volver
@@ -1778,10 +1791,10 @@ function AnnotationsWorkspace({
                   ) : null}
                 </span>
               </div>
-              <h2>{tagViewTitle}</h2>
+              <h2 className={docTitle}>{tagViewTitle}</h2>
               <p className="mt-1 mb-4 text-[0.82rem] text-ink-soft">Notas con este tag</p>
               {tagViewNotes.length ? (
-                <ul>
+                <ul className={docList}>
                   {tagViewNotes.map((item) => {
                     const courses = []
                     for (const anchor of item.anchors || []) {
@@ -1794,7 +1807,7 @@ function AnnotationsWorkspace({
                     }
                     return (
                       <li key={`${item.coursePath || 'local'}-${item.id}`}>
-                        <button type="button" onClick={() => openFinding(item)}>
+                        <button type="button" className={docLink} onClick={() => openFinding(item)}>
                           <strong>{displayName(item)}</strong>
                           {courses.length ? <span>{courses.join(' · ')}</span> : null}
                         </button>
@@ -1807,7 +1820,7 @@ function AnnotationsWorkspace({
               )}
             </div>
           ) : tagsManageOpen ? (
-            <div className="mx-auto max-w-[46rem] px-7 pt-5 pb-12 [&_h2]:m-0 [&_h2]:font-display [&_h2]:text-[1.6rem] [&_h2]:text-ink [&_ul]:m-0 [&_ul]:flex [&_ul]:list-none [&_ul]:flex-col [&_ul]:gap-[0.45rem] [&_ul]:p-0 [&_button:not([class])]:flex [&_button:not([class])]:w-full [&_button:not([class])]:cursor-pointer [&_button:not([class])]:flex-col [&_button:not([class])]:items-start [&_button:not([class])]:gap-[0.15rem] [&_button:not([class])]:rounded-md [&_button:not([class])]:border [&_button:not([class])]:border-ink/10 [&_button:not([class])]:bg-surface [&_button:not([class])]:px-[0.85rem] [&_button:not([class])]:py-[0.7rem] [&_button:not([class])]:text-left [&_button:not([class])]:font-[inherit] [&_button:not([class])]:text-ink [&_button:not([class])]:shadow-card [&_button:not([class])]:hover:-translate-y-px [&_button:not([class])]:hover:shadow-lift [&_button:not([class])_strong]:font-display [&_button:not([class])_strong]:text-[0.95rem] [&_button:not([class])_span]:text-[0.78rem] [&_button:not([class])_span]:text-ink-soft">
+            <div className={docStack}>
               <div className="mb-[0.85rem] flex items-center justify-between gap-3 text-[0.78rem] font-bold text-ink-soft">
                 <button
                   type="button"
@@ -1817,19 +1830,23 @@ function AnnotationsWorkspace({
                   Volver
                 </button>
               </div>
-              <h2>Tags</h2>
+              <h2 className={docTitle}>Tags</h2>
               <p className="mt-1 mb-4 text-[0.82rem] text-ink-soft">
                 Quitar un tag lo saca de todas las notas y de su texto.
               </p>
               {topics.length ? (
-                <ul className="[&_li]:flex [&_li]:items-center [&_li]:gap-2 [&_li>button:first-child]:min-w-0 [&_li>button:first-child]:flex-1">
+                <ul className={cn(docList, '[&_li]:flex [&_li]:items-center [&_li]:gap-2')}>
                   {topics.map((topic) => {
                     const count = topicUsage.get(topic.id) || 0
                     const useLabel =
                       count === 0 ? 'Sin notas' : count === 1 ? '1 nota' : `${count} notas`
                     return (
                       <li key={topic.id}>
-                        <button type="button" onClick={() => setTagViewId(topic.id)}>
+                        <button
+                          type="button"
+                          className={cn(docLink, 'min-w-0 flex-1')}
+                          onClick={() => setTagViewId(topic.id)}
+                        >
                           <strong>{topic.title}</strong>
                           <span>{useLabel}</span>
                         </button>
@@ -1851,13 +1868,13 @@ function AnnotationsWorkspace({
               )}
             </div>
           ) : !selected ? (
-            <div className="mx-auto mt-16 max-w-[28rem] text-center text-ink-soft [&_h2]:mb-2 [&_h2]:font-display [&_h2]:text-ink">
-              <h2>Selecciona una anotación</h2>
+            <div className="mx-auto mt-16 max-w-[28rem] text-center text-ink-soft">
+              <h2 className="mb-2 font-display text-ink">Selecciona una anotación</h2>
               <p>Abre una fila de la tabla o crea una nueva para editarla aquí.</p>
             </div>
           ) : (
             <>
-              <div className="sticky top-0 z-[2] flex w-full items-center justify-end gap-[0.4rem] bg-white px-0 pt-[0.2rem] pb-[0.15rem] [&_.menu]:z-[8] [&_.menu]:min-w-[11rem]">
+              <div className="sticky top-0 z-[2] flex w-full items-center justify-end gap-[0.4rem] bg-white px-0 pt-[0.2rem] pb-[0.15rem]">
                 <div className="ml-auto flex items-center justify-end gap-[0.4rem] pr-[0.15rem]">
                   {saveStatus !== 'idle' ? (
                     saveStatus === 'error' ? (
@@ -2049,7 +2066,7 @@ function AnnotationsWorkspace({
                   ) : null}
                 </div>
 
-                <div className="annotations-topics px-5 pb-3">
+                <div className="px-5 pb-3" data-annotation-topics="">
                   <span className={propLabel}>Temas</span>
                   <div className="mt-[0.35rem] flex flex-wrap items-center gap-[0.35rem]">
                     {draftTopics.map((title) => (
@@ -2077,7 +2094,7 @@ function AnnotationsWorkspace({
                       aria-label="Añadir tema"
                       onChange={(event) => setTopicQuery(event.target.value)}
                       onBlur={(event) => {
-                        if (event.relatedTarget?.closest?.('.annotations-topics')) return
+                        if (event.relatedTarget?.closest?.('[data-annotation-topics]')) return
                         if (topicQueryRef.current.trim()) addTopicTitle(topicQueryRef.current)
                       }}
                       onKeyDown={(event) => {
@@ -2099,7 +2116,7 @@ function AnnotationsWorkspace({
                   ) : null}
                 </div>
 
-                <div className={docEditor}>
+                <div>
                   <NoteEditor
                     key={`${selected.id}-${editorKey}`}
                     editorKey={`${selected.id}-${editorKey}`}
@@ -2122,12 +2139,12 @@ function AnnotationsWorkspace({
                 </div>
 
                 {related.length ? (
-                  <div className="px-5 pb-3 [&_ul]:m-0 [&_ul]:mt-[0.4rem] [&_ul]:flex [&_ul]:list-none [&_ul]:flex-col [&_ul]:gap-[0.35rem] [&_ul]:p-0 [&_button]:flex [&_button]:w-full [&_button]:cursor-pointer [&_button]:flex-col [&_button]:items-start [&_button]:gap-[0.1rem] [&_button]:rounded-sm [&_button]:border [&_button]:border-chip-status-border [&_button]:bg-chip-status [&_button]:px-[0.55rem] [&_button]:py-[0.15rem] [&_button]:text-left [&_button]:font-[inherit] [&_button]:text-[0.78rem] [&_button]:text-chip-status-text [&_button_span]:text-[0.75rem] [&_button_span]:text-ink-soft">
+                  <div className="px-5 pb-3">
                     <span className={propLabel}>Referencias vinculadas</span>
-                    <ul>
+                    <ul className="m-0 mt-[0.4rem] flex list-none flex-col gap-[0.35rem] p-0">
                       {related.map((finding) => (
                         <li key={finding.id}>
-                          <button type="button" onClick={() => onSelect?.(finding)}>
+                          <button type="button" className={relatedLink} onClick={() => onSelect?.(finding)}>
                             <strong>{noteTitle(finding)}</strong>
                             <span>
                               {(finding.anchors || [])
@@ -2204,7 +2221,7 @@ function AnnotationsWorkspace({
                   role="dialog"
                   aria-label="Ajustes de la gráfica"
                 >
-                  <label>
+                  <label className={rangeLabel}>
                     Profundidad
                     <input
                       type="range"
@@ -2217,7 +2234,7 @@ function AnnotationsWorkspace({
                     />
                     <span>{graphDepth}</span>
                   </label>
-                  <label>
+                  <label className={rangeLabel}>
                     Distancia
                     <input
                       type="range"
@@ -2229,7 +2246,7 @@ function AnnotationsWorkspace({
                       onChange={(event) => setLinkDistance(clampLinkDistance(event.target.value))}
                     />
                   </label>
-                  <label>
+                  <label className={rangeLabel}>
                     Tamaño
                     <input
                       type="range"
@@ -2241,7 +2258,7 @@ function AnnotationsWorkspace({
                       onChange={(event) => setNodeScale(clampNodeScale(event.target.value))}
                     />
                   </label>
-                  <label className="check">
+                  <label className={checkLabel}>
                     <input
                       type="checkbox"
                       checked={showArrows}
@@ -2249,7 +2266,7 @@ function AnnotationsWorkspace({
                     />
                     Flechas
                   </label>
-                  <label className="check">
+                  <label className={checkLabel}>
                     <input
                       type="checkbox"
                       checked={showLabels}
@@ -2258,7 +2275,7 @@ function AnnotationsWorkspace({
                     Nombres
                   </label>
                   {showLabels ? (
-                    <label>
+                    <label className={rangeLabel}>
                       Umbral
                       <input
                         type="range"
@@ -2272,7 +2289,7 @@ function AnnotationsWorkspace({
                       <span>{labelZoom.toFixed(2)}</span>
                     </label>
                   ) : null}
-                  <label className="check">
+                  <label className={checkLabel}>
                     <input
                       type="checkbox"
                       checked={showTags}
@@ -2280,7 +2297,7 @@ function AnnotationsWorkspace({
                     />
                     Tags
                   </label>
-                  <label className="check">
+                  <label className={checkLabel}>
                     <input
                       type="checkbox"
                       checked={showCourses}
@@ -2288,7 +2305,7 @@ function AnnotationsWorkspace({
                     />
                     Cursos
                   </label>
-                  <label className="check">
+                  <label className={checkLabel}>
                     <input
                       type="checkbox"
                       checked={showFiles}
@@ -2296,7 +2313,7 @@ function AnnotationsWorkspace({
                     />
                     Archivos
                   </label>
-                  <label className="check">
+                  <label className={checkLabel}>
                     <input
                       type="checkbox"
                       checked={showOrphans}
@@ -2320,7 +2337,7 @@ function AnnotationsWorkspace({
               ) : null}
             </div>
           </div>
-          <div className="annotations-graph-pane__finder relative px-3 pb-[0.35rem]">
+          <div className="relative px-3 pb-[0.35rem]" data-graph-finder="">
             <div className={searchInList}>
               <svg
                 className="pointer-events-none"
@@ -2367,7 +2384,7 @@ function AnnotationsWorkspace({
             {graphQuery.trim() ? (
               <ul
                 id="graph-node-results"
-                className="absolute top-[calc(100%-0.2rem)] right-3 left-3 z-[5] m-0 max-h-56 list-none overflow-auto rounded-md border border-ink/10 bg-surface p-1 shadow-lift [&_button]:flex [&_button]:w-full [&_button]:cursor-pointer [&_button]:flex-col [&_button]:items-start [&_button]:gap-[0.05rem] [&_button]:rounded-sm [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2 [&_button]:py-[0.35rem] [&_button]:text-left [&_button]:font-[inherit] [&_button]:text-ink [&_button]:hover:bg-cream-deep [&_button.is-active]:bg-cream-deep [&_button_span]:max-w-full [&_button_span]:truncate [&_button_small]:text-[0.68rem] [&_button_small]:text-ink-soft"
+                className="absolute top-[calc(100%-0.2rem)] right-3 left-3 z-[5] m-0 max-h-56 list-none overflow-auto rounded-md border border-ink/10 bg-surface p-1 shadow-lift"
                 role="listbox"
                 aria-label="Nodos"
                 onMouseDown={(event) => event.preventDefault()}
@@ -2381,7 +2398,7 @@ function AnnotationsWorkspace({
                           type="button"
                           role="option"
                           aria-selected={active}
-                          className={active ? 'is-active' : undefined}
+                          className={cn(graphOption, active && 'is-active')}
                           onMouseEnter={() => setGraphQueryIndex(index)}
                           onClick={() => focusGraphNode(node)}
                         >

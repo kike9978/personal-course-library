@@ -234,7 +234,8 @@ function CourseDetailPanel({
   onOpenCourse,
   onToggleInProcess,
   onGenerateProps,
-  onSearchCover
+  onSearchCover,
+  dock = false
 }) {
   const fallbackCover = absoluteAssetUrl(getCoverFallback())
   const [coverImg, setCoverImg] = useState(fallbackCover)
@@ -306,7 +307,11 @@ function CourseDetailPanel({
 
   return (
     <aside
-      className="detail-panel relative z-20 flex h-full min-h-0 w-detail max-w-[40vw] shrink-0 animate-slide-in flex-col self-stretch overflow-hidden border-l border-ink/10 bg-[#f7f2ec] bg-linear-to-b from-[#fffaf5] to-[#f7f2ec] motion-reduce:animate-none max-[900px]:max-h-[45vh] max-[900px]:w-full max-[900px]:max-w-none max-[900px]:flex-none max-[900px]:border-t max-[900px]:border-l-0 max-[900px]:border-ink/10"
+      className={cn(
+        'relative z-20 flex h-full min-h-0 w-detail max-w-[40vw] shrink-0 animate-slide-in flex-col self-stretch overflow-hidden border-l border-ink/10 bg-[#f7f2ec] bg-linear-to-b from-[#fffaf5] to-[#f7f2ec] motion-reduce:animate-none max-[900px]:max-h-[45vh] max-[900px]:w-full max-[900px]:max-w-none max-[900px]:flex-none max-[900px]:border-t max-[900px]:border-l-0 max-[900px]:border-ink/10',
+        dock &&
+          'max-w-none flex-none max-[900px]:w-[min(100vw,300px)] max-[900px]:max-w-none max-[900px]:border-t-0 max-[900px]:border-l max-[800px]:!w-full max-[800px]:max-h-[45vh] max-[800px]:border-t max-[800px]:border-l-0'
+      )}
       aria-label="Detalle del curso"
     >
       <div className="relative aspect-[16/7] max-h-36 shrink-0 overflow-hidden border-b border-ink/10 bg-cream-deep">

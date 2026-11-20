@@ -26,7 +26,7 @@ const railMark =
 const panel =
   'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none bg-transparent shadow-none'
 const embeddedAnnotations =
-  'flex min-h-0 min-w-0 flex-1 overflow-hidden [&_header]:px-[0.7rem] [&_header]:py-[0.55rem] [&_header_h1]:text-[1.05rem] [&_header+div]:!flex [&_header+div]:!flex-col [&_header+div]:!overflow-auto [&_.annotations-page-list]:max-h-[38%] [&_.annotations-page-list]:min-h-[7.5rem] [&_.annotations-page-list]:flex-none [&_.annotations-page-list]:overflow-auto [&_.annotations-doc-pane]:min-h-56 [&_.annotations-doc-pane]:flex-[1_0_14rem] [&_header+div>aside:last-child]:min-h-48 [&_header+div>aside:last-child]:flex-[0_0_12rem] [&_[role=separator]]:hidden'
+  'flex min-h-0 min-w-0 flex-1 overflow-hidden [&_header]:px-[0.7rem] [&_header]:py-[0.55rem] [&_header_h1]:text-[1.05rem] [&_header+div]:!flex [&_header+div]:!flex-col [&_header+div]:!overflow-auto [&_[data-annotations-list]]:max-h-[38%] [&_[data-annotations-list]]:min-h-[7.5rem] [&_[data-annotations-list]]:flex-none [&_[data-annotations-list]]:overflow-auto [&_[data-annotations-doc]]:min-h-56 [&_[data-annotations-doc]]:flex-[1_0_14rem] [&_header+div>aside:last-child]:min-h-48 [&_header+div>aside:last-child]:flex-[0_0_12rem] [&_[role=separator]]:hidden'
 
 const PANEL_MIN = 260
 const PANEL_MAX = 720
@@ -49,7 +49,7 @@ function readPanelWidth() {
 }
 
 function roomMaxWidth(el) {
-  const room = el?.closest('.course-room__body')
+  const room = el?.closest('[data-course-room]')
   return (room?.clientWidth || PANEL_MAX) - 420
 }
 

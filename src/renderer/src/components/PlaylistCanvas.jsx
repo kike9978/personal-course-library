@@ -84,9 +84,9 @@ const titlePill =
 const courseCard =
   'relative flex h-full items-center gap-2 rounded-md border border-ink/10 bg-surface py-[0.35rem] pr-[0.4rem] pl-2 shadow-card cursor-grab [&>label]:absolute [&>label]:top-[0.35rem] [&>label]:left-[0.35rem] [&>label]:z-[4]'
 const courseCover =
-  'flex size-[52px] shrink-0 items-center justify-center overflow-hidden rounded-sm bg-cream-deep [&_img]:size-full [&_img]:object-cover [&_img.is-mark]:size-[22px] [&_img.is-mark]:object-contain'
+  'flex size-[52px] shrink-0 items-center justify-center overflow-hidden rounded-sm bg-cream-deep'
 const rowCover =
-  'flex size-[42px] shrink-0 items-center justify-center overflow-hidden rounded-sm bg-cream-deep [&_img]:size-full [&_img]:object-cover [&_img.is-mark]:size-[22px] [&_img.is-mark]:object-contain'
+  'flex size-[42px] shrink-0 items-center justify-center overflow-hidden rounded-sm bg-cream-deep'
 const statusMark =
   'pointer-events-none absolute z-[2] hidden items-center rounded-full border border-chip-status-border bg-chip-status px-[0.65rem] py-[0.28rem] text-[0.7rem] font-extrabold tracking-[0.03em] text-chip-status-text uppercase'
 const pickBox =
@@ -102,9 +102,7 @@ const chipSelect =
 const filterPill =
   'inline-flex cursor-pointer items-center gap-[0.4rem] rounded-full border border-ink/10 bg-surface px-[0.65rem] py-[0.28rem] text-[0.75rem] font-bold text-ink shadow-none aria-pressed:bg-teal aria-pressed:text-white'
 const board =
-  'flex h-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(232,69,112,0.05),transparent_40%),radial-gradient(circle_at_88%_8%,rgba(61,122,122,0.05),transparent_38%),var(--color-cream-deep)] [&_.react-flow]:size-full [&_.react-flow]:bg-transparent [&_.react-flow__node-playlist]:cursor-default [&_.react-flow__node-playlist]:overflow-visible [&_.react-flow__node-playlist]:rounded-none [&_.react-flow__node-playlist]:border-0 [&_.react-flow__node-playlist]:bg-transparent [&_.react-flow__node-playlist]:p-0 [&_.react-flow__node-playlist]:text-left [&_.react-flow__node-playlist]:text-inherit [&_.react-flow__node-playlist]:shadow-none [&_.react-flow__node-course]:overflow-visible [&_.react-flow__node-course]:rounded-none [&_.react-flow__node-course]:border-0 [&_.react-flow__node-course]:bg-transparent [&_.react-flow__node-course]:p-0 [&_.react-flow__node-course]:text-left [&_.react-flow__node-course]:text-inherit [&_.react-flow__node-course]:shadow-none [&_.react-flow__node-course.selected_article]:shadow-[0_0_0_2px_var(--color-coral),var(--shadow-card)] [&_.react-flow__edge]:pointer-events-none [&_.react-flow__controls]:overflow-hidden [&_.react-flow__controls]:rounded-md [&_.react-flow__controls]:border [&_.react-flow__controls]:border-ink/10 [&_.react-flow__controls]:shadow-card [&_.react-flow__controls-button]:border-b-ink/10 [&_.react-flow__controls-button]:bg-surface [&_.react-flow__controls-button]:fill-ink [&_.react-flow__controls-button:hover]:bg-cream [&_.react-flow__minimap]:overflow-hidden [&_.react-flow__minimap]:rounded-md [&_.react-flow__minimap]:border [&_.react-flow__minimap]:border-ink/10 [&_.react-flow__minimap]:bg-surface [&_.react-flow__minimap]:shadow-card [&_.react-flow__attribution]:bg-transparent [&_.react-flow__attribution]:text-ink-soft [&_.detail-panel]:w-detail [&_.detail-panel]:max-w-none [&_.detail-panel]:flex-none [&_.detail-panel]:border-t-0 [&_.detail-panel]:border-l [&_.detail-panel]:border-ink/10 max-[900px]:[&_.detail-panel]:w-[min(100vw,300px)] max-[800px]:[&_.detail-panel]:!w-full max-[800px]:[&_.detail-panel]:max-h-[45vh] max-[800px]:[&_.detail-panel]:border-t max-[800px]:[&_.detail-panel]:border-l-0'
-const boardFilters =
-  'relative z-[4] flex min-w-0 flex-wrap items-center gap-2 border-b border-ink/10 bg-surface-muted px-3 py-[0.55rem] [&_.search-field]:max-w-[22rem] [&_.search-field]:min-w-[9rem] [&_.search-field]:flex-[0_1_18rem] [&_.search-field_input]:h-8 [&_.search-field_input]:py-0 [&_.search-field_input]:pr-[0.85rem] [&_.search-field_input]:pl-[2.15rem] [&_.search-field_input]:text-[0.8125rem] [&_.search-field__icon]:left-3 [&_.header-programs]:flex-auto'
+  'flex h-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(232,69,112,0.05),transparent_40%),radial-gradient(circle_at_88%_8%,rgba(61,122,122,0.05),transparent_38%),var(--color-cream-deep)] [&_.react-flow]:size-full [&_.react-flow]:bg-transparent [&_.react-flow\\_\\_node-playlist]:cursor-default [&_.react-flow\\_\\_node-playlist]:overflow-visible [&_.react-flow\\_\\_node-playlist]:rounded-none [&_.react-flow\\_\\_node-playlist]:border-0 [&_.react-flow\\_\\_node-playlist]:bg-transparent [&_.react-flow\\_\\_node-playlist]:p-0 [&_.react-flow\\_\\_node-playlist]:text-left [&_.react-flow\\_\\_node-playlist]:text-inherit [&_.react-flow\\_\\_node-playlist]:shadow-none [&_.react-flow\\_\\_node-course]:overflow-visible [&_.react-flow\\_\\_node-course]:rounded-none [&_.react-flow\\_\\_node-course]:border-0 [&_.react-flow\\_\\_node-course]:bg-transparent [&_.react-flow\\_\\_node-course]:p-0 [&_.react-flow\\_\\_node-course]:text-left [&_.react-flow\\_\\_node-course]:text-inherit [&_.react-flow\\_\\_node-course]:shadow-none [&_.react-flow\\_\\_node-course.selected_article]:shadow-[0_0_0_2px_var(--color-coral),var(--shadow-card)] [&_.react-flow\\_\\_edge]:pointer-events-none [&_.react-flow\\_\\_controls]:overflow-hidden [&_.react-flow\\_\\_controls]:rounded-md [&_.react-flow\\_\\_controls]:border [&_.react-flow\\_\\_controls]:border-ink/10 [&_.react-flow\\_\\_controls]:shadow-card [&_.react-flow\\_\\_controls-button]:border-b-ink/10 [&_.react-flow\\_\\_controls-button]:bg-surface [&_.react-flow\\_\\_controls-button]:fill-ink [&_.react-flow\\_\\_controls-button:hover]:bg-cream [&_.react-flow\\_\\_minimap]:overflow-hidden [&_.react-flow\\_\\_minimap]:rounded-md [&_.react-flow\\_\\_minimap]:border [&_.react-flow\\_\\_minimap]:border-ink/10 [&_.react-flow\\_\\_minimap]:bg-surface [&_.react-flow\\_\\_minimap]:shadow-card [&_.react-flow\\_\\_attribution]:bg-transparent [&_.react-flow\\_\\_attribution]:text-ink-soft '
 
 function heightToStore(height, count, bigCover) {
   if (!bigCover) return height
@@ -185,7 +183,7 @@ function applyCoverWidth(nodes, playlist, width, playlists) {
 function forwardBoardDrag(id, event) {
   if (event.button !== 0) return
   const handle = document.querySelector(
-    `.playlist-frame[data-playlist-id="${CSS.escape(id)}"] .playlist-frame__drag`
+    `[data-playlist-id="${CSS.escape(id)}"] [data-playlist-drag]`
   )
   if (!handle) return
   event.stopPropagation()
@@ -291,7 +289,6 @@ function PlaylistNode({ id, data }) {
   return (
     <div
       className={cn(
-        'playlist-frame',
         frame,
         current &&
           'shadow-[inset_3px_0_0_var(--color-coral),0_0_0_2px_rgba(232,69,112,0.35),var(--shadow-card)]',
@@ -310,7 +307,7 @@ function PlaylistNode({ id, data }) {
         lineClassName=""
         handleClassName="size-2 rounded-[2px] border border-coral bg-surface"
       />
-      <header className="playlist-frame__drag flex h-14 cursor-grab items-center gap-[0.4rem] pr-[0.65rem] pl-[0.4rem]" title={data.why || undefined}>
+      <header className="flex h-14 cursor-grab items-center gap-[0.4rem] pr-[0.65rem] pl-[0.4rem]" data-playlist-drag="" title={data.why || undefined}>
         <button
           type="button"
           className={cn(frameIcon, 'nodrag nopan', data.collapsed && 'is-collapsed')}
@@ -464,14 +461,30 @@ function useCourseCover(coursePath, hasCover, coverStamp, eager) {
   }
 }
 
-function CourseCover({ coursePath, hasCover, coverStamp, className, eager = false }) {
+function CourseCover({ coursePath, hasCover, coverStamp, className, markClassName, fill = false, eager = false }) {
   const { ref, src, onError } = useCourseCover(coursePath, hasCover, coverStamp, eager)
   return (
     <div ref={ref} className={className}>
       {src ? (
-        <img src={src} alt="" draggable={false} onError={onError} />
+        <img
+          className={fill ? 'absolute inset-0 size-full object-cover' : 'size-full object-cover'}
+          src={src}
+          alt=""
+          draggable={false}
+          onError={onError}
+        />
       ) : (
-        <img className="is-mark" src={brandMark} alt="" draggable={false} />
+        <img
+          className={cn(
+            fill
+              ? 'absolute top-1/2 left-1/2 size-12 -translate-x-1/2 -translate-y-1/2 object-contain'
+              : 'size-[22px] object-contain',
+            markClassName
+          )}
+          src={brandMark}
+          alt=""
+          draggable={false}
+        />
       )}
     </div>
   )
@@ -494,8 +507,7 @@ function CourseNode({ data }) {
         data.inProcess && 'shadow-[inset_3px_0_0_var(--color-coral),var(--shadow-card)]',
         data.continues &&
           "after:absolute after:top-full after:left-[1.35rem] after:h-[var(--playlist-gap)] after:w-[1.5px] after:bg-[rgba(42,36,56,0.38)] after:content-['']",
-        data.bigCover &&
-          'flex-col items-stretch gap-0 p-0 [&_.cover]:h-auto [&_.cover]:w-full [&_.cover]:min-h-0 [&_.cover]:flex-1 [&_.cover]:rounded-t-[13px] [&_.cover_img.is-mark]:size-12 [&_.actions]:absolute [&_.actions]:top-[0.4rem] [&_.actions]:right-[0.4rem] [&_.actions]:flex-row [&_.text]:flex-none [&_.text]:px-[0.6rem] [&_.text]:pt-[0.4rem] [&_.text]:pb-[0.5rem]',
+        data.bigCover && 'flex-col items-stretch gap-0 p-0',
         data.bigCover &&
           data.continues &&
           'after:left-1/2 after:-ml-[0.75px]',
@@ -514,7 +526,11 @@ function CourseNode({ data }) {
         coursePath={data.missing ? '' : data.libraryPath || data.coursePath}
         hasCover={data.hasCover}
         coverStamp={data.coverStamp}
-        className={cn(courseCover, 'cover')}
+        className={cn(
+          courseCover,
+          data.bigCover && 'h-auto w-full min-h-0 flex-1 rounded-t-[13px]'
+        )}
+        markClassName={data.bigCover ? 'size-12' : undefined}
         eager
       />
       {data.inProcess ? (
@@ -522,13 +538,18 @@ function CourseNode({ data }) {
           En curso
         </span>
       ) : null}
-      <div className="text min-w-0 flex-1 [&_h3]:m-0 [&_h3]:truncate [&_h3]:font-display [&_h3]:text-[0.9rem] [&_h3]:font-extrabold [&_p]:m-0 [&_p]:mt-[0.1rem] [&_p]:truncate [&_p]:text-[0.72rem] [&_p]:text-ink-soft">
+      <div
+        className={cn(
+          'min-w-0 flex-1 [&_h3]:m-0 [&_h3]:truncate [&_h3]:font-display [&_h3]:text-[0.9rem] [&_h3]:font-extrabold [&_p]:m-0 [&_p]:mt-[0.1rem] [&_p]:truncate [&_p]:text-[0.72rem] [&_p]:text-ink-soft',
+          data.bigCover && 'flex-none px-[0.6rem] pt-[0.4rem] pb-[0.5rem]'
+        )}
+      >
         <h3 title={data.why ? `${data.title}. ${data.why}` : data.title}>{data.title}</h3>
         {data.missing ? (
           <p title={meta}>{meta}</p>
         ) : (
-          <p className="flex min-w-0 items-center gap-[0.2rem] [&_.institution-logo]:block" title={meta}>
-            <InstitutionMark institution={data.institution} nameClassName="institution-name" />
+          <p className="flex min-w-0 items-center gap-[0.2rem]" title={meta}>
+            <InstitutionMark institution={data.institution} />
             {typeof data.percent === 'number' ? (
               <span>{`${data.institution ? ' · ' : ''}${data.percent}%`}</span>
             ) : null}
@@ -536,7 +557,12 @@ function CourseNode({ data }) {
           </p>
         )}
       </div>
-      <div className="actions nodrag nopan flex flex-col gap-[0.2rem]">
+      <div
+        className={cn(
+          'nodrag nopan flex flex-col gap-[0.2rem]',
+          data.bigCover && 'absolute top-[0.4rem] right-[0.4rem] flex-row'
+        )}
+      >
         <button
           type="button"
           className={cn(frameIcon, data.bigCover && 'bg-surface')}
@@ -811,7 +837,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
     handle.setPointerCapture(event.pointerId)
     const startX = event.clientX
     const startWidth = sidebarWidthRef.current
-    const body = handle.closest('.playlist-board__body')
+    const body = handle.closest('[data-playlist-body]')
     const max = (body?.clientWidth || SIDEBAR_MAX) - 240
 
     const onMove = (moveEvent) => {
@@ -829,7 +855,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
     const step = event.shiftKey ? 48 : 16
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
     event.preventDefault()
-    const body = event.currentTarget.closest('.playlist-board__body')
+    const body = event.currentTarget.closest('[data-playlist-body]')
     const max = (body?.clientWidth || SIDEBAR_MAX) - 240
     const delta = event.key === 'ArrowRight' ? step : -step
     setSidebarWidth((width) => clampSidebar(width + delta, max))
@@ -2094,7 +2120,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
             </button>
           </div>
         </header>
-        <div className="playlist-board__body flex min-h-0 flex-1 max-[800px]:flex-col">
+        <div className="flex min-h-0 flex-1 max-[800px]:flex-col" data-playlist-body="">
           <aside className="relative flex w-[var(--sidebar-w,320px)] shrink-0 flex-col gap-3 min-h-0 border-r border-ink/10 bg-white/45 px-[0.85rem] pt-[0.9rem] pb-4 max-[800px]:max-h-56 max-[800px]:w-full max-[800px]:border-r-0 max-[800px]:border-b">
             <div>
               <div className="flex items-center justify-between gap-2">
@@ -2205,7 +2231,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
               className={cn(
                 'flex min-h-0 flex-1 flex-col gap-[0.45rem] overflow-auto pr-[0.15rem]',
                 bigCover &&
-                  'grid auto-rows-max grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] content-start items-start [&_.row]:relative [&_.row]:h-max [&_.row]:min-h-min [&_.row]:flex-col [&_.row]:items-stretch [&_.row]:gap-0 [&_.row]:self-start [&_.row]:overflow-hidden [&_.row]:p-0 [&_.row>.pick]:absolute [&_.row>.pick]:top-[0.35rem] [&_.row>.pick]:left-[0.35rem] [&_.row>.pick]:z-[4] [&_.row-cover]:relative [&_.row-cover]:aspect-[16/10] [&_.row-cover]:h-auto [&_.row-cover]:w-full [&_.row-cover]:flex-none [&_.row-cover]:rounded-none [&_.row-cover_img]:absolute [&_.row-cover_img]:inset-0 [&_.row-cover_img]:size-full [&_.row-cover_img]:object-cover [&_.row-cover_img.is-mark]:inset-auto [&_.row-cover_img.is-mark]:top-1/2 [&_.row-cover_img.is-mark]:left-1/2 [&_.row-cover_img.is-mark]:size-12 [&_.row-cover_img.is-mark]:-translate-x-1/2 [&_.row-cover_img.is-mark]:-translate-y-1/2 [&_.row-cover_img.is-mark]:object-contain [&_.row-text]:flex-none [&_.row-text]:px-[0.65rem] [&_.row-text]:pt-[0.45rem] [&_.row-text]:pb-[0.55rem] [&_.row-title]:line-clamp-2 [&_.row-title]:whitespace-normal [&_.row-add]:absolute [&_.row-add]:top-[0.45rem] [&_.row-add]:right-[0.45rem] [&_.row-add]:bg-surface [&_.mark]:top-[0.45rem] [&_.mark]:left-[0.45rem] [&_.mark]:inline-flex'
+                  'grid auto-rows-max grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] content-start items-start'
               )}
               role="list"
             >
@@ -2219,7 +2245,9 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                     <div
                       key={course.path}
                       className={cn(
-                        'row flex shrink-0 cursor-grab items-center gap-[0.45rem] rounded-md border border-ink/10 bg-surface px-2 py-[0.45rem] shadow-card',
+                        'flex shrink-0 cursor-grab items-center gap-[0.45rem] rounded-md border border-ink/10 bg-surface px-2 py-[0.45rem] shadow-card',
+                        bigCover &&
+                          'relative h-max min-h-min flex-col items-stretch gap-0 self-start overflow-hidden p-0',
                         member && 'shadow-[inset_3px_0_0_var(--color-teal),var(--shadow-card)]',
                         detailPath === course.path &&
                           'shadow-[inset_3px_0_0_var(--color-coral),var(--shadow-card)]',
@@ -2246,7 +2274,10 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                       }}
                     >
                       <CoursePickBox
-                        className={cn(pickBox, 'pick')}
+                        className={cn(
+                          pickBox,
+                          bigCover && 'absolute top-[0.35rem] left-[0.35rem] z-[4]'
+                        )}
                         checked={pickedCourses.has(course.path)}
                         label={`Seleccionar ${course.title || course.path}`}
                         onPick={(pick) => toggleCoursePick(course.path, pick)}
@@ -2255,16 +2286,30 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                         coursePath={course.path}
                         hasCover={course.hasCover}
                         coverStamp={course.coverStamp}
-                        className={cn(rowCover, 'row-cover')}
+                        className={cn(
+                          rowCover,
+                          bigCover && 'relative aspect-[16/10] h-auto w-full flex-none rounded-none'
+                        )}
+                        fill={bigCover}
                       />
                       {course.isInProcess ? (
-                        <span className={cn(statusMark, 'mark')}>En curso</span>
+                        <span className={cn(statusMark, bigCover && 'top-[0.45rem] left-[0.45rem] inline-flex')}>En curso</span>
                       ) : null}
-                      <div className="row-text flex min-w-0 flex-1 flex-col gap-[0.1rem]">
-                        <span className="row-title truncate font-display text-[0.86rem] font-extrabold">
+                      <div
+                        className={cn(
+                          'flex min-w-0 flex-1 flex-col gap-[0.1rem]',
+                          bigCover && 'flex-none px-[0.65rem] pt-[0.45rem] pb-[0.55rem]'
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'truncate font-display text-[0.86rem] font-extrabold',
+                            bigCover && 'line-clamp-2 whitespace-normal'
+                          )}
+                        >
                           {course.title || course.path}
                         </span>
-                        <span className="truncate text-[0.72rem] text-ink-soft [&_.institution-logo]:block">
+                        <span className="truncate text-[0.72rem] text-ink-soft">
                           {member ? (
                             'En esta lista'
                           ) : count > 0 ? (
@@ -2272,7 +2317,6 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                           ) : (
                             <InstitutionMark
                               institution={course.institution}
-                              nameClassName="institution-name"
                               emptyLabel="Arrastrar"
                             />
                           )}
@@ -2280,7 +2324,10 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                       </div>
                       <button
                         type="button"
-                        className="row-add shrink-0 cursor-pointer rounded-sm border border-ink/10 bg-cream px-2 py-[0.28rem] text-[0.72rem] font-bold text-ink disabled:cursor-default disabled:opacity-45"
+                        className={cn(
+                          'shrink-0 cursor-pointer rounded-sm border border-ink/10 bg-cream px-2 py-[0.28rem] text-[0.72rem] font-bold text-ink disabled:cursor-default disabled:opacity-45',
+                          bigCover && 'absolute top-[0.45rem] right-[0.45rem] bg-surface'
+                        )}
                         disabled={member}
                         onMouseDown={(event) => event.stopPropagation()}
                         onClick={() => addCourse(null, course.path)}
@@ -2308,7 +2355,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <CourseFilterBar
               idPrefix="board"
-              className={boardFilters}
+              board
               showSearch
               query={boardQuery}
               onQueryChange={setBoardQuery}
@@ -2401,6 +2448,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
           </div>
           {detailCourse ? (
             <CourseDetailPanel
+              dock
               course={detailCourse}
               onClose={() => setDetailPath(null)}
               onOpenCourse={(course, target) => onOpenCourse?.(course, target)}

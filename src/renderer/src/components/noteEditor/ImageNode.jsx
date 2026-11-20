@@ -214,7 +214,7 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
   }
 
   return (
-    <figure className="note-editor__figure group m-0" data-image-key={nodeKey}>
+    <figure className="group m-0" data-image-key={nodeKey}>
       <button
         type="button"
         className="m-0 block w-full cursor-pointer border-0 bg-transparent p-0 text-left"

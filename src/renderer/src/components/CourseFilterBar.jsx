@@ -57,6 +57,7 @@ const popoverSelect =
   'rounded-sm border border-border-strong bg-surface px-2 py-1.5 text-[0.85rem] font-semibold tracking-normal text-ink normal-case focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus'
 
 function CourseFilterBar({
+  board = false,
   idPrefix = 'library',
   className = '',
   showSearch = false,
@@ -95,7 +96,6 @@ function CourseFilterBar({
   const rateId = `${idPrefix}-min-rate-filter`
   const themeLabelId = `${idPrefix}-theme-filter-label`
   const passed = className || ''
-  const board = /\bcourse-filter-bar--board\b/.test(passed) || passed.includes('[&_.search-field]')
   const extraClass = passed.replace(/\bcourse-filter-bar(--board)?\b/g, '').trim()
 
   const extraFilterCount =
@@ -177,7 +177,7 @@ function CourseFilterBar({
       {showSearch ? (
         <div
           className={cn(
-            'search-field relative',
+            'relative',
             board
               ? 'min-w-[9rem] max-w-[22rem] flex-[0_1_18rem]'
               : 'min-w-[200px] max-w-[420px] flex-1'
@@ -185,7 +185,6 @@ function CourseFilterBar({
         >
           <svg
             className={cn(
-              'search-field__icon',
               'pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 opacity-55',
               board ? 'left-3' : 'left-[0.95rem]'
             )}
@@ -229,7 +228,6 @@ function CourseFilterBar({
           <span className="h-[18px] w-px shrink-0 bg-border-strong" aria-hidden="true" />
           <div
             className={cn(
-              'header-programs',
               programsRail,
               programsOverflow &&
                 'pr-7 [mask-image:linear-gradient(90deg,#000_0,#000_calc(100%-28px),transparent)] [-webkit-mask-image:linear-gradient(90deg,#000_0,#000_calc(100%-28px),transparent)]'
@@ -251,7 +249,7 @@ function CourseFilterBar({
           </div>
         </>
       ) : (
-        <span className={cn('header-programs', programsRail, 'min-w-0 p-0')} />
+        <span className={cn(programsRail, 'min-w-0 p-0')} />
       )}
 
       <div className="relative shrink-0" ref={filtersRef}>

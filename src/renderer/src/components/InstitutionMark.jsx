@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
+import { cn } from '../ui/cn'
 import { absoluteAssetUrl, getInstitutionLogo, hasInstitutionLogo } from '../utils/images'
 
 const institutionName = 'text-xs font-bold text-coral-deep'
 
-export function InstitutionMark({ institution, nameClassName, emptyLabel = null }) {
+export function InstitutionMark({ institution, nameClassName, markClassName, emptyLabel = null }) {
   const specific = hasInstitutionLogo(institution)
   const src = specific ? absoluteAssetUrl(getInstitutionLogo(institution)) : ''
   const [failed, setFailed] = useState(false)
   const nameClass =
-    !nameClassName || nameClassName === 'institution-name' ? institutionName : nameClassName
+    !nameClassName ? institutionName : nameClassName
 
   useEffect(() => {
     setFailed(false)
@@ -17,7 +18,10 @@ export function InstitutionMark({ institution, nameClassName, emptyLabel = null 
   if (specific && src && !failed) {
     return (
       <img
-        className="institution-logo max-h-[1.1rem] max-w-[4.5rem] object-contain object-left"
+        className={cn(
+          'max-h-[1.1rem] max-w-[4.5rem] object-contain object-left',
+          markClassName
+        )}
         src={src}
         alt={institution || ''}
         title={institution || undefined}

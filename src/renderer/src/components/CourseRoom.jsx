@@ -13,9 +13,6 @@ import Loader from './Loader'
 import { cn } from '../ui/cn'
 import { iconBtn, iconBtnGhost } from '../ui/classes'
 
-const roomHeadingLogo =
-  '[&_.institution-logo]:mt-[0.12rem] [&_.institution-logo]:block [&_.institution-logo]:max-h-[1.45rem] [&_.institution-logo]:max-w-[8.5rem] [&_.institution-logo]:object-contain [&_.institution-logo]:object-[left_center]'
-
 const roomPopoverItem =
   'flex w-full cursor-pointer flex-col items-start gap-[2px] rounded-[8px] border-0 bg-transparent px-[10px] py-2 text-left text-[0.875rem] font-bold text-ink hover:enabled:bg-ink/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral disabled:cursor-not-allowed disabled:opacity-50'
 
@@ -1213,7 +1210,7 @@ function CourseRoom({
         <button type="button" className={cn(iconBtn, iconBtnGhost)} onClick={onBack}>
           ← {backLabel}
         </button>
-        <div className={cn('flex min-w-0 flex-1 flex-col justify-center gap-[0.12rem]', roomHeadingLogo)}>
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-[0.12rem]">
           <h1
             className="m-0 overflow-hidden font-display text-[1.15rem] leading-[1.15] font-extrabold text-ellipsis whitespace-nowrap"
             title={[course.title, course.instructor].filter(Boolean).join(' ')}
@@ -1223,6 +1220,7 @@ function CourseRoom({
           </h1>
           <InstitutionMark
             institution={course.institution}
+            markClassName="mt-[0.12rem] block max-h-[1.45rem] max-w-[8.5rem] object-[left_center]"
             nameClassName="mt-[0.12rem] block overflow-hidden font-display text-[1.02rem] leading-none font-extrabold tracking-[0.06em] text-ellipsis whitespace-nowrap text-[#ff3b1f] uppercase"
           />
         </div>
@@ -1305,8 +1303,9 @@ function CourseRoom({
         </div>
       ) : (
         <div
+          data-course-room=""
           className={cn(
-            'course-room__body grid min-h-0 flex-1 items-stretch gap-[0.7rem] overflow-hidden p-[0.7rem]',
+            'grid min-h-0 flex-1 items-stretch gap-[0.7rem] overflow-hidden p-[0.7rem]',
             sidebarOpen
               ? 'grid-cols-[minmax(260px,340px)_1fr] max-[900px]:grid-cols-1 max-[900px]:grid-rows-[minmax(140px,28vh)_minmax(0,1fr)]'
               : 'grid-cols-[2.75rem_minmax(0,1fr)] max-[900px]:grid-cols-1 max-[900px]:grid-rows-[2.75rem_minmax(0,1fr)]'
@@ -1354,9 +1353,10 @@ function CourseRoom({
             />
           </aside>
           <div className="flex min-h-0 min-w-0 overflow-hidden rounded-[16px] bg-surface shadow-card max-[900px]:flex-col">
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent [&_.project-panel]:[background:var(--color-surface)]">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
             {panelMode === 'project' ? (
               <ProjectPanel
+                plain
                 coursePath={coursePath}
                 project={creatingProject ? projectDraft : selectedProject}
                 sections={tree?.sections || []}

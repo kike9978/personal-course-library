@@ -17,9 +17,6 @@ const playIconBtn =
 
 const playIconDone = 'border-[rgba(46,160,140,0.55)] bg-[rgba(46,160,140,0.22)] text-[#d7fff4]'
 
-const playerHeaderIcon =
-  '[&_.icon-btn]:inline-flex [&_.icon-btn]:min-h-0 [&_.icon-btn]:cursor-pointer [&_.icon-btn]:items-center [&_.icon-btn]:justify-center [&_.icon-btn]:gap-[0.4rem] [&_.icon-btn]:rounded-full [&_.icon-btn]:border [&_.icon-btn]:border-white/18 [&_.icon-btn]:bg-white/6 [&_.icon-btn]:px-[0.75rem] [&_.icon-btn]:py-[0.32rem] [&_.icon-btn]:text-[0.78rem] [&_.icon-btn]:font-bold [&_.icon-btn]:text-[#f5f2ee] [&_.icon-btn]:shadow-none [&_.icon-btn]:transition-[transform,box-shadow] [&_.icon-btn]:duration-[120ms] [&_.icon-btn]:ease-pop [&_.icon-btn]:enabled:hover:translate-y-0 [&_.icon-btn]:enabled:hover:bg-white/14 [&_.icon-btn]:enabled:hover:shadow-none [&_.header-menu]:relative [&_.header-menu]:shrink-0'
-
 const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
 const COMPLETE_RATIO = 0.95
 const FRAME_MAX_EDGE = 1600
@@ -768,8 +765,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       >
         <div
           className={cn(
-            'absolute inset-x-0 top-0 z-[6] flex items-center gap-3 bg-gradient-to-b from-[rgba(12,10,16,0.82)] to-transparent px-[0.95rem] pt-[0.7rem] pb-[1.6rem]',
-            playerHeaderIcon
+            'absolute inset-x-0 top-0 z-[6] flex items-center gap-3 bg-gradient-to-b from-[rgba(12,10,16,0.82)] to-transparent px-[0.95rem] pt-[0.7rem] pb-[1.6rem]'
           )}
         >
           <h2
@@ -780,6 +776,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           </h2>
           {onToggleProjectLink ? (
             <LinkProjectMenu
+              tone="media"
               projects={projects}
               activePath={lesson.relativePath}
               sectionId={linkSectionId}

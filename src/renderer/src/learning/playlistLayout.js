@@ -508,7 +508,7 @@ export function buildFlow(playlists, courseByPath, options = {}) {
       initialWidth: width,
       initialHeight: height,
       style: { width, height },
-      dragHandle: '.playlist-frame__drag',
+      dragHandle: '[data-playlist-drag]',
       data: {
         title: playlist.title,
         why: playlist.why || '',

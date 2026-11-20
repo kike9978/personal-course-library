@@ -159,7 +159,7 @@ const theme = {
   excalidraw: 'my-[0.45rem] block',
   timestamp: 'inline',
   mention:
-    'note-editor__mention inline rounded-[4px] bg-black/6 px-[0.25em] py-[0.05em] font-semibold text-ink data-[mention-type=note]:cursor-pointer',
+    'inline rounded-[4px] bg-black/6 px-[0.25em] py-[0.05em] font-semibold text-ink data-[mention-type=note]:cursor-pointer',
   hashtag: 'font-semibold text-coral-deep',
   hr: 'my-3 border-x-0 border-b-0 border-t border-t-ink/16',
   table: 'my-2 w-full table-fixed border-collapse overflow-hidden border-spacing-0',
@@ -673,7 +673,7 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
   return (
     <div
       className={cn(
-        'note-editor__toolbar flex flex-wrap gap-[0.2rem] border-b border-ink/10 bg-surface px-[0.4rem] py-[0.35rem]',
+        'flex flex-wrap gap-[0.2rem] border-b border-ink/10 bg-surface px-[0.4rem] py-[0.35rem]',
         variant === 'document' && 'mb-2 bg-transparent',
         compact && !toolsOpen && 'justify-end px-[0.3rem] py-[0.2rem]'
       )}
@@ -913,10 +913,10 @@ function AutoFocusPlugin() {
   return null
 }
 
-const DRAGGABLE_BLOCK_MENU_CLASSNAME = 'note-editor__drag-handle'
+const DRAG_HANDLE = '[data-drag-handle]'
 
 function isOnDragMenu(element) {
-  return Boolean(element.closest(`.${DRAGGABLE_BLOCK_MENU_CLASSNAME}`))
+  return Boolean(element.closest(DRAG_HANDLE))
 }
 
 /** Lexical experimental block reorder handle (hover grip + drop line). */
@@ -935,10 +935,8 @@ function DraggableBlocksPlugin({ anchorElem }) {
       menuComponent={
         <div
           ref={menuRef}
-          className={cn(
-            DRAGGABLE_BLOCK_MENU_CLASSNAME,
-            'absolute top-0 left-0 z-[4] hidden h-5 w-5 cursor-grab items-center justify-center rounded-[4px] p-[0.1rem] text-ink-soft opacity-0 will-change-[transform,opacity] hover:bg-black/6 hover:text-ink active:cursor-grabbing'
-          )}
+          data-drag-handle=""
+          className="absolute top-0 left-0 z-[4] hidden h-5 w-5 cursor-grab items-center justify-center rounded-[4px] p-[0.1rem] text-ink-soft opacity-0 will-change-[transform,opacity] hover:bg-black/6 hover:text-ink active:cursor-grabbing"
           title="Arrastrar bloque"
           aria-label="Arrastrar bloque"
         >
@@ -979,7 +977,7 @@ function BlockCaretPlugin() {
     const onMouseDown = (event) => {
       const target = event.target
       if (!(target instanceof Element)) return
-      if (target.closest('button, a, input, textarea, .note-editor__figure')) return
+      if (target.closest('button, a, input, textarea, [data-image-key]')) return
       const host = target.closest('[data-lexical-decorator="true"]')
       if (!host || !editor.getRootElement()?.contains(host)) return
       event.preventDefault()
@@ -1012,7 +1010,7 @@ function MentionClickPlugin({ onOpenMention }) {
   useEffect(() => {
     if (!onOpenMention) return undefined
     const onClick = (event) => {
-      const chip = event.target?.closest?.('.note-editor__mention')
+      const chip = event.target?.closest?.('[data-mention-id]')
       if (!chip || chip.dataset.mentionType !== 'note' || !chip.dataset.mentionId) return
       event.preventDefault()
       onOpenMention({ type: chip.dataset.mentionType, id: chip.dataset.mentionId })
@@ -1086,15 +1084,15 @@ function NoteEditor({
     <NoteEditorContext.Provider value={editorContext}>
       <div
         className={cn(
-          'note-editor overflow-hidden rounded-sm border border-ink/10 bg-cream',
-          variant === 'document' && 'note-editor--document rounded-none border-0 bg-transparent'
+          'overflow-hidden rounded-sm border border-ink/10 bg-cream',
+          variant === 'document' && 'rounded-none border-0 bg-transparent'
         )}
       >
         <LexicalComposer initialConfig={initialConfig}>
           <ToolbarPlugin compact={compactToolbar} variant={variant} />
           <div
             className={cn(
-              'note-editor__shell relative min-h-[5.5rem] max-h-56 overflow-auto',
+              'relative min-h-[5.5rem] max-h-56 overflow-auto',
               variant === 'document' && 'min-h-64 max-h-none'
             )}
           >
@@ -1108,7 +1106,7 @@ function NoteEditor({
                 contentEditable={
                   <ContentEditable
                     className={cn(
-                      'note-editor__input relative z-[1] min-h-[5.5rem] cursor-text overflow-visible py-[0.55rem] pr-[0.65rem] pl-[1.85rem] text-[0.88rem] leading-[1.45] text-ink caret-coral-deep select-text [font:inherit] outline-none',
+                      'relative z-[1] min-h-[5.5rem] cursor-text overflow-visible py-[0.55rem] pr-[0.65rem] pl-[1.85rem] text-[0.88rem] leading-[1.45] text-ink caret-coral-deep select-text [font:inherit] outline-none',
                       variant === 'document' &&
                         'min-h-64 max-h-none py-[0.35rem] pr-[0.35rem] pl-[1.85rem] text-base leading-[1.55]'
                     )}

@@ -113,7 +113,7 @@ describe('askConfirm', () => {
       doc
     })
     const dialog = doc.created.find((el) => el.tag === 'dialog')
-    const actions = dialog.children[0].children.find((el) => el.className === 'dialog__actions')
+    const actions = dialog.children[0].children.find((el) => el.attrs['data-confirm-actions'] === '')
     const confirm = actions.children.find((el) => el.textContent === 'Borrar')
     const opener = element('button')
     opener.owner = doc
@@ -131,7 +131,7 @@ describe('askConfirm', () => {
     const doc = fakeDocument()
     const pending = askConfirm({ message: '¿Borrar esta anotación?', doc })
     const dialog = doc.created.find((el) => el.tag === 'dialog')
-    const actions = dialog.children[0].children.find((el) => el.className === 'dialog__actions')
+    const actions = dialog.children[0].children.find((el) => el.attrs['data-confirm-actions'] === '')
     const cancel = actions.children.find((el) => el.textContent === 'Cancelar')
     cancel.dispatch('click')
     assert.equal(await pending, false)

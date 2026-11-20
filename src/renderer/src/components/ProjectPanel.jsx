@@ -171,7 +171,8 @@ function ProjectPanel({
   courseResourceSections = [],
   onSaved,
   onDeleted,
-  onCancelCreate
+  onCancelCreate,
+  plain = false
 }) {
   const isNew = !project?.id
   const [title, setTitle] = useState(project?.title || '')
@@ -320,7 +321,14 @@ function ProjectPanel({
   const hasLink = Boolean(linkedFolderPath)
 
   return (
-    <div className="project-panel flex min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_8%_0%,rgba(232,69,112,0.04),transparent_42%),radial-gradient(circle_at_92%_6%,rgba(61,122,122,0.04),transparent_40%),var(--color-cream-deep)] text-ink">
+    <div
+      className={cn(
+        'flex min-h-0 flex-1 flex-col text-ink',
+        plain
+          ? 'bg-surface'
+          : 'bg-[radial-gradient(circle_at_8%_0%,rgba(232,69,112,0.04),transparent_42%),radial-gradient(circle_at_92%_6%,rgba(61,122,122,0.04),transparent_40%),var(--color-cream-deep)]'
+      )}
+    >
       <div className="border-b border-ink/10 bg-surface-muted px-5 py-4 backdrop-blur-[10px]">
         <div className="flex flex-wrap items-center gap-[0.65rem]">
           <h2 className="m-0 font-display text-[1.2rem] font-black tracking-[-0.02em] text-ink">

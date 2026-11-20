@@ -112,6 +112,11 @@
     margin: 0;
   }
 
+  /* Preflight sets margin: 0, which pins a modal dialog to the top-left. */
+  dialog:modal {
+    margin: auto;
+  }
+
   body {
     min-height: 100vh;
     color: var(--color-ink);

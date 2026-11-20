@@ -32,7 +32,7 @@ const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral'
 
 const treeItem =
-  'lesson-tree__item flex min-w-0 cursor-pointer items-start gap-[0.45rem] border-0 bg-transparent text-left text-ink'
+  'flex min-w-0 cursor-pointer items-start gap-[0.45rem] border-0 bg-transparent text-left text-ink'
 
 const treeLabel = 'min-w-0 flex-1 text-[0.9rem] leading-[1.3] line-clamp-2'
 
@@ -45,14 +45,14 @@ const treeList = 'm-0 flex list-none flex-col gap-[0.2rem] p-0'
 
 function sectionCopyClass({ dense }) {
   return cn(
-    'lesson-tree__section-copy flex min-w-0 flex-1 flex-col gap-[0.15rem]',
+    'flex min-w-0 flex-1 flex-col gap-[0.15rem]',
     dense && 'flex-row items-center gap-[0.45rem] overflow-hidden'
   )
 }
 
 function sectionMetaClass({ dense, nested }) {
   return cn(
-    'lesson-tree__section-meta font-body text-[0.75rem] font-medium normal-case tracking-normal text-ink-soft',
+    'font-body text-[0.75rem] font-medium normal-case tracking-normal text-ink-soft',
     dense &&
       'mt-[0.05rem] min-w-[1.15rem] shrink-0 rounded-full bg-cream-deep px-[0.38rem] py-[0.02rem] text-center text-[0.68rem] leading-[1.35] font-bold',
     dense && nested && 'bg-transparent pr-0'
@@ -62,14 +62,9 @@ function sectionMetaClass({ dense, nested }) {
 function sectionClass({ nested, dense, bar, open, className }) {
   const loose = typeof className === 'string' && className.split(/\s+/).includes('is-loose')
   return cn(
-    'lesson-tree__section mb-4',
-    nested && 'lesson-tree__section--nested',
-    dense && 'lesson-tree__section--dense',
-    bar && 'lesson-tree__section--bar',
-    !open && 'is-collapsed',
+    'mb-4',
     bar && 'mb-0 border-b border-ink/10',
-    dense && 'mb-[0.1rem]',
-    !open && 'mb-[0.35rem]',
+    !open && !dense && 'mb-[0.35rem]',
     nested &&
       !bar &&
       'mt-[0.15rem] mr-0 mb-[0.45rem] ml-[0.55rem] border-l border-ink/10 pl-[0.35rem]',
@@ -92,14 +87,14 @@ function sectionClass({ nested, dense, bar, open, className }) {
 
 function sectionHeadClass({ bar, nested }) {
   return cn(
-    'lesson-tree__section-head m-0 flex min-w-0 items-center',
+    'm-0 flex min-w-0 items-center',
     bar && !nested && 'bg-ink/5 hover:bg-ink/8'
   )
 }
 
 function sectionToggleClass({ nested, dense, bar }) {
   return cn(
-    'lesson-tree__section-toggle flex w-auto min-w-0 flex-1 cursor-pointer items-center gap-[0.28rem] border-0 bg-transparent text-left text-[0.72rem] font-bold uppercase tracking-[0.04em] text-ink-soft',
+    'flex w-auto min-w-0 flex-1 cursor-pointer items-center gap-[0.28rem] border-0 bg-transparent text-left text-[0.72rem] font-bold uppercase tracking-[0.04em] text-ink-soft',
     'mb-[0.35rem] rounded-[6px] px-[0.3rem] py-[0.2rem] hover:bg-ink/5 hover:text-ink',
     focusRing,
     nested && 'mb-[0.2rem] text-[0.68rem] normal-case tracking-[0.02em]',
@@ -120,7 +115,7 @@ function sectionToggleClass({ nested, dense, bar }) {
 
 function sectionChevronClass({ bar, nested, dense, open }) {
   return cn(
-    'lesson-tree__section-chevron shrink-0 transition-transform duration-[120ms] ease-pop',
+    'shrink-0 transition-transform duration-[120ms] ease-pop',
     bar ? 'mt-[0.15rem] h-[1.15rem] w-[1.15rem] text-ink-soft' : 'h-[0.65rem] w-[0.65rem]',
     bar && nested && 'h-[0.95rem] w-[0.95rem]',
     dense && !bar && 'mt-0 size-[var(--ann-chevron)]',
@@ -130,7 +125,7 @@ function sectionChevronClass({ bar, nested, dense, open }) {
 
 function sectionTitleClass({ bar, nested }) {
   return cn(
-    'lesson-tree__section-title min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap',
+    'min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap',
     bar &&
       'overflow-visible font-display text-clip font-extrabold leading-[1.25] whitespace-normal',
     bar && nested && 'font-bold'
@@ -295,7 +290,7 @@ function TreeSection({
           </span>
         </button>
         {actions ? (
-          <div className="lesson-tree__actions mr-3 ml-0 inline-flex items-center gap-[0.4rem] self-center">
+          <div className="mr-3 ml-0 inline-flex items-center gap-[0.4rem] self-center">
             {actions}
           </div>
         ) : null}
@@ -303,7 +298,7 @@ function TreeSection({
           <button
             type="button"
             className={cn(
-              'lesson-tree__section-chevron-btn mr-[0.7rem] ml-0 inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[6px] border-0 bg-transparent p-[0.2rem] text-ink-soft',
+              'mr-[0.7rem] ml-0 inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[6px] border-0 bg-transparent p-[0.2rem] text-ink-soft',
               focusRing
             )}
             aria-expanded={open}
@@ -442,6 +437,7 @@ function ProjectRow({ project, selectedProjectId, onSelectProject }) {
     <li>
       <button
         type="button"
+        data-tree-item=""
         className={cn(
           treeItem,
           'w-full rounded-none pt-[0.6rem] pr-[0.95rem] pb-[0.65rem] pl-[2.15rem] hover:bg-ink/4',
@@ -539,7 +535,7 @@ function LessonTree({
   const scrolledSectionKey = useRef(null)
   useLayoutEffect(() => {
     if (collapsed || scrolledSectionKey.current === sectionKey) return
-    const active = treeRef.current?.querySelector('.lesson-tree__item.is-active')
+    const active = treeRef.current?.querySelector('[data-tree-item].is-active')
     if (!active) return
     active.scrollIntoView({ block: 'center', inline: 'nearest' })
     scrolledSectionKey.current = sectionKey
@@ -788,6 +784,7 @@ function LessonRow({
         />
         <button
           type="button"
+          data-tree-item=""
           className={cn(
             treeItem,
             'flex-1 rounded-none p-0 hover:bg-transparent hover:text-ink',
@@ -948,6 +945,7 @@ function SectionView({
           <li>
             <button
               type="button"
+              data-tree-item=""
               className={cn(
                 treeItem,
                 'w-full items-center rounded-none pt-[0.7rem] pr-[0.95rem] pb-[0.75rem] pl-[2.6rem] hover:bg-ink/4',

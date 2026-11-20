@@ -15,7 +15,8 @@ function LinkProjectMenu({
   sectionTitle = '',
   onToggleFile,
   onToggleSection,
-  onCreate
+  onCreate,
+  tone = 'default'
 }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef(null)
@@ -40,10 +41,14 @@ function LinkProjectMenu({
   }, [open])
 
   return (
-    <div className="header-menu relative shrink-0" ref={rootRef}>
+    <div className="relative shrink-0" ref={rootRef}>
       <button
         type="button"
-        className={cn('icon-btn', iconBtn, iconBtnGhost)}
+        className={
+          tone === 'media'
+            ? 'inline-flex min-h-0 cursor-pointer items-center justify-center gap-[0.4rem] rounded-full border border-white/18 bg-white/6 px-[0.75rem] py-[0.32rem] text-[0.78rem] font-bold text-[#f5f2ee] shadow-none transition-[background-color,box-shadow] duration-[120ms] ease-pop enabled:hover:bg-white/14 enabled:hover:shadow-none'
+            : cn(iconBtn, iconBtnGhost)
+        }
         aria-haspopup="menu"
         aria-expanded={open}
         title="Vincular un proyecto a este archivo o a su sección"
