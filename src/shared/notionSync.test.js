@@ -31,6 +31,9 @@ import {
   isRetryableNotionError,
   notionAssetsToUpload,
   notionErrorMessage,
+  canonicalNoteTitle,
+  noteConflictText,
+  noteWireHash,
   notionPlace,
   wireHash
 } from './notionSync.js'
@@ -362,6 +365,32 @@ describe('course progress wire', () => {
     )
     assert.equal(cleared.excitement, 0)
     assert.notEqual(progressSyncKey(excited), progressSyncKey(cleared))
+  })
+})
+
+describe('note titles', () => {
+  const body = 'random(minVal, maxVal), can receive 0 arguments.\n\nReturn a random number'
+
+  it('treats a placeholder title and the body text as the same name', () => {
+    const derived = body.replace(/\s+/g, ' ')
+    assert.equal(canonicalNoteTitle('Sin título', body), canonicalNoteTitle(derived, body))
+    assert.equal(canonicalNoteTitle('new note 1:23', body), canonicalNoteTitle('', body))
+    assert.equal(canonicalNoteTitle(`${derived} (1)`, body), canonicalNoteTitle('', body))
+    assert.equal(
+      noteWireHash({ title: 'Sin título', body, anchors: [] }),
+      noteWireHash({ title: derived, body, anchors: [] })
+    )
+  })
+
+  it('keeps a name the person typed', () => {
+    assert.equal(canonicalNoteTitle('Terminología', body), 'Terminología')
+    assert.notEqual(noteWireHash({ title: 'Terminología', body }), noteWireHash({ title: 'Sin título', body }))
+  })
+
+  it('shows a conflict body once when the title only repeats it', () => {
+    assert.equal(noteConflictText('Sin título', body), body)
+    assert.equal(noteConflictText(body.replace(/\n+/g, ' '), body), body)
+    assert.match(noteConflictText('Terminología', body), /^Terminología/)
   })
 })
 

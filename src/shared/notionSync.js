@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { noteTextTitle, resolveCourseTitle } from './knowledgeGraph.js'
+import { isDefaultNoteTitle, plainNoteText, resolveCourseTitle } from './knowledgeGraph.js'
 import { courseMediaNoteFile, markdownImageDestination } from './noteMedia.js'
 
 export { courseMediaNoteFile, markdownImageDestination }
@@ -447,10 +447,35 @@ export function topicIdsFromText(text) {
   return sortedStrings(String(text || '').split('\n'))
 }
 
+const UNTITLED_NOTE = /^sin t[ií]tulo$/i
+
+/**
+ * Title used for the sync hash.
+ * A typed name stays. An empty name, "new note", "Sin título", or a Notion
+ * duplicate suffix of the body's own words all count as the same untitled note.
+ * Deleting a course was rewriting those names and flagging the note as a conflict.
+ */
+export function canonicalNoteTitle(title, body) {
+  const derived = normalizeTitle(plainNoteText(body))
+  const raw = normalizeTitle(title)
+  const stripped = raw.replace(/ \(\d+\)$/, '')
+  const placeholder = !stripped || isDefaultNoteTitle(stripped) || UNTITLED_NOTE.test(stripped)
+  if (placeholder || (derived && stripped === derived)) return derived
+  return raw
+}
+
+/** Text for one side of a conflict. The name is omitted when it only repeats the body. */
+export function noteConflictText(title, body) {
+  const text = normalizeBody(body)
+  const name = normalizeTitle(title)
+  if (!name || canonicalNoteTitle(name, text) === canonicalNoteTitle('', text)) return text
+  return [name, text].filter(Boolean).join('\n\n')
+}
+
 /** Note fields that participate in the sync hash. */
 export function noteWire(finding) {
   return {
-    title: normalizeTitle(noteTextTitle(finding, 0)),
+    title: canonicalNoteTitle(finding?.title, finding?.body),
     body: normalizeBody(finding?.body),
     color: String(finding?.color || '').trim(),
     anchors: noteAnchorsWire(finding?.anchors),

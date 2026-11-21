@@ -196,6 +196,7 @@ describe('notion client', () => {
       if (url.endsWith('/databases/db-1') && method === 'GET') {
         return jsonResponse({ data_sources: [{ id: 'src-1', name: 'Anotaciones' }] })
       }
+      if (url.endsWith('/data_sources/src-1') && method === 'PATCH') return jsonResponse({ ok: true })
       if (url.endsWith('/data_sources/src-1') && method === 'GET') {
         return jsonResponse({
           object: 'data_source',
@@ -236,6 +237,10 @@ describe('notion client', () => {
           ]
         })
       }
+      if (url.endsWith('/blocks/code-1') && method === 'PATCH') {
+        deleted.push('patched-code')
+        return jsonResponse({ id: 'code-1', last_edited_time: '2026-11-08T00:01:00.000Z' })
+      }
       if (url.endsWith('/blocks/code-1') && method === 'DELETE') {
         deleted.push('code-1')
         return jsonResponse({})
@@ -251,7 +256,7 @@ describe('notion client', () => {
     }
     const client = createNotionClient({ token: 'secret', databaseId: 'db-1', fetchImpl })
     await client.updatePage('page-1', 'note-1', 'Nota', 'Hola')
-    assert.deepEqual(deleted, ['code-1'])
+    assert.deepEqual(deleted, ['patched-code'])
   })
 
   it('repeats a save when Notion reports a conflict, then accepts the next try', async () => {

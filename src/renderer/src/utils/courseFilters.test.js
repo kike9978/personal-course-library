@@ -6,7 +6,7 @@ import {
   libraryFiltersActive,
   projectPlaylists
 } from './courseFilters.js'
-import { compareCourses } from './courseTable.js'
+import { EMPTY_COLUMN_FILTERS, compareCourses, matchesColumnFilters } from './courseTable.js'
 
 const lighting = {
   path: 'lighting',
@@ -107,6 +107,23 @@ describe('library course filters', () => {
     const shown = projectPlaylists(stored, byPath, { isInProcessOnly: true })
     assert.deepEqual(shown[0].coursePaths, ['lighting'])
     assert.deepEqual(stored[0].coursePaths, ['lighting', 'other', 'gone'])
+  })
+
+  it('filters the list by en curso and nuevos', () => {
+    const filters = { ...EMPTY_COLUMN_FILTERS }
+    const inProcess = { ...lighting, isInProcess: true, isNew: false }
+    const fresh = {
+      ...lighting,
+      title: 'Fresh',
+      isInProcess: false,
+      isNew: true,
+      learning: { isRecentlyViewed: false }
+    }
+    assert.equal(matchesColumnFilters(inProcess, { ...filters, status: 'inProcess' }), true)
+    assert.equal(matchesColumnFilters(fresh, { ...filters, status: 'inProcess' }), false)
+    assert.equal(matchesColumnFilters(fresh, { ...filters, status: 'new' }), true)
+    assert.equal(matchesColumnFilters(inProcess, { ...filters, status: 'new' }), false)
+    assert.equal(matchesColumnFilters(fresh, filters), true)
   })
 
   it('sorts courses by personal excitement before title', () => {

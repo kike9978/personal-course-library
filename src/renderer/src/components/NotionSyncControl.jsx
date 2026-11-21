@@ -568,8 +568,8 @@ function NotionSyncAttention({ status, resolvingId, resolveWith, retryingSave })
             <VersionChoice
               key={item.findingId}
               title={item.title || 'Sin título'}
-              localText={[item.title, item.body].filter(Boolean).join('\n\n')}
-              remoteText={[item.remoteTitle, item.remoteBody].filter(Boolean).join('\n\n')}
+              localText={item.body}
+              remoteText={item.remoteBody}
               meta={noteMeta(item)}
               busy={resolvingId === item.findingId}
               allowBoth

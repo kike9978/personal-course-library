@@ -29,7 +29,7 @@ import {
   writeCourseProgress,
   writePlaylistRecord
 } from './learningStore.js'
-import { findingFromLegacyNote } from '../../shared/knowledgeGraph.js'
+import { findingFromLegacyNote, noteTextTitle } from '../../shared/knowledgeGraph.js'
 import {
   anchorFromNotion,
   anchorsWithVideoTime,
@@ -50,6 +50,7 @@ import {
   anchorsToText,
   intentFromBody,
   intentWire,
+  noteConflictText,
   noteWire,
   noteWireHash,
   PLAYLIST_INTENT_ID,
@@ -327,15 +328,35 @@ function topicLabels(ids) {
     .filter(Boolean)
 }
 
+function clearFalseNoteConflicts() {
+  for (const finding of readFindingList()) {
+    const conflict = finding.notion?.conflict
+    if (!conflict || !Array.isArray(conflict.remoteAnchors)) continue
+    const remote = noteWireHash({
+      title: conflict.remoteTitle,
+      body: conflict.remoteBody,
+      color: conflict.remoteColor || '',
+      anchors: conflict.remoteAnchors,
+      topicIds: conflict.remoteTopicIds || []
+    })
+    if (remote !== localNoteHash(finding)) continue
+    withoutNoteWriteHook(() => {
+      mutateFinding(finding.id, (item) => {
+        item.notion = { ...item.notion, ackedHash: remote, conflict: null, error: null }
+      })
+    })
+  }
+}
+
 function noteConflictView(finding) {
   const conflict = finding.notion?.conflict || {}
   const hasMeta = Array.isArray(conflict.remoteAnchors)
   return {
     findingId: finding.id,
-    title: noteWire(finding).title || 'Sin título',
-    body: finding.body || '',
+    title: noteTextTitle(finding, 72) || 'Sin título',
+    body: noteConflictText(finding.title, finding.body),
     remoteTitle: conflict.remoteTitle || '',
-    remoteBody: conflict.remoteBody || '',
+    remoteBody: noteConflictText(conflict.remoteTitle, conflict.remoteBody),
     coursePath: finding.anchors?.[0]?.coursePath || null,
     hasMeta,
     localColor: finding.color || '',
@@ -350,6 +371,7 @@ function noteConflictView(finding) {
 }
 
 function publicStatus() {
+  clearFalseNoteConflicts()
   const config = getNotionConfig()
   const conflicts = config.enabled
     ? readFindingList()
@@ -661,13 +683,29 @@ async function pageBelongsToRows(client, pageId, rowIds) {
 }
 
 async function loadRemote(client, finding) {
+  let page = null
   if (finding.notion?.pageId) {
     const direct = await client.readPage(finding.notion.pageId)
-    if (direct) return direct
+    if (direct) page = direct
   }
-  const summary = await client.findPage(finding.id)
-  if (!summary?.pageId) return null
-  return client.readPage(summary.pageId)
+  if (!page) {
+    const summary = await client.findPage(finding.id)
+    if (summary?.pageId) page = await client.readPage(summary.pageId)
+  }
+  if (!page || !rowsReady() || !finding?.id || typeof client.listRows !== 'function') return page
+  const copies = await client.listRows('note', finding.id)
+  if (copies.length < 2) return page
+  const keepId = copies.some((copy) => copy.pageId === finding.notion?.pageId)
+    ? finding.notion.pageId
+    : page.pageId
+  const keep = page.pageId === keepId ? page : (await client.readPage(keepId)) || page
+  const keepHash = remoteNoteHash(keep, finding)
+  for (const copy of copies) {
+    if (!copy.pageId || copy.pageId === keep.pageId) continue
+    const full = await client.readPage(copy.pageId)
+    if (full && remoteNoteHash(full, finding) === keepHash) await client.archivePage(copy.pageId)
+  }
+  return keep
 }
 
 async function ensureCoursePage(client, place) {
@@ -1058,6 +1096,7 @@ function noteSyncAction(finding, remote) {
     })
     if (bodyAction === 'conflict') return 'conflict'
     if (bodyAction === 'pull') return 'pull'
+    if (bodyAction === 'relink') return 'relink'
     return remote ? 'push' : 'create'
   }
   const localHash = rowsReady() ? localNoteHash(finding) : wireHash(noteWire(finding).title, finding.body)
@@ -1087,6 +1126,12 @@ async function reconcileUpsert(client, id, job = {}) {
     const remote = await loadKindPage(client, 'note', id, null)
     if (!remote) return
     const shape = noteShapeFromPage(remote, { notion: { wire: 2 } })
+    const incomingHash = noteWireHash(shape)
+    const twin = readFindingList().find((item) => item.id !== id && localNoteHash(item) === incomingHash)
+    if (twin) {
+      await client.archivePage(remote.pageId)
+      return
+    }
     const created = findingFromLegacyNote(
       {
         id,
@@ -1220,7 +1265,11 @@ async function reconcileDelete(client, findingId) {
   const remote = await client.readPage(tomb.pageId)
   const action = decideDelete({
     hasRemote: Boolean(remote),
-    remoteHash: remote ? wireHash(remote.title, remote.body) : null,
+    remoteHash: remote
+      ? rowsReady()
+        ? remoteNoteHash(remote, { notion: { wire: 2 } })
+        : wireHash(remote.title, remote.body)
+      : null,
     ackedHash: tomb.ackedHash
   })
   if (action === 'drop') {
@@ -3797,12 +3846,13 @@ export async function resolveNotionConflict(findingId, choice) {
     } else if (choice === 'remote') {
       const remote = await loadRemote(client, finding)
       if (!remote) throw new Error('La página de Notion ya no está')
-      const hash = wireHash(remote.title, remote.body)
+      const shape = rowsReady() ? noteShapeFromPage(remote, finding) : null
+      const hash = shape ? noteWireHash(shape) : wireHash(remote.title, remote.body)
       applyNotion(
         findingId,
         noteCursor(remote, hash, remote.timeSec, { pulledAt: Date.now() }),
-        remote,
-        remote.timeSec
+        shape || remote,
+        Array.isArray(shape?.anchors) ? undefined : remote.timeSec
       )
       await syncNoteFiles(client, findingId, remote, remote.body)
     } else if (choice === 'both') {
@@ -3857,7 +3907,6 @@ export async function resolveNotionDelete(findingId, choice) {
         body: tomb.conflict.remoteBody,
         editedAt: tomb.conflict.remoteEditedAt
       }
-      const hash = wireHash(remote.title, remote.body)
       const snapshot = {
         ...tomb.snapshot,
         id: tomb.findingId,
@@ -3868,9 +3917,10 @@ export async function resolveNotionDelete(findingId, choice) {
         anchors:
           remote.timeSec !== undefined
             ? anchorsWithVideoTime(tomb.snapshot?.anchors, remote.timeSec)
-            : tomb.snapshot?.anchors,
-        notion: noteCursor(remote, hash, remote.timeSec, { pulledAt: Date.now() })
+            : tomb.snapshot?.anchors
       }
+      const hash = rowsReady() ? noteWireHash(snapshot) : wireHash(remote.title, remote.body)
+      snapshot.notion = noteCursor(remote, hash, remote.timeSec, { pulledAt: Date.now() })
       withoutNoteWriteHook(() => restoreFinding(snapshot))
       notifyNotes()
     } else {

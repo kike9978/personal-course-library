@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { ChevronDown } from 'lucide-react'
 import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import { InstitutionMark } from './InstitutionMark'
 import CoursePickBox from './CoursePickBox'
@@ -143,6 +145,121 @@ function SortButton({ column, columnSort, onColumnSort }) {
   )
 }
 
+function menuPosition(anchor) {
+  const rect = anchor.getBoundingClientRect()
+  const width = Math.max(rect.width, 148)
+  const height = 240
+  let left = rect.left
+  let top = rect.bottom + 4
+  if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8
+  if (left < 8) left = 8
+  if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 4)
+  return { top, left, width }
+}
+
+function FilterMenu({ label, value, options, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [position, setPosition] = useState(null)
+  const rootRef = useRef(null)
+  const menuRef = useRef(null)
+  const selected = options.find((option) => option.value === value) ?? options[0]
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      event.stopPropagation()
+      event.preventDefault()
+      setOpen(false)
+    }
+    const onPointerDown = (event) => {
+      if (rootRef.current?.contains(event.target)) return
+      if (menuRef.current?.contains(event.target)) return
+      setOpen(false)
+    }
+    const close = () => setOpen(false)
+    const closeOnScroll = (event) => {
+      if (menuRef.current?.contains(event.target)) return
+      setOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    document.addEventListener('mousedown', onPointerDown)
+    window.addEventListener('resize', close)
+    window.addEventListener('scroll', closeOnScroll, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      document.removeEventListener('mousedown', onPointerDown)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', closeOnScroll, true)
+    }
+  }, [open])
+
+  const toggle = (event) => {
+    event.stopPropagation()
+    if (open) {
+      setOpen(false)
+      return
+    }
+    if (rootRef.current) setPosition(menuPosition(rootRef.current))
+    setOpen(true)
+  }
+
+  const pick = (event, next) => {
+    event.stopPropagation()
+    setOpen(false)
+    onChange(next)
+  }
+
+  return (
+    <div ref={rootRef} className="relative min-w-0">
+      <button
+        type="button"
+        className={cn(filterControl, 'flex items-center justify-between gap-1 text-left')}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={toggle}
+      >
+        <span className="min-w-0 truncate">{selected?.label ?? ''}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-soft" aria-hidden="true" />
+      </button>
+      {open && position
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="listbox"
+              aria-label={label}
+              className="fixed z-[80] max-h-60 overflow-auto rounded-md border border-ink/10 bg-surface p-1 shadow-panel"
+              style={{ top: position.top, left: position.left, width: position.width }}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              {options.map((option) => {
+                const isSelected = option.value === value
+                return (
+                  <button
+                    key={String(option.value)}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    className={cn(
+                      'block w-full cursor-pointer truncate rounded-[8px] border-0 bg-transparent px-2 py-1.5 text-left text-xs font-semibold text-ink hover:bg-ink/5',
+                      isSelected && 'bg-ink/5'
+                    )}
+                    onClick={(event) => pick(event, option.value)}
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>,
+            document.body
+          )
+        : null}
+    </div>
+  )
+}
+
 function ColumnFilter({ column, filters, onColumnFilter, institutions, programs, themes }) {
   if (!column.filter) return null
   const value = filters[column.filterKey] ?? ''
@@ -162,92 +279,84 @@ function ColumnFilter({ column, filters, onColumnFilter, institutions, programs,
   }
 
   if (column.filter === 'select') {
-    const options =
+    const names =
       column.filterKey === 'institution'
         ? institutions
         : column.filterKey === 'program'
           ? programs
           : themes
     return (
-      <select
-        className={filterControl}
+      <FilterMenu
+        label={`Filtrar ${column.label}`}
         value={value}
-        aria-label={`Filtrar ${column.label}`}
-        onChange={(event) => set(event.target.value)}
-      >
-        <option value="">Todos</option>
-        {options.map((name) => (
-          <option key={name} value={name}>
-            {name}
-          </option>
-        ))}
-      </select>
+        options={[
+          { value: '', label: 'Todos' },
+          ...names.map((name) => ({ value: name, label: name }))
+        ]}
+        onChange={set}
+      />
     )
   }
 
   if (column.filter === 'rate') {
     return (
-      <select
-        className={filterControl}
+      <FilterMenu
+        label="Valoración mínima"
         value={value}
-        aria-label="Valoración mínima"
-        onChange={(event) => set(Number(event.target.value))}
-      >
-        <option value={0}>Todas</option>
-        <option value={3}>3+</option>
-        <option value={4}>4+</option>
-        <option value={5}>5</option>
-      </select>
+        options={[
+          { value: 0, label: 'Todas' },
+          { value: 3, label: '3+' },
+          { value: 4, label: '4+' },
+          { value: 5, label: '5' }
+        ]}
+        onChange={set}
+      />
     )
   }
 
   if (column.filter === 'excitement') {
     return (
-      <select
-        className={filterControl}
+      <FilterMenu
+        label="Emoción"
         value={value}
-        aria-label="Emoción"
-        onChange={(event) => set(Number(event.target.value))}
-      >
-        <option value={0}>Todas</option>
-        {EXCITEMENT_LEVELS.map((item) => (
-          <option key={item.level} value={item.level}>
-            {item.label}
-          </option>
-        ))}
-      </select>
+        options={[
+          { value: 0, label: 'Todas' },
+          ...EXCITEMENT_LEVELS.map((item) => ({ value: item.level, label: item.label }))
+        ]}
+        onChange={set}
+      />
     )
   }
 
   if (column.filter === 'status') {
     return (
-      <select
-        className={filterControl}
+      <FilterMenu
+        label="Filtrar estado"
         value={value}
-        aria-label="Filtrar estado"
-        onChange={(event) => set(event.target.value)}
-      >
-        <option value="">Todos</option>
-        <option value="inProcess">En curso</option>
-        <option value="recent">Reciente</option>
-        <option value="new">Nuevo</option>
-        <option value="completed">Completado</option>
-        <option value="missing">Sin props</option>
-      </select>
+        options={[
+          { value: '', label: 'Todos' },
+          { value: 'inProcess', label: 'En curso' },
+          { value: 'recent', label: 'Reciente' },
+          { value: 'new', label: 'Nuevo' },
+          { value: 'completed', label: 'Completado' },
+          { value: 'missing', label: 'Sin props' }
+        ]}
+        onChange={set}
+      />
     )
   }
 
   return (
-    <select
-      className={filterControl}
+    <FilterMenu
+      label={`Filtrar ${column.label}`}
       value={value}
-      aria-label={`Filtrar ${column.label}`}
-      onChange={(event) => set(event.target.value)}
-    >
-      <option value="">Todas</option>
-      <option value="yes">Con fecha</option>
-      <option value="no">Sin fecha</option>
-    </select>
+      options={[
+        { value: '', label: 'Todas' },
+        { value: 'yes', label: 'Con fecha' },
+        { value: 'no', label: 'Sin fecha' }
+      ]}
+      onChange={set}
+    />
   )
 }
 

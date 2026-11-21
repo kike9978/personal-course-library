@@ -407,22 +407,31 @@ export function createNotionClient({
     return pages
   }
 
-  async function findRow(kind, externalId) {
+  async function listRows(kind, externalId) {
     const names = await loadSchema()
     const id = String(externalId || '')
-    if (!id) return null
+    if (!id) return []
     const filters = [{ property: names.idName, rich_text: { equals: id } }]
     if (kind) filters.push({ property: names.kindName, select: { equals: kind } })
     const data = await request(`/data_sources/${names.dataSourceId}/query`, {
       method: 'POST',
       body: {
-        page_size: 5,
+        page_size: 25,
         filter: filters.length === 1 ? filters[0] : { and: filters }
       }
     })
-    const page = (data.results || []).find((item) => !item.archived && !item.in_trash)
-    if (!page) return null
-    return { pageId: page.id, editedAt: page.last_edited_time || null, ...rowFields(page, names) }
+    return (data.results || [])
+      .filter((item) => !item.archived && !item.in_trash)
+      .map((page) => ({
+        pageId: page.id,
+        editedAt: page.last_edited_time || null,
+        ...rowFields(page, names)
+      }))
+  }
+
+  async function findRow(kind, externalId) {
+    const rows = await listRows(kind, externalId)
+    return rows[0] || null
   }
 
   async function findPage(findingId) {
@@ -952,6 +961,7 @@ export function createNotionClient({
     listPages,
     findPage,
     findRow,
+    listRows,
     saveRow,
     findNode,
     readPage,
