@@ -255,6 +255,7 @@ function NotionDebug() {
 }
 
 function choiceLabel(choice, kind) {
+  if (choice === 'local' && kind === 'notas') return 'Quedaron las notas de esta biblioteca'
   if (choice === 'local' && kind === 'progress') return 'En curso se quedó como en esta biblioteca'
   if (choice === 'remote' && kind === 'progress') return 'En curso se quedó como en Notion'
   if (choice === 'json') return 'Los dibujos se comparten como JSON'
@@ -564,6 +565,24 @@ function NotionSyncAttention({ status, resolvingId, resolveWith, retryingSave })
             Cambiaron aquí y en Notion. El texto, el color, los lugares y los temas viajan con la
             versión que elijas.
           </p>
+          <div className={actionsBtns}>
+            <button
+              type="button"
+              className={btnPrimary}
+              disabled={Boolean(resolvingId)}
+              onClick={() =>
+                void resolveWith(
+                  'all-notes',
+                  'local',
+                  () => window.api.resolveAllLocalNoteConflicts(),
+                  'No se pudieron usar las notas de esta biblioteca',
+                  'notas'
+                )
+              }
+            >
+              Usar todas las de esta biblioteca
+            </button>
+          </div>
           {status.conflicts.map((item) => (
             <VersionChoice
               key={item.findingId}
@@ -571,7 +590,7 @@ function NotionSyncAttention({ status, resolvingId, resolveWith, retryingSave })
               localText={item.body}
               remoteText={item.remoteBody}
               meta={noteMeta(item)}
-              busy={resolvingId === item.findingId}
+              busy={Boolean(resolvingId)}
               allowBoth
               onChoose={(choice) =>
                 void resolveWith(

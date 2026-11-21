@@ -470,6 +470,7 @@ export function createNotionClient({
       const blockTime = timeSecFromBlocks(blocks)
       return {
         ...summary,
+        parentType: page.parent?.type || '',
         body: playlistId ? playlistBodyFromBlocks(blocks) : blocksToBody(blocks),
         findingId:
           fields.kind === 'note'
@@ -724,37 +725,74 @@ export function createNotionClient({
         inProcess: Boolean(row?.inProcess)
       }
     }
-    const saved = await request(`/pages/${pageId}`, {
-      method: 'PATCH',
-      body: { properties, ...(icon ? { icon } : {}) }
-    })
-    let editedAt = saved?.last_edited_time || null
-    if (!skipBody) {
-      const wrote = await writeBody(
+    try {
+      const saved = await request(`/pages/${pageId}`, {
+        method: 'PATCH',
+        body: { properties, ...(icon ? { icon } : {}) }
+      })
+      let editedAt = saved?.last_edited_time || null
+      if (!skipBody) {
+        const wrote = await writeBody(
+          pageId,
+          normalizeBody(row?.body || ''),
+          externalId,
+          writeKind,
+          row?.childTitles || null,
+          undefined
+        )
+        if (wrote.editedAt) editedAt = wrote.editedAt
+        else editedAt = (await pageEditedAt(pageId)) || editedAt
+      }
+      return {
         pageId,
-        normalizeBody(row?.body || ''),
+        title: normalizeTitle(row?.title),
+        body: normalizeBody(row?.body || ''),
+        editedAt,
+        timeSec: row?.seconds == null ? undefined : row.seconds,
+        kind,
         externalId,
-        writeKind,
-        row?.childTitles || null,
-        undefined
-      )
-      if (wrote.editedAt) editedAt = wrote.editedAt
-      else editedAt = (await pageEditedAt(pageId)) || editedAt
-    }
-    return {
-      pageId,
-      title: normalizeTitle(row?.title),
-      body: normalizeBody(row?.body || ''),
-      editedAt,
-      timeSec: row?.seconds == null ? undefined : row.seconds,
-      kind,
-      externalId,
-      color: row?.color || '',
-      anchors: row?.anchors || [],
-      topicIds: row?.topicIds || [],
-      status: row?.status || '',
-      inProcess: Boolean(row?.inProcess),
-      playlistLegacy: false
+        color: row?.color || '',
+        anchors: row?.anchors || [],
+        topicIds: row?.topicIds || [],
+        status: row?.status || '',
+        inProcess: Boolean(row?.inProcess),
+        playlistLegacy: false
+      }
+    } catch (error) {
+      if (!/archived ancestor/i.test(error?.message || '')) throw error
+      const created = await request('/pages', {
+        method: 'POST',
+        body: {
+          parent: { type: 'data_source_id', data_source_id: names.dataSourceId },
+          ...(icon ? { icon } : {}),
+          properties,
+          ...(() => {
+            if (skipBody) return {}
+            const children = pageChildren(
+              row?.body || '',
+              externalId,
+              writeKind,
+              row?.childTitles || null,
+              undefined
+            ).slice(0, 100)
+            return children.length ? { children } : {}
+          })()
+        }
+      })
+      return {
+        pageId: created.id,
+        title: normalizeTitle(row?.title),
+        body: normalizeBody(row?.body || ''),
+        editedAt: created.last_edited_time || null,
+        timeSec: row?.seconds == null ? undefined : row.seconds,
+        kind,
+        externalId,
+        color: row?.color || '',
+        anchors: row?.anchors || [],
+        topicIds: row?.topicIds || [],
+        status: row?.status || '',
+        inProcess: Boolean(row?.inProcess)
+      }
     }
   }
 
@@ -793,7 +831,7 @@ export function createNotionClient({
         id: page.parent?.page_id || null
       }
     } catch (error) {
-      if (isMissing(error)) return null
+      if (isMissing(error) || /archived ancestor/i.test(error?.message || '')) return null
       throw error
     }
   }

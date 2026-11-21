@@ -99,6 +99,7 @@ const api = {
   syncNotionNow: (findingId) => ipcRenderer.invoke('sync-notion-now', findingId || null),
   resolveNotionConflict: (findingId, choice) =>
     ipcRenderer.invoke('resolve-notion-conflict', { findingId, choice }),
+  resolveAllLocalNoteConflicts: () => ipcRenderer.invoke('resolve-all-local-note-conflicts'),
   resolveNotionDelete: (findingId, choice) =>
     ipcRenderer.invoke('resolve-notion-delete', { findingId, choice }),
   resolveNotionPlaylistConflict: (playlistId, choice) =>

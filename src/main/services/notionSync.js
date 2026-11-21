@@ -328,21 +328,52 @@ function topicLabels(ids) {
     .filter(Boolean)
 }
 
+function placesOf(anchors) {
+  return (Array.isArray(anchors) ? anchors : []).map(placeLabel).filter(Boolean).join('\n')
+}
+
+/** The two copies ask for a choice only when the visible note actually differs. */
+function noteChoiceNeeded(finding, remote) {
+  if (!remote) return false
+  if (noteConflictText(finding.title, finding.body) !== noteConflictText(remote.title, remote.body)) {
+    return true
+  }
+  if (!Array.isArray(remote.anchors) && !Array.isArray(remote.remoteAnchors)) return false
+  const remoteAnchors = remote.anchors || remote.remoteAnchors || []
+  if (placesOf(finding.anchors) !== placesOf(remoteAnchors)) return true
+  if (String(finding.color || '') !== String(remote.color || remote.remoteColor || '')) return true
+  if (topicLabels(finding.topicIds).join('\n') !== topicLabels(remote.topicIds || remote.remoteTopicIds || []).join('\n')) {
+    return true
+  }
+  return false
+}
+
 function clearFalseNoteConflicts() {
   for (const finding of readFindingList()) {
     const conflict = finding.notion?.conflict
-    if (!conflict || !Array.isArray(conflict.remoteAnchors)) continue
-    const remote = noteWireHash({
+    if (!conflict) continue
+    const sameHash =
+      Array.isArray(conflict.remoteAnchors) &&
+      noteWireHash({
+        title: conflict.remoteTitle,
+        body: conflict.remoteBody,
+        color: conflict.remoteColor || '',
+        anchors: conflict.remoteAnchors,
+        topicIds: conflict.remoteTopicIds || []
+      }) === localNoteHash(finding)
+    if (!sameHash && noteChoiceNeeded(finding, {
       title: conflict.remoteTitle,
       body: conflict.remoteBody,
-      color: conflict.remoteColor || '',
+      color: conflict.remoteColor,
       anchors: conflict.remoteAnchors,
-      topicIds: conflict.remoteTopicIds || []
-    })
-    if (remote !== localNoteHash(finding)) continue
+      topicIds: conflict.remoteTopicIds
+    })) {
+      continue
+    }
+    const hash = localNoteHash(finding)
     withoutNoteWriteHook(() => {
       mutateFinding(finding.id, (item) => {
-        item.notion = { ...item.notion, ackedHash: remote, conflict: null, error: null }
+        item.notion = { ...item.notion, ackedHash: hash, conflict: null, error: null }
       })
     })
   }
@@ -800,12 +831,12 @@ function buildNoteRow(finding) {
 
 async function saveNoteRow(client, finding, remote) {
   const row = buildNoteRow(finding)
-  if (remote?.pageId && (remote.kind === 'note' || remote.parentType === 'data_source_id')) {
-    row.pageId = remote.pageId
-  } else if (finding.notion?.pageId && rowsReady()) {
-    row.pageId = finding.notion.pageId
-  }
-  row.databaseRow = Boolean(row.pageId)
+  const parentType = remote?.parentType || ''
+  const inDatabase = parentType === 'data_source_id' || parentType === 'database_id'
+  // A note nested under a course page cannot be edited once that course is archived.
+  if (inDatabase && remote?.pageId) row.pageId = remote.pageId
+  else if (!parentType && finding.notion?.pageId) row.pageId = finding.notion.pageId
+  row.databaseRow = inDatabase && Boolean(row.pageId)
   const page = await client.saveRow(row)
   const fileFetch = await reconcileNoteFiles(client, page?.pageId, finding.body, { remove: true })
   return page ? { ...page, fileFetch } : page
@@ -1168,7 +1199,15 @@ async function reconcileUpsert(client, id, job = {}) {
     return
   }
   const remote = await loadRemote(client, finding)
-  const action = noteSyncAction(finding, remote)
+  let action = noteSyncAction(finding, remote)
+  if (action === 'conflict' && remote && !noteChoiceNeeded(finding, remote)) action = 'relink'
+  if (rowsReady() && remote?.parentType === 'page_id' && action !== 'pull') {
+    const page = await saveNotePage(client, finding, remote)
+    finishWrite(id, page, localHash, noteVideoTime(finding))
+    recordNoteFiles(id, page?.fileFetch)
+    notifyNotes()
+    return
+  }
 
   if (action === 'create' || action === 'push') {
     const page = await saveNotePage(client, finding, remote)
@@ -3884,6 +3923,43 @@ export async function resolveNotionConflict(findingId, choice) {
 
     notifyNotes()
     publish()
+    return publicStatus()
+  })
+}
+
+/** Keep this library's copy of every note that is waiting on a choice. */
+export async function resolveAllLocalNoteConflicts() {
+  if (!getNotionConfig().enabled) throw new Error('La sincronización con Notion está apagada')
+  await flushQueued()
+  const client = clientFromConfig()
+  return oneAtATime(async () => {
+    await client.loadSchema()
+    const ids = readFindingList()
+      .filter((finding) => finding.notion?.conflict)
+      .map((finding) => finding.id)
+    let done = 0
+    let failed = 0
+    for (const id of ids) {
+      const finding = readFinding(id)
+      if (!finding?.notion?.conflict) continue
+      try {
+        await writeLocal(client, finding)
+        done += 1
+        publish()
+      } catch (error) {
+        failed += 1
+        rememberError(id, describeError(error))
+      }
+    }
+    notifyNotes()
+    publish()
+    if (failed) {
+      throw new Error(
+        done
+          ? `Quedaron ${done} notas de esta biblioteca. ${failed} no se pudieron copiar.`
+          : 'No se pudieron copiar las notas a Notion.'
+      )
+    }
     return publicStatus()
   })
 }

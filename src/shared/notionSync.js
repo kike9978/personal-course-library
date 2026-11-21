@@ -990,6 +990,9 @@ export function notionErrorMessage({ status, code, message } = {}) {
   if (status === 409 || code === 'conflict_error') {
     return 'Notion estaba guardando esa página al mismo tiempo.'
   }
+  if (/archived ancestor/i.test(message || '')) {
+    return 'Esa página está dentro de un curso archivado en Notion. La nota se copia a la base.'
+  }
   if (/not supported for the File Upload API/i.test(message || '')) {
     return 'Notion no acepta ese tipo de archivo. Los dibujos se envían como JSON para que la otra copia los pueda abrir.'
   }

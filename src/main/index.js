@@ -101,6 +101,7 @@ import {
   notionDebugReport,
   pollNotionChanges,
   resolveNotionConflict,
+  resolveAllLocalNoteConflicts,
   resolveNotionDelete,
   resolveNotionPlaylistConflict,
   resolveNotionPlaylistDelete,
@@ -1029,6 +1030,7 @@ function registerIpcHandlers() {
   ipcMain.handle('resolve-notion-conflict', (_event, { findingId, choice } = {}) =>
     resolveNotionConflict(findingId, choice)
   )
+  ipcMain.handle('resolve-all-local-note-conflicts', () => resolveAllLocalNoteConflicts())
   ipcMain.handle('resolve-notion-delete', (_event, { findingId, choice } = {}) =>
     resolveNotionDelete(findingId, choice)
   )

@@ -455,6 +455,12 @@ describe('notion reconcile', () => {
 
 describe('notion errors', () => {
   it('names a missing share of the database', () => {
+    assert.match(
+      notionErrorMessage({
+        message: "Can't edit page on block with an archived ancestor. You must unarchive the ancestor before editing page."
+      }),
+      /archivado/
+    )
     assert.match(notionErrorMessage({ status: 404, code: 'object_not_found' }), /Conexiones/)
     assert.match(notionErrorMessage({ status: 401 }), /token/)
   })
