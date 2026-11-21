@@ -10,6 +10,7 @@ import CourseRoom from './components/CourseRoom'
 import LibraryStudyView from './components/LibraryStudyView'
 import AnnotationsPopoutView from './components/AnnotationsPopoutView'
 import ProjectsKanban from './components/ProjectsKanban'
+import CierresFeed from './components/CierresFeed'
 import PlaylistCanvas from './components/PlaylistCanvas'
 import LibraryHeader from './components/LibraryHeader'
 import CourseZipBar from './components/CourseZipBar'
@@ -200,6 +201,7 @@ function FilterableCoursesGrid({
   const [programFilter, setProgramFilter] = useState('')
   const [themeFilter, setThemeFilter] = useState('')
   const [minRate, setMinRate] = useState(0)
+  const [minExcitement, setMinExcitement] = useState(0)
   const [sortMode, setSortMode] = useState('az')
   const [columnSort, setColumnSort] = useState(null)
   const [columnFilters, setColumnFilters] = useState(EMPTY_COLUMN_FILTERS)
@@ -269,7 +271,8 @@ function FilterableCoursesGrid({
       institution: institutionFilter,
       program: programFilter,
       theme: themeFilter,
-      minRate
+      minRate,
+      minExcitement
     }
     const filtered = courses.filter(
       (course) =>
@@ -297,6 +300,10 @@ function FilterableCoursesGrid({
         const diff = (Number(b.rate) || 0) - (Number(a.rate) || 0)
         if (diff !== 0) return diff
       }
+      if (sortMode === 'excitement') {
+        const diff = (Number(b.learning?.excitement) || 0) - (Number(a.learning?.excitement) || 0)
+        if (diff !== 0) return diff
+      }
       if (sortMode === 'progress') {
         const diff = (b.learning?.percent || 0) - (a.learning?.percent || 0)
         if (diff !== 0) return diff
@@ -321,6 +328,7 @@ function FilterableCoursesGrid({
     programFilter,
     themeFilter,
     minRate,
+    minExcitement,
     sortMode,
     isCardLayout,
     columnSort,
@@ -563,6 +571,8 @@ function FilterableCoursesGrid({
         onThemeFilterChange={setThemeFilter}
         minRate={minRate}
         onMinRateChange={setMinRate}
+        minExcitement={minExcitement}
+        onMinExcitementChange={setMinExcitement}
         sortMode={sortMode}
         onSortModeChange={(value) => {
           setColumnSort(null)
@@ -683,6 +693,7 @@ function FilterableCoursesGrid({
                 !programFilter &&
                 !themeFilter &&
                 !minRate &&
+                !minExcitement &&
                 !hasColumnFilters(columnFilters) && (
                   <ContinueHub
                     courses={continueCourses}
@@ -962,7 +973,7 @@ function App() {
       setResumeTarget(target)
       const from = libraryStudyModeRef.current
       setReturnStudy(
-        from === 'annotations' || from === 'projects' || from === 'playlists'
+        from === 'annotations' || from === 'projects' || from === 'playlists' || from === 'cierres'
           ? { mode: from, ...(from === 'annotations' ? origin : null) }
           : null
       )
@@ -1099,7 +1110,12 @@ function App() {
     setResumeTarget(null)
     setReturnStudy(null)
     setAnnotationsCoursePath('')
-    if (section === 'projects' || section === 'annotations' || section === 'playlists') {
+    if (
+      section === 'projects' ||
+      section === 'annotations' ||
+      section === 'playlists' ||
+      section === 'cierres'
+    ) {
       setLibraryStudyMode(section)
       return
     }
@@ -1177,6 +1193,8 @@ function App() {
         />
       ) : libraryStudyMode === 'projects' ? (
         <ProjectsKanban courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
+      ) : libraryStudyMode === 'cierres' ? (
+        <CierresFeed courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'playlists' ? (
         <PlaylistCanvas
           courses={courses}
@@ -1190,7 +1208,13 @@ function App() {
           courses={courses}
           resumeTarget={resumeTarget}
           liveJump={liveJump}
-          backLabel={returnStudy?.mode === 'annotations' ? 'Anotaciones' : 'Biblioteca'}
+          backLabel={
+            returnStudy?.mode === 'annotations'
+              ? 'Anotaciones'
+              : returnStudy?.mode === 'cierres'
+                ? 'Cierres'
+                : 'Biblioteca'
+          }
           onBack={() => {
             const back = returnStudy
             setActiveCoursePath(null)

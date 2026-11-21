@@ -240,6 +240,21 @@ function lessonShared(lesson) {
   }
 }
 
+/** Personal excitement, 0 when unset. This is not the catalog rating. */
+export function clampExcitement(value) {
+  const level = Math.round(Number(value) || 0)
+  if (level < 1) return 0
+  if (level > 5) return 5
+  return level
+}
+
+function excitementOf(progress) {
+  return {
+    excitement: clampExcitement(progress?.excitement),
+    excitementAt: Math.max(0, Math.round(Number(progress?.excitementAt) || 0))
+  }
+}
+
 /** Two minutes. Pauses inside one session do not count as a new recent view. */
 export const VIEW_SESSION_MS = 2 * 60 * 1000
 
@@ -264,15 +279,19 @@ export function progressWire(progress) {
     if (!key) continue
     lessons[key] = lessonShared(source[key])
   }
-  const body = normalizeBody(
-    JSON.stringify({
-      inProcess: Boolean(progress?.inProcess),
-      lessons,
-      lastLessonRelativePath: String(progress?.lastLessonRelativePath || ''),
-      lastLessonTitle: String(progress?.lastLessonTitle || ''),
-      lastViewedAt: viewedAtOf(progress)
-    })
-  )
+  const payload = {
+    inProcess: Boolean(progress?.inProcess),
+    lessons,
+    lastLessonRelativePath: String(progress?.lastLessonRelativePath || ''),
+    lastLessonTitle: String(progress?.lastLessonTitle || ''),
+    lastViewedAt: viewedAtOf(progress)
+  }
+  const excitement = excitementOf(progress)
+  if (excitement.excitement || excitement.excitementAt) {
+    payload.excitement = excitement.excitement
+    payload.excitementAt = excitement.excitementAt
+  }
+  const body = normalizeBody(JSON.stringify(payload))
   return { body }
 }
 
@@ -286,6 +305,7 @@ export function progressFromBody(body) {
       if (!key) continue
       lessons[key] = lessonWire(source[key])
     }
+    const excitement = excitementOf(data)
     return {
       inProcess: Boolean(data.inProcess),
       lessons,
@@ -293,7 +313,9 @@ export function progressFromBody(body) {
       lastLessonTitle: String(data.lastLessonTitle || ''),
       lastPositionSec: Math.max(0, Math.round(Number(data.lastPositionSec) || 0)),
       lastOpenedAt: Math.max(0, Math.round(Number(data.lastOpenedAt) || 0)),
-      lastViewedAt: viewedAtOf(data)
+      lastViewedAt: viewedAtOf(data),
+      excitement: excitement.excitement,
+      excitementAt: excitement.excitementAt
     }
   } catch {
     return null
@@ -306,6 +328,7 @@ export function progressIsEmpty(progress) {
   if (data.inProcess) return false
   if (data.lastLessonRelativePath) return false
   if (data.lastViewedAt) return false
+  if (clampExcitement(data.excitement) > 0) return false
   return !Object.values(data.lessons).some((lesson) => lesson.completed || lesson.positionSec > 0)
 }
 
@@ -325,7 +348,10 @@ export function progressTrackKey(progress) {
 export function progressSyncKey(progress) {
   const data = progress?.lessons ? progress : progressFromBody(progress?.body || progress)
   if (!data) return ''
-  return `${progressTrackKey(data)}\n${viewSession(viewedAtOf(data))}`
+  const base = `${progressTrackKey(data)}\n${viewSession(viewedAtOf(data))}`
+  const excitement = excitementOf(data)
+  if (!excitement.excitement && !excitement.excitementAt) return base
+  return `${base}\n${excitement.excitement}`
 }
 
 export function progressSyncHash(courseId, progress) {
@@ -359,6 +385,9 @@ export function mergeCourseProgress(local, remote) {
     }
   }
   const last = viewedAtOf(right) >= viewedAtOf(left) ? right : left
+  const excitement = excitementOf(
+    (right.excitementAt || 0) >= (left.excitementAt || 0) ? right : left
+  )
   return {
     inProcess: Boolean(left.inProcess),
     lessons,
@@ -366,7 +395,9 @@ export function mergeCourseProgress(local, remote) {
     lastLessonTitle: last.lastLessonTitle,
     lastPositionSec: last.lastPositionSec,
     lastOpenedAt: Math.max(left.lastOpenedAt || 0, right.lastOpenedAt || 0),
-    lastViewedAt: Math.max(viewedAtOf(left), viewedAtOf(right))
+    lastViewedAt: Math.max(viewedAtOf(left), viewedAtOf(right)),
+    excitement: excitement.excitement,
+    excitementAt: Math.max(left.excitementAt || 0, right.excitementAt || 0)
   }
 }
 

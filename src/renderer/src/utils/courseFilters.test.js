@@ -6,6 +6,7 @@ import {
   libraryFiltersActive,
   projectPlaylists
 } from './courseFilters.js'
+import { compareCourses } from './courseTable.js'
 
 const lighting = {
   path: 'lighting',
@@ -45,12 +46,39 @@ describe('library course filters', () => {
     assert.equal(courseMatchesLibraryFilters(lighting, { isNewOnly: true }), false)
     assert.equal(courseMatchesLibraryFilters(lighting, { missingPropsOnly: true }), false)
     assert.equal(courseMatchesLibraryFilters(lighting, { minRate: 5 }), false)
+    const rated = {
+      ...lighting,
+      isInProcess: false,
+      learning: { excitement: 4, isRecentlyViewed: false }
+    }
+    assert.equal(courseMatchesLibraryFilters(rated, { minExcitement: 4 }), true)
+    assert.equal(courseMatchesLibraryFilters(rated, { minExcitement: 5 }), false)
+    assert.equal(
+      courseMatchesLibraryFilters({ ...rated, isInProcess: true }, { minExcitement: 4 }),
+      false
+    )
+    assert.equal(
+      courseMatchesLibraryFilters(
+        { ...rated, learning: { excitement: 4, isRecentlyViewed: true } },
+        { minExcitement: 4 }
+      ),
+      false
+    )
+    assert.equal(
+      courseMatchesLibraryFilters(
+        { ...rated, isInProcess: true },
+        { minExcitement: 4, isInProcessOnly: true }
+      ),
+      true
+    )
   })
 
   it('treats an empty filter set as inactive', () => {
     assert.equal(libraryFiltersActive({}), false)
     assert.equal(libraryFiltersActive({ query: '   ', minRate: 0 }), false)
     assert.equal(libraryFiltersActive({ theme: 'Color' }), true)
+    assert.equal(libraryFiltersActive({ minExcitement: 0 }), false)
+    assert.equal(libraryFiltersActive({ minExcitement: 3 }), true)
   })
 
   it('ranks programs and themes by how often they appear', () => {
@@ -79,5 +107,12 @@ describe('library course filters', () => {
     const shown = projectPlaylists(stored, byPath, { isInProcessOnly: true })
     assert.deepEqual(shown[0].coursePaths, ['lighting'])
     assert.deepEqual(stored[0].coursePaths, ['lighting', 'other', 'gone'])
+  })
+
+  it('sorts courses by personal excitement before title', () => {
+    const calm = { ...lighting, title: 'A', learning: { excitement: 1 } }
+    const hot = { ...lighting, title: 'B', learning: { excitement: 5 } }
+    assert.equal(compareCourses(calm, hot, 'excitement', 'desc') > 0, true)
+    assert.equal(compareCourses(hot, { ...hot, title: 'C' }, 'excitement', 'desc') < 0, true)
   })
 })

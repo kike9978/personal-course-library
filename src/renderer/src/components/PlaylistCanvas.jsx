@@ -32,6 +32,7 @@ import CourseDetailPanel from './CourseDetailPanel'
 import CoursePickBox from './CoursePickBox'
 import CourseZipBar from './CourseZipBar'
 import CourseFilterBar from './CourseFilterBar'
+import { EXCITEMENT_LEVELS } from './ExcitementGauge'
 import CourseEditModal from './CourseEditModal'
 import CoverSearchModal from './CoverSearchModal'
 import PlaylistBuilder from './PlaylistBuilder'
@@ -69,6 +70,7 @@ import {
   collectCourseFacets,
   courseMatchesLibraryFilters,
   libraryFiltersActive,
+  matchesExcitement,
   projectPlaylists,
   useDebouncedValue
 } from '../utils/courseFilters'
@@ -695,7 +697,8 @@ function courseSignatureOf(courses) {
         (course.programs || []).join('\u001e'),
         (course.theme || []).join('\u001e'),
         course.learning?.percent ?? '',
-        course.learning?.isRecentlyViewed ? 1 : 0
+        course.learning?.isRecentlyViewed ? 1 : 0,
+        course.learning?.excitement ?? ''
       ].join('\u001f')
     )
     .join('\n')
@@ -721,6 +724,8 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
   const [boardProgram, setBoardProgram] = useState('')
   const [boardTheme, setBoardTheme] = useState('')
   const [boardMinRate, setBoardMinRate] = useState(0)
+  const [boardMinExcitement, setBoardMinExcitement] = useState(0)
+  const [minExcitement, setMinExcitement] = useState(0)
   const [bigCover, setBigCover] = useState(readBigCover)
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth)
   const [selectedId, setSelectedId] = useState(null)
@@ -762,7 +767,8 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
       institution: boardInstitution,
       program: boardProgram,
       theme: boardTheme,
-      minRate: boardMinRate
+      minRate: boardMinRate,
+      minExcitement: boardMinExcitement
     }),
     [
       debouncedBoardQuery,
@@ -773,7 +779,8 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
       boardInstitution,
       boardProgram,
       boardTheme,
-      boardMinRate
+      boardMinRate,
+      boardMinExcitement
     ]
   )
   const boardFiltersRef = useRef(boardFilters)
@@ -1961,6 +1968,14 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
         if (institutionFilter && course.institution !== institutionFilter) return false
         if (programFilter && !(course.programs || []).includes(programFilter)) return false
         if (inProcessOnly && !course.isInProcess) return false
+        if (
+          !matchesExcitement(course, {
+            minExcitement,
+            isInProcessOnly: inProcessOnly
+          })
+        ) {
+          return false
+        }
         if (unlistedOnly && listed.has(course.path)) return false
         if (!query) return true
         const hay = [
@@ -1986,6 +2001,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
     institutionFilter,
     programFilter,
     inProcessOnly,
+    minExcitement,
     unlistedOnly,
     selectedPlaylist
   ])
@@ -2208,6 +2224,21 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   ))}
                 </select>
               </div>
+              <div className={cn(chipSelect, '[&_label]:text-[0.75rem] [&_label]:font-bold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase')}>
+                <label htmlFor="playlist-excitement">Emoción</label>
+                <select
+                  id="playlist-excitement"
+                  value={minExcitement}
+                  onChange={(event) => setMinExcitement(Number(event.target.value))}
+                >
+                  <option value={0}>Cualquiera</option>
+                  {EXCITEMENT_LEVELS.map((item) => (
+                    <option key={item.level} value={item.level}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="flex flex-wrap gap-[0.35rem]">
                 <button
                   type="button"
@@ -2378,6 +2409,8 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
               onThemeFilterChange={setBoardTheme}
               minRate={boardMinRate}
               onMinRateChange={setBoardMinRate}
+              minExcitement={boardMinExcitement}
+              onMinExcitementChange={setBoardMinExcitement}
               courseCount={boardStats.visible}
               courseTotal={boardStats.total}
             />

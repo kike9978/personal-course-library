@@ -32,6 +32,8 @@ const api = {
   setLessonProgress: (coursePath, update) =>
     ipcRenderer.invoke('set-lesson-progress', { coursePath, ...update }),
   recordCourseView: (coursePath) => ipcRenderer.invoke('record-course-view', coursePath),
+  setCourseExcitement: (coursePath, excitement) =>
+    ipcRenderer.invoke('set-course-excitement', { coursePath, excitement }),
   listNotes: (coursePath) => ipcRenderer.invoke('list-notes', coursePath),
   upsertNote: (coursePath, note) => ipcRenderer.invoke('upsert-note', { coursePath, note }),
   deleteNote: (coursePath, noteId) => ipcRenderer.invoke('delete-note', { coursePath, noteId }),
@@ -68,6 +70,14 @@ const api = {
   deletePlaylist: (playlistId) => ipcRenderer.invoke('delete-playlist', playlistId),
   getPlaylistIntent: () => ipcRenderer.invoke('get-playlist-intent'),
   savePlaylistIntent: (intent) => ipcRenderer.invoke('save-playlist-intent', intent),
+  listCierres: () => ipcRenderer.invoke('list-cierres'),
+  upsertCierre: (payload) => ipcRenderer.invoke('upsert-cierre', payload || {}),
+  setCierreFavorite: (id, favorite) => ipcRenderer.invoke('set-cierre-favorite', { id, favorite }),
+  deleteCierre: (id) => ipcRenderer.invoke('delete-cierre', id),
+  upsertCierreComment: (cierreId, comment) =>
+    ipcRenderer.invoke('upsert-cierre-comment', { cierreId, comment }),
+  deleteCierreComment: (cierreId, commentId) =>
+    ipcRenderer.invoke('delete-cierre-comment', { cierreId, commentId }),
   pickProjectFolder: () => ipcRenderer.invoke('pick-project-folder'),
   pickNoteImage: () => ipcRenderer.invoke('pick-note-image'),
   captureWindowRegion: (rect) => ipcRenderer.invoke('capture-window-region', rect),
@@ -142,6 +152,11 @@ const api = {
     const listener = () => callback()
     ipcRenderer.on('projects-changed', listener)
     return () => ipcRenderer.removeListener('projects-changed', listener)
+  },
+  onCierresChanged: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('cierres-changed', listener)
+    return () => ipcRenderer.removeListener('cierres-changed', listener)
   },
   onAnnotationsJump: (callback) => {
     const listener = (_event, data) => callback(data)

@@ -4,6 +4,7 @@ import { flattenLessons } from '../../../shared/courseTree.js'
 import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import { InstitutionMark } from './InstitutionMark'
 import CourseDescription from './CourseDescription'
+import ExcitementGauge from './ExcitementGauge'
 import brandMark from '../assets/img/brand-mark.svg'
 import { cn } from '../ui/cn'
 import { iconBtn } from '../ui/classes'
@@ -364,6 +365,17 @@ function CourseDetailPanel({
           className="flex flex-col gap-[0.55rem] rounded-md border border-ink/10 bg-surface p-3 shadow-card"
           aria-label="Continuar"
         >
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+              Emoción
+            </span>
+            <ExcitementGauge
+              coursePath={course.path}
+              value={course.learning?.excitement || 0}
+              size="md"
+            />
+          </div>
+
           {hasStatus ? (
             <div className="flex min-h-[1.35rem] flex-wrap items-center gap-[0.35rem]">
               {course.isInProcess ? <span className={ribbon}>En curso</span> : null}

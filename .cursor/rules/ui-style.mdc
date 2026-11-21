@@ -6,6 +6,10 @@ Compose conditional classes with `cn()` from `src/renderer/src/ui/cn.js`.
 
 Style UI with Tailwind utilities. Do not add component CSS files or plain CSS rules.
 
+## Icons
+
+Use `lucide-react`. Draw a custom icon only when the user asks for one.
+
 ## Tokens (use these — do not invent parallel palettes)
 
 - **Ink:** `text-ink` (primary text), `text-ink-soft` (secondary/meta)

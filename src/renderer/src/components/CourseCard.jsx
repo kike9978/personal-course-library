@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import { InstitutionMark } from './InstitutionMark'
 import CoursePickBox from './CoursePickBox'
+import ExcitementGauge from './ExcitementGauge'
 import brandMark from '../assets/img/brand-mark.svg'
 import { cn } from '../ui/cn'
 
@@ -292,6 +293,11 @@ function CourseCard({
               {'★'.repeat(course.rate)}
             </span>
           ) : null}
+          <ExcitementGauge
+            coursePath={coursePath}
+            value={course.learning?.excitement || 0}
+            onError={onError}
+          />
           {showLearningMeta &&
           typeof course.learning?.percent === 'number' &&
           course.learning.playableCount > 0 ? (

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import { InstitutionMark } from './InstitutionMark'
 import CoursePickBox from './CoursePickBox'
+import ExcitementGauge, { EXCITEMENT_LEVELS } from './ExcitementGauge'
 import brandMark from '../assets/img/brand-mark.svg'
 import { courseViewedAt, formatCourseDate } from '../utils/courseTable'
 import { cn } from '../ui/cn'
@@ -47,6 +48,7 @@ const COLUMNS = [
   { key: 'programs', label: 'Programas', kind: 'text', filter: 'select', filterKey: 'program' },
   { key: 'themes', label: 'Temas', kind: 'text', filter: 'select', filterKey: 'theme' },
   { key: 'rate', label: '★', kind: 'number', filter: 'rate', filterKey: 'minRate' },
+  { key: 'excitement', label: 'Emoción', kind: 'number', filter: 'excitement', filterKey: 'minExcitement' },
   { key: 'progress', label: 'Progreso', kind: 'number', filter: null },
   { key: 'status', label: 'Estado', kind: 'number', filter: 'status', filterKey: 'status' },
   { key: 'added', label: 'Añadido', kind: 'date', filter: 'presence', filterKey: 'added' },
@@ -195,6 +197,24 @@ function ColumnFilter({ column, filters, onColumnFilter, institutions, programs,
         <option value={3}>3+</option>
         <option value={4}>4+</option>
         <option value={5}>5</option>
+      </select>
+    )
+  }
+
+  if (column.filter === 'excitement') {
+    return (
+      <select
+        className={filterControl}
+        value={value}
+        aria-label="Emoción"
+        onChange={(event) => set(Number(event.target.value))}
+      >
+        <option value={0}>Todas</option>
+        {EXCITEMENT_LEVELS.map((item) => (
+          <option key={item.level} value={item.level}>
+            {item.label}
+          </option>
+        ))}
       </select>
     )
   }
@@ -376,6 +396,13 @@ function TableRow({
         ) : (
           '—'
         )}
+      </td>
+      <td className={cell}>
+        <ExcitementGauge
+          coursePath={course.path}
+          value={course.learning?.excitement || 0}
+          onError={onError}
+        />
       </td>
       <td className={cn(cell, 'tabular-nums')}>
         {percent == null ? (

@@ -1,3 +1,5 @@
+import { matchesExcitement } from './courseFilters.js'
+
 export const EMPTY_COLUMN_FILTERS = {
   title: '',
   institution: '',
@@ -5,6 +7,7 @@ export const EMPTY_COLUMN_FILTERS = {
   program: '',
   theme: '',
   minRate: 0,
+  minExcitement: 0,
   status: '',
   added: '',
   modified: '',
@@ -35,6 +38,7 @@ export function hasColumnFilters(filters) {
     filters.program ||
     filters.theme ||
     filters.minRate ||
+    filters.minExcitement ||
     filters.status ||
     filters.added ||
     filters.modified ||
@@ -63,6 +67,16 @@ export function matchesColumnFilters(course, filters) {
   if (filters.program && !(course.programs || []).includes(filters.program)) return false
   if (filters.theme && !(course.theme || []).includes(filters.theme)) return false
   if (filters.minRate && (Number(course.rate) || 0) < Number(filters.minRate)) return false
+  if (
+    filters.minExcitement &&
+    !matchesExcitement(course, {
+      minExcitement: filters.minExcitement,
+      isInProcessOnly: filters.status === 'inProcess',
+      recentlyViewedOnly: filters.status === 'recent'
+    })
+  ) {
+    return false
+  }
   if (!matchesStatus(course, filters.status)) return false
   if (!matchesPresence(filters.added, course.addedAt)) return false
   if (!matchesPresence(filters.modified, course.folderMtimeMs)) return false
@@ -95,7 +109,9 @@ export function compareCourses(a, b, key, dir) {
   } else if (key === 'themes') {
     diff = textCompare((a.theme || []).join(', '), (b.theme || []).join(', '))
   } else if (key === 'rate') diff = (Number(a.rate) || 0) - (Number(b.rate) || 0)
-  else if (key === 'progress') diff = (a.learning?.percent || 0) - (b.learning?.percent || 0)
+  else if (key === 'excitement') {
+    diff = (Number(a.learning?.excitement) || 0) - (Number(b.learning?.excitement) || 0)
+  } else if (key === 'progress') diff = (a.learning?.percent || 0) - (b.learning?.percent || 0)
   else if (key === 'added') diff = (a.addedAt || 0) - (b.addedAt || 0)
   else if (key === 'modified') diff = (a.folderMtimeMs || 0) - (b.folderMtimeMs || 0)
   else if (key === 'viewed') diff = courseViewedAt(a) - courseViewedAt(b)

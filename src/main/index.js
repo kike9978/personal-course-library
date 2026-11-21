@@ -48,6 +48,7 @@ import { exportCourseFolders } from './services/courseZip.js'
 import {
   getCourseProgress,
   setLessonProgress,
+  setCourseExcitement,
   recordCourseView,
   getLessonProgress,
   setCourseCurriculum,
@@ -77,6 +78,12 @@ import {
   deletePlaylist,
   getPlaylistIntent,
   savePlaylistIntent,
+  listCierres,
+  upsertCierre,
+  setCierreFavorite,
+  deleteCierre,
+  upsertCierreComment,
+  deleteCierreComment,
   setNoteWriteHook,
   setPlaylistWriteHook,
   setProjectWriteHook
@@ -702,6 +709,16 @@ function registerIpcHandlers() {
     return next
   })
 
+  ipcMain.handle('set-course-excitement', (_event, { coursePath, excitement }) => {
+    const before = localProgressSyncKey(coursePath)
+    const next = setCourseExcitement(coursePath, excitement)
+    if (localProgressSyncKey(coursePath) !== before) {
+      enqueueNotionProgress(coursePath, { soon: true })
+    }
+    broadcastToWindows('progress-changed', {})
+    return next
+  })
+
   ipcMain.handle('record-course-view', (_event, coursePath) => {
     const before = localProgressSyncKey(coursePath)
     const next = recordCourseView(coursePath)
@@ -773,6 +790,33 @@ function registerIpcHandlers() {
   ipcMain.handle('delete-playlist', (_event, playlistId) => deletePlaylist(playlistId))
   ipcMain.handle('get-playlist-intent', () => getPlaylistIntent())
   ipcMain.handle('save-playlist-intent', (_event, intent) => savePlaylistIntent(intent))
+
+  ipcMain.handle('list-cierres', () => listCierres())
+  ipcMain.handle('upsert-cierre', (_event, payload) => {
+    const saved = upsertCierre(payload || {})
+    broadcastToWindows('cierres-changed', {})
+    return saved
+  })
+  ipcMain.handle('set-cierre-favorite', (_event, { id, favorite } = {}) => {
+    const saved = setCierreFavorite(id, favorite)
+    broadcastToWindows('cierres-changed', {})
+    return saved
+  })
+  ipcMain.handle('delete-cierre', (_event, id) => {
+    const result = deleteCierre(id)
+    broadcastToWindows('cierres-changed', {})
+    return result
+  })
+  ipcMain.handle('upsert-cierre-comment', (_event, { cierreId, comment } = {}) => {
+    const saved = upsertCierreComment(cierreId, comment || {})
+    broadcastToWindows('cierres-changed', {})
+    return saved
+  })
+  ipcMain.handle('delete-cierre-comment', (_event, { cierreId, commentId } = {}) => {
+    const saved = deleteCierreComment(cierreId, commentId)
+    broadcastToWindows('cierres-changed', {})
+    return saved
+  })
 
   ipcMain.handle('pick-project-folder', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {

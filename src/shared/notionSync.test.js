@@ -340,6 +340,29 @@ describe('course progress wire', () => {
     assert.equal(progressSyncKey(early), progressSyncKey(paused))
     assert.notEqual(progressSyncKey(early), progressSyncKey(nextSession))
   })
+
+  it('syncs a personal excitement level without moving courses that have none', () => {
+    const plain = { inProcess: false, lessons: {}, lastViewedAt: 120_000 }
+    const excited = { ...plain, excitement: 4, excitementAt: 9 }
+    const wire = progressWire(excited)
+    const parsed = progressFromBody(wire.body)
+    assert.equal(parsed.excitement, 4)
+    assert.equal(parsed.excitementAt, 9)
+    assert.equal(progressSyncKey(plain), progressSyncKey(progressFromBody(progressWire(plain).body)))
+    assert.notEqual(progressSyncKey(plain), progressSyncKey(parsed))
+    assert.equal(progressIsEmpty(progressWire({ inProcess: false, lessons: {}, excitement: 3, excitementAt: 1 })), false)
+    const merged = mergeCourseProgress(
+      { ...plain, excitement: 2, excitementAt: 10 },
+      { ...plain, excitement: 5, excitementAt: 4 }
+    )
+    assert.equal(merged.excitement, 2)
+    assert.equal(merged.excitementAt, 10)
+    const cleared = progressFromBody(
+      progressWire({ ...plain, excitement: 0, excitementAt: 20 }).body
+    )
+    assert.equal(cleared.excitement, 0)
+    assert.notEqual(progressSyncKey(excited), progressSyncKey(cleared))
+  })
 })
 
 describe('notion reconcile', () => {

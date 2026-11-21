@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { collectTreeResources, flattenLessons } from '../../../shared/courseTree.js'
+import { flattenOutline } from '../../../shared/cierres.js'
 import { noteDisplayTitles, noteTextTitle, playbackMarkLabel } from '../../../shared/knowledgeGraph.js'
 import LessonTree from './LessonTree'
 import LessonPlayer from './LessonPlayer'
 import ResourceViewer, { ResourceGroupView } from './ResourceViewer'
 import ProjectPanel, { placementForFile, sectionForPath } from './ProjectPanel'
+import CierreComposer, { shouldOfferCierre, suggestProjectCierre } from './CierreComposer'
 import StudySidePanel, { formatTime } from './StudySidePanel'
 import { InstitutionMark } from './InstitutionMark'
+import ExcitementGauge from './ExcitementGauge'
 import { collectCourseFacets } from '../utils/courseFilters'
 import Loader from './Loader'
 import { cn } from '../ui/cn'
@@ -86,6 +89,7 @@ function CourseRoom({
   const [composerFocusTick, setComposerFocusTick] = useState(0)
   const [highlightNoteId, setHighlightNoteId] = useState(null)
   const [pendingSeek, setPendingSeek] = useState(null)
+  const [cierreDraft, setCierreDraft] = useState(null)
   const playerRef = useRef(null)
   const currentTimeRef = useRef(0)
   const draftRef = useRef({ text: '', markdown: '', json: null })
@@ -94,6 +98,14 @@ function CourseRoom({
   const pinReleasedRef = useRef(false)
   const composerFocusedRef = useRef(false)
   const highlightTimerRef = useRef(null)
+  const progressRef = useRef(null)
+  const cierreToastRef = useRef(new Set())
+  progressRef.current = progress
+
+  const offerCierre = useCallback(async (subject) => {
+    if (!(await shouldOfferCierre(subject))) return
+    setCierreDraft(subject)
+  }, [])
 
   useEffect(
     () => () => {
@@ -510,13 +522,32 @@ function CourseRoom({
     }
   }
 
-  const handleProjectsSaved = (list, saved) => {
+  const handleProjectsSaved = async (list, saved, meta) => {
     setProjects(list || [])
     setCreatingProject(false)
     setProjectDraft(null)
     if (saved?.id) {
       setSelectedProjectId(saved.id)
       setPanelMode('project')
+    }
+    if (meta?.becameDone && saved?.id) {
+      const fromFile = saved.fileRelativePath
+        ? sectionForPath(tree?.sections || [], saved.fileRelativePath)
+        : null
+      const fromSection = saved.sectionId
+        ? flattenOutline(tree?.sections || []).find((section) => section.id === saved.sectionId)
+        : null
+      const section = fromFile || fromSection
+      const subject = {
+        coursePath,
+        projectId: saved.id,
+        projectTitle: saved.title,
+        sectionId: section?.id || saved.sectionId || null,
+        sectionTitle: section?.title || null,
+        lessonRelativePath: saved.fileRelativePath || null,
+        title: saved.title || ''
+      }
+      if (await suggestProjectCierre(subject)) setCierreDraft(subject)
     }
   }
 
@@ -532,6 +563,9 @@ function CourseRoom({
 
   const handleProgress = useCallback(
     async (update) => {
+      const wasCompleted = Boolean(
+        progressRef.current?.lessons?.[update.relativePath]?.completed
+      )
       try {
         const next = await window.api.setLessonProgress(coursePath, {
           relativePath: update.relativePath,
@@ -542,11 +576,45 @@ function CourseRoom({
           setAsLast: true
         })
         applyProgress(next)
+        if (update.completed === true && !wasCompleted) {
+          const toastKey = `${coursePath}\0${update.relativePath}`
+          if (cierreToastRef.current.has(toastKey)) return
+          cierreToastRef.current.add(toastKey)
+          const section = sectionForPath(tree?.sections || [], update.relativePath)
+          const subject = {
+            coursePath,
+            sectionId: section?.id || null,
+            sectionTitle: section?.title || null,
+            lessonRelativePath: update.relativePath,
+            lessonTitle: update.title,
+            title: update.title || ''
+          }
+          if (await shouldOfferCierre(subject)) {
+            toast.custom(
+              (t) => (
+                <div className="flex items-center gap-3 rounded-[14px] border-[3px] border-[#1a1423] bg-[#fff4e8] px-4 py-3 font-bold text-[#1a1423]">
+                  <span>Lección completada</span>
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-full border-0 bg-[#1a1423] px-3 py-1 text-white"
+                    onClick={() => {
+                      toast.dismiss(t.id)
+                      setCierreDraft(subject)
+                    }}
+                  >
+                    Publicar cierre
+                  </button>
+                </div>
+              ),
+              { duration: 7000 }
+            )
+          }
+        }
       } catch (err) {
         console.error('Failed to save progress', err)
       }
     },
-    [coursePath, applyProgress]
+    [coursePath, applyProgress, tree]
   )
 
   const toggleLessonComplete = useCallback(
@@ -562,6 +630,17 @@ function CourseRoom({
           trackAsPlayable: playable
         })
         applyProgress(next)
+        if (completed && playable) {
+          const section = sectionForPath(tree?.sections || [], lesson.relativePath)
+          void offerCierre({
+            coursePath,
+            sectionId: section?.id || null,
+            sectionTitle: section?.title || null,
+            lessonRelativePath: lesson.relativePath,
+            lessonTitle: lesson.title || lesson.name,
+            title: lesson.title || lesson.name || ''
+          })
+        }
         toast.success(
           completed
             ? playable
@@ -575,7 +654,7 @@ function CourseRoom({
         toast.error(err.message || 'No se pudo actualizar')
       }
     },
-    [coursePath, applyProgress]
+    [coursePath, applyProgress, offerCierre, tree]
   )
 
   const jumpTo = useCallback(
@@ -1225,6 +1304,11 @@ function CourseRoom({
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <ExcitementGauge
+            coursePath={course.path}
+            value={course.learning?.excitement || 0}
+            size="md"
+          />
           <div className="relative z-[4] shrink-0" ref={moreMenuRef}>
             <button
               type="button"
@@ -1522,6 +1606,12 @@ function CourseRoom({
           </div>
         </div>
       )}
+      <CierreComposer
+        open={Boolean(cierreDraft)}
+        initial={cierreDraft}
+        courses={courses}
+        onClose={() => setCierreDraft(null)}
+      />
     </div>
   )
 }

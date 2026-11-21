@@ -3105,7 +3105,9 @@ function localProgress(coursePath) {
       lastLessonTitle: course?.lastLessonTitle || '',
       lastPositionSec: course?.lastPositionSec || 0,
       lastOpenedAt: course?.lastOpenedAt || 0,
-      lastViewedAt: course?.lastViewedAt || 0
+      lastViewedAt: course?.lastViewedAt || 0,
+      excitement: course?.excitement || 0,
+      excitementAt: course?.excitementAt || 0
     }).body
   )
 }
@@ -3153,6 +3155,8 @@ async function applyProgress(coursePath, data, notion) {
     lastPositionSec: next.lastPositionSec || 0,
     lastOpenedAt: next.lastOpenedAt || course?.lastOpenedAt || null,
     lastViewedAt: lastViewedAt || null,
+    excitement: next.excitement || 0,
+    excitementAt: next.excitementAt || null,
     inProcess: Boolean(next.inProcess),
     notion
   })
@@ -3312,6 +3316,8 @@ async function reconcileProgress(client, coursePath, job = {}) {
     lastPositionSec: merged.lastPositionSec || 0,
     lastOpenedAt: merged.lastOpenedAt || null,
     lastViewedAt: merged.lastViewedAt || null,
+    excitement: merged.excitement || 0,
+    excitementAt: merged.excitementAt || null,
     inProcess: local.inProcess,
     notion: {
       pageId: remote.pageId,

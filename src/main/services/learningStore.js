@@ -23,7 +23,13 @@ import {
   sameCourse,
   topicKey
 } from '../../shared/knowledgeGraph.js'
-import { viewSession } from '../../shared/notionSync.js'
+import { clampExcitement, viewSession } from '../../shared/notionSync.js'
+import {
+  cierreCourseKey,
+  findCierreForSubject,
+  normalizeCierreInput,
+  normalizeCommentBody
+} from '../../shared/cierres.js'
 
 const STORE_FILE = 'learning-store.json'
 const COMPLETE_THRESHOLD = 0.95
@@ -39,7 +45,8 @@ function emptyStore() {
     courses: {},
     playlists: [],
     topics: [],
-    findings: []
+    findings: [],
+    cierres: []
   }
 }
 
@@ -50,6 +57,8 @@ function emptyCourseState() {
     lastPositionSec: 0,
     lastOpenedAt: null,
     lastViewedAt: null,
+    excitement: 0,
+    excitementAt: null,
     playableLessons: [],
     lessons: {},
     notes: [],
@@ -288,6 +297,10 @@ function loadStoreFromDisk() {
       data.playlists = []
       dirty = true
     }
+    if (!Array.isArray(data.cierres)) {
+      data.cierres = []
+      dirty = true
+    }
     for (const course of Object.values(data.courses || {})) ensureArrays(course)
     if (ensureKnowledge(data)) dirty = true
     if (clearDefaultNoteTitles(data.findings)) dirty = true
@@ -405,6 +418,8 @@ export function summarizeCourseState(courseState) {
 
   return {
     ...state,
+    excitement: clampExcitement(state.excitement),
+    excitementAt: Number(state.excitementAt) || null,
     notes: state.notes,
     bookmarks: state.bookmarks,
     noteCount: state.notes.length,
@@ -461,6 +476,10 @@ export function writeCourseProgress(coursePath, patch = {}) {
   if ('lastPositionSec' in patch) course.lastPositionSec = Math.max(0, Number(patch.lastPositionSec) || 0)
   if ('lastOpenedAt' in patch) course.lastOpenedAt = Number(patch.lastOpenedAt) || null
   if ('lastViewedAt' in patch) course.lastViewedAt = Number(patch.lastViewedAt) || null
+  if ('excitement' in patch) course.excitement = clampExcitement(patch.excitement)
+  if ('excitementAt' in patch) {
+    course.excitementAt = Math.max(0, Math.round(Number(patch.excitementAt) || 0)) || null
+  }
   if ('inProcess' in patch) course.inProcess = Boolean(patch.inProcess)
   if ('notion' in patch) course.notion = patch.notion
   store.courses[key] = course
@@ -586,6 +605,17 @@ export function setLessonProgress(coursePath, update) {
  * Remember that the course was opened, without changing lesson progress.
  * @param {string} coursePath
  */
+/** Personal 0–5 excitement. Stored with learning progress, not on the course file. */
+export function setCourseExcitement(coursePath, level) {
+  const store = readStore()
+  if (!courseKey(coursePath)) return null
+  const { key, course } = getMutableCourse(store, coursePath)
+  course.excitement = clampExcitement(level)
+  course.excitementAt = Date.now()
+  writeStore(store)
+  return presentCourse(store, key, course)
+}
+
 export function recordCourseView(coursePath) {
   const store = readStore()
   const { course } = getMutableCourse(store, coursePath)
@@ -1488,6 +1518,122 @@ export function deletePlaylist(playlistId) {
     for (const parentId of parentIds) emitPlaylistWrite({ op: 'upsert', id: parentId })
   }
   return { ok: true }
+}
+
+function publicCierre(cierre) {
+  const comments = [...(cierre.comments || [])].sort(
+    (a, b) => (a.createdAt || 0) - (b.createdAt || 0)
+  )
+  return {
+    ...cierre,
+    comments: comments.map((comment) => ({ ...comment }))
+  }
+}
+
+export function listCierres() {
+  const store = readStore()
+  const hidden = hiddenCoursePathSet()
+  return (store.cierres || [])
+    .filter((item) => item?.coursePath && !hidden.has(item.coursePath))
+    .map(publicCierre)
+    .sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0))
+}
+
+export function upsertCierre(payload = {}) {
+  const store = readStore()
+  if (!Array.isArray(store.cierres)) store.cierres = []
+  const now = Date.now()
+  let existing = null
+  if (payload.id) {
+    existing = store.cierres.find((item) => item.id === payload.id) || null
+    if (!existing) throw new Error('Cierre no encontrado')
+  } else {
+    existing = findCierreForSubject(store.cierres, {
+      ...payload,
+      coursePath: cierreCourseKey(payload.coursePath)
+    })
+  }
+  const next = normalizeCierreInput(payload, existing)
+  if (existing) {
+    const saved = {
+      ...existing,
+      ...next,
+      id: existing.id,
+      comments: Array.isArray(existing.comments) ? existing.comments : [],
+      favorite:
+        payload.favorite !== undefined ? Boolean(payload.favorite) : Boolean(existing.favorite),
+      publishedAt: existing.publishedAt || now,
+      createdAt: existing.createdAt || now,
+      updatedAt: now
+    }
+    const idx = store.cierres.findIndex((item) => item.id === existing.id)
+    store.cierres[idx] = saved
+    writeStore(store)
+    return publicCierre(saved)
+  }
+  const created = {
+    ...next,
+    id: makeId(),
+    comments: [],
+    favorite: Boolean(payload.favorite),
+    publishedAt: now,
+    createdAt: now,
+    updatedAt: now
+  }
+  store.cierres.push(created)
+  writeStore(store)
+  return publicCierre(created)
+}
+
+export function setCierreFavorite(id, favorite) {
+  const store = readStore()
+  const item = (store.cierres || []).find((cierre) => cierre.id === id)
+  if (!item) throw new Error('Cierre no encontrado')
+  item.favorite = Boolean(favorite)
+  item.updatedAt = Date.now()
+  writeStore(store)
+  return publicCierre(item)
+}
+
+export function deleteCierre(id) {
+  const store = readStore()
+  const before = store.cierres?.length || 0
+  store.cierres = (store.cierres || []).filter((item) => item.id !== id)
+  if (store.cierres.length === before) throw new Error('Cierre no encontrado')
+  writeStore(store)
+  return { ok: true }
+}
+
+export function upsertCierreComment(cierreId, payload = {}) {
+  const store = readStore()
+  const cierre = (store.cierres || []).find((item) => item.id === cierreId)
+  if (!cierre) throw new Error('Cierre no encontrado')
+  if (!Array.isArray(cierre.comments)) cierre.comments = []
+  const body = normalizeCommentBody(payload.body)
+  const now = Date.now()
+  if (payload.id) {
+    const comment = cierre.comments.find((item) => item.id === payload.id)
+    if (!comment) throw new Error('Seguimiento no encontrado')
+    comment.body = body
+    comment.updatedAt = now
+  } else {
+    cierre.comments.push({ id: makeId(), body, createdAt: now, updatedAt: now })
+  }
+  cierre.updatedAt = now
+  writeStore(store)
+  return publicCierre(cierre)
+}
+
+export function deleteCierreComment(cierreId, commentId) {
+  const store = readStore()
+  const cierre = (store.cierres || []).find((item) => item.id === cierreId)
+  if (!cierre) throw new Error('Cierre no encontrado')
+  const before = cierre.comments?.length || 0
+  cierre.comments = (cierre.comments || []).filter((item) => item.id !== commentId)
+  if (cierre.comments.length === before) throw new Error('Seguimiento no encontrado')
+  cierre.updatedAt = Date.now()
+  writeStore(store)
+  return publicCierre(cierre)
 }
 
 /** Absolute path to learning-store.json (notes, projects, progress). */

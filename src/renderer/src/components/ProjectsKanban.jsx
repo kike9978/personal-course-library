@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { STATUS_OPTIONS, statusLabel } from './ProjectPanel'
 import AppNav from './AppNav'
+import CierreComposer, { suggestProjectCierre } from './CierreComposer'
 import { cn } from '../ui/cn'
 import { btnGhost } from '../ui/classes'
 
@@ -41,6 +42,7 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
   const [query, setQuery] = useState('')
   const [draggingId, setDraggingId] = useState(null)
   const [dropColumn, setDropColumn] = useState(null)
+  const [cierreDraft, setCierreDraft] = useState(null)
 
   const catalogKey = useMemo(
     () => [...courses.map((course) => course.path)].sort().join('\0'),
@@ -138,6 +140,18 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
     } catch (err) {
       setItems(prev)
       toast.error(err.message || 'No se pudo mover el proyecto')
+      return
+    }
+    if (nextStatus === 'done' && project.status !== 'done') {
+      const subject = {
+        coursePath: project.coursePath,
+        projectId: project.id,
+        projectTitle: project.title,
+        sectionId: project.sectionId || null,
+        lessonRelativePath: project.fileRelativePath || null,
+        title: project.title || ''
+      }
+      if (await suggestProjectCierre(subject)) setCierreDraft(subject)
     }
   }
 
@@ -356,6 +370,12 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
           })
         )}
       </div>
+      <CierreComposer
+        open={Boolean(cierreDraft)}
+        initial={cierreDraft}
+        courses={courses}
+        onClose={() => setCierreDraft(null)}
+      />
     </div>
   )
 }

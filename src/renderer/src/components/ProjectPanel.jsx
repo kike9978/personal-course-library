@@ -244,7 +244,8 @@ function ProjectPanel({
         ) ||
         list[list.length - 1]
       toast.success(isNew ? 'Proyecto creado' : 'Proyecto guardado')
-      onSaved?.(list, saved)
+      const becameDone = status === 'done' && (project?.status || 'todo') !== 'done'
+      onSaved?.(list, saved, { becameDone })
     } catch (err) {
       toast.error(err.message || 'No se pudo guardar')
     } finally {

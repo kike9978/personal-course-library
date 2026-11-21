@@ -1,0 +1,12 @@
+---
+description: Use Lucide for icons unless a custom icon is requested
+alwaysApply: true
+---
+
+# Icons: Lucide
+
+Use icons from `lucide-react`.
+
+- Import the named icon: `import { Smile } from 'lucide-react'`
+- Size and color with Tailwind on the icon (`h-4 w-4 text-ink-soft`)
+- Draw a custom SVG only when the user asks for a custom icon

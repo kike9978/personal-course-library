@@ -40,6 +40,17 @@ export function courseMatchesLibraryFilters(course, filters = {}) {
   if (filters.program && !(course?.programs || []).includes(filters.program)) return false
   if (filters.theme && !(course?.theme || []).includes(filters.theme)) return false
   if (filters.minRate && (Number(course?.rate) || 0) < Number(filters.minRate)) return false
+  if (!matchesExcitement(course, filters)) return false
+  return true
+}
+
+/** Exact emotion. En curso and Reciente stay out unless that filter is on too. */
+export function matchesExcitement(course, filters = {}) {
+  const wanted = Number(filters.minExcitement) || 0
+  if (!wanted) return true
+  if ((Number(course?.learning?.excitement) || 0) !== wanted) return false
+  if (!filters.isInProcessOnly && course?.isInProcess) return false
+  if (!filters.recentlyViewedOnly && course?.learning?.isRecentlyViewed) return false
   return true
 }
 
@@ -53,7 +64,8 @@ export function libraryFiltersActive(filters = {}) {
     filters.institution ||
     filters.program ||
     filters.theme ||
-    Number(filters.minRate) > 0
+    Number(filters.minRate) > 0 ||
+    Number(filters.minExcitement) > 0
   )
 }
 

@@ -13,6 +13,7 @@ const SORT_OPTIONS = [
   { value: 'addedOldest', label: 'Añadidos primero' },
   { value: 'newest', label: 'Última modificación' },
   { value: 'rate', label: 'Mejor valorados' },
+  { value: 'excitement', label: 'Más emoción' },
   { value: 'progress', label: 'Más progreso' },
   { value: 'inProgress', label: 'En curso primero' }
 ]
@@ -55,6 +56,8 @@ function LibraryHeader({
   onThemeFilterChange,
   minRate,
   onMinRateChange,
+  minExcitement,
+  onMinExcitementChange,
   sortMode,
   onSortModeChange,
   onExportCourses,
@@ -314,6 +317,8 @@ function LibraryHeader({
           onThemeFilterChange={onThemeFilterChange}
           minRate={minRate}
           onMinRateChange={onMinRateChange}
+          minExcitement={minExcitement}
+          onMinExcitementChange={onMinExcitementChange}
           closeSignal={moreOpen}
           onFiltersToggle={(open) => {
             if (open) setMoreOpen(false)

@@ -8,6 +8,7 @@ function AppNav({ active = 'library', onSelect }) {
     { id: 'library', label: 'Biblioteca' },
     { id: 'annotations', label: 'Anotaciones' },
     { id: 'projects', label: 'Proyectos' },
+    { id: 'cierres', label: 'Cierres' },
     { id: 'playlists', label: 'Listas' }
   ]
 

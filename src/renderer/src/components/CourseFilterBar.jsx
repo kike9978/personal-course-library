@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { EXCITEMENT_LEVELS } from './ExcitementGauge'
 import { cn } from '../ui/cn'
 
 function CheckIcon() {
@@ -82,6 +83,8 @@ function CourseFilterBar({
   onThemeFilterChange,
   minRate,
   onMinRateChange,
+  minExcitement = 0,
+  onMinExcitementChange,
   courseCount = null,
   courseTotal = null,
   closeSignal = false,
@@ -94,6 +97,7 @@ function CourseFilterBar({
   const panelId = `${idPrefix}-filters-panel`
   const institutionId = `${idPrefix}-institution-filter`
   const rateId = `${idPrefix}-min-rate-filter`
+  const excitementId = `${idPrefix}-min-excitement-filter`
   const themeLabelId = `${idPrefix}-theme-filter-label`
   const passed = className || ''
   const extraClass = passed.replace(/\bcourse-filter-bar(--board)?\b/g, '').trim()
@@ -103,6 +107,7 @@ function CourseFilterBar({
     Number(missingPropsOnly) +
     Number(Boolean(institutionFilter)) +
     Number(minRate > 0) +
+    Number(minExcitement > 0) +
     Number(Boolean(themeFilter))
 
   useEffect(() => {
@@ -159,6 +164,7 @@ function CourseFilterBar({
     onMissingPropsOnlyChange(false)
     onInstitutionFilterChange('')
     onMinRateChange(0)
+    onMinExcitementChange?.(0)
     onThemeFilterChange('')
     setFiltersOpen(false)
   }
@@ -330,6 +336,23 @@ function CourseFilterBar({
                 <option value={3}>3+</option>
                 <option value={4}>4+</option>
                 <option value={5}>5</option>
+              </select>
+            </label>
+
+            <label className={popoverLabel} htmlFor={excitementId}>
+              Emoción
+              <select
+                id={excitementId}
+                className={popoverSelect}
+                value={minExcitement}
+                onChange={(event) => onMinExcitementChange?.(Number(event.target.value))}
+              >
+                <option value={0}>Cualquiera</option>
+                {EXCITEMENT_LEVELS.map((item) => (
+                  <option key={item.level} value={item.level}>
+                    {item.label}
+                  </option>
+                ))}
               </select>
             </label>
 
