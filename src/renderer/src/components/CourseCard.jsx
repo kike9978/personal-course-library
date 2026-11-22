@@ -276,16 +276,7 @@ function CourseCard({
         >
           {courseTitle}
         </h3>
-        {showLearningMeta && course.learning?.lastLessonTitle ? (
-          <p
-            className="m-0 truncate text-[0.78rem] text-ink-soft"
-            title={course.learning.lastLessonTitle}
-          >
-            {course.learning.status === 'completed'
-              ? 'Completado'
-              : `Continuar: ${course.learning.lastLessonTitle}`}
-          </p>
-        ) : null}
+       
         <div className="flex min-h-6 items-center gap-2">
           <InstitutionMark institution={institution} />
           {typeof course.rate === 'number' && course.rate > 0 ? (

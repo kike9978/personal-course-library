@@ -2131,10 +2131,48 @@ async function reconcileTopicDelete(client, topicId) {
   ])
 }
 
+function notionCourseFolder(...values) {
+  for (const value of values) {
+    const text = String(value || '').trim()
+    if (!text) continue
+    const folder = text.startsWith('course:') ? text.slice('course:'.length) : text
+    if (folder && folder !== '__loose__') return folder
+  }
+  return ''
+}
+
+/** A Notion project with no local copy becomes a shell. The linked folder stays empty. */
+async function adoptRemoteProject(client, id, coursePath) {
+  if ((readState().projectTombstones || []).some((item) => item.projectId === id)) return
+  const remote = await loadKindPage(client, 'project', id, null)
+  const parsed = remote ? projectFromBody(remote.body) : null
+  if (!remote || !parsed) return
+  const folder = notionCourseFolder(coursePath, remote.courseKey, remote.parentExternalId)
+  if (!folder) return
+  const hash = wireHash(remote.title, projectWire({ title: remote.title, ...parsed }).body)
+  withoutNoteWriteHook(() => {
+    restoreProject(folder, {
+      id,
+      title: remote.title || 'Proyecto',
+      notes: parsed.notes,
+      status: parsed.status,
+      sectionId: parsed.sectionId || null,
+      fileRelativePath: parsed.fileRelativePath || null,
+      linkedFolderPath: null,
+      notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
+    })
+  })
+  notifyProjects()
+}
+
 async function reconcileProject(client, id, coursePath) {
   const project =
     readStoredProject(coursePath, id) || listStoredProjects().find((item) => item.id === id)
-  if (!project || project.notion?.conflict) return
+  if (!project) {
+    await adoptRemoteProject(client, id, coursePath)
+    return
+  }
+  if (project.notion?.conflict) return
   const wire = projectWire(project)
   const localHash = wireHash(wire.title, wire.body)
   const remote = await loadKindPage(client, 'project', id, project.notion?.pageId)
