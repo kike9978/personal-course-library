@@ -76,6 +76,13 @@ import {
   listPlaylists,
   upsertPlaylist,
   deletePlaylist,
+  listDecks,
+  createDeck,
+  deleteDeck,
+  setDeckCardKnown,
+  appendDeckCards,
+  updateDeckCard,
+  deleteDeckCard,
   getPlaylistIntent,
   savePlaylistIntent,
   listCierres,
@@ -112,6 +119,14 @@ import {
   startNotionSync,
   syncNotionNow
 } from './services/notionSync.js'
+import { readLessonTranscripts } from './services/lessonTranscripts.js'
+import {
+  ankiStatus,
+  exportDeckForAnki,
+  getAnkiSettings,
+  saveAnkiSettings,
+  syncDeckToAnki
+} from './services/ankiSync.js'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -785,6 +800,31 @@ function registerIpcHandlers() {
   )
   ipcMain.handle('delete-project', (_event, { coursePath, projectId }) =>
     deleteProject(coursePath, projectId)
+  )
+  ipcMain.handle('list-decks', () => listDecks())
+  ipcMain.handle('create-deck', (_event, deck) => createDeck(deck || {}))
+  ipcMain.handle('delete-deck', (_event, deckId) => deleteDeck(deckId))
+  ipcMain.handle('append-deck-cards', (_event, { deckId, cards } = {}) =>
+    appendDeckCards(deckId, cards)
+  )
+  ipcMain.handle('update-deck-card', (_event, { deckId, cardId, patch } = {}) =>
+    updateDeckCard(deckId, cardId, patch)
+  )
+  ipcMain.handle('delete-deck-card', (_event, { deckId, cardId } = {}) =>
+    deleteDeckCard(deckId, cardId)
+  )
+  ipcMain.handle('read-lesson-transcripts', (_event, { coursePath, items } = {}) =>
+    readLessonTranscripts(coursePath, items)
+  )
+  ipcMain.handle('anki-status', () => ankiStatus())
+  ipcMain.handle('get-anki-settings', () => getAnkiSettings())
+  ipcMain.handle('set-anki-settings', (_event, payload = {}) => saveAnkiSettings(payload))
+  ipcMain.handle('sync-deck-to-anki', (_event, deckId) => syncDeckToAnki(deckId))
+  ipcMain.handle('export-deck-anki', (event, deckId) =>
+    exportDeckForAnki(deckId, BrowserWindow.fromWebContents(event.sender) || mainWindow)
+  )
+  ipcMain.handle('set-deck-card-known', (_event, { deckId, cardId, known } = {}) =>
+    setDeckCardKnown(deckId, cardId, known)
   )
   ipcMain.handle('list-playlists', () => listPlaylists())
   ipcMain.handle('upsert-playlist', (_event, playlist) => upsertPlaylist(playlist))

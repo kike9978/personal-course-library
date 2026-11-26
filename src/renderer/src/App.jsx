@@ -12,6 +12,7 @@ import AnnotationsPopoutView from './components/AnnotationsPopoutView'
 import ProjectsKanban from './components/ProjectsKanban'
 import CierresFeed from './components/CierresFeed'
 import PlaylistCanvas from './components/PlaylistCanvas'
+import FlashcardsView from './components/FlashcardsView'
 import LibraryHeader from './components/LibraryHeader'
 import CourseZipBar from './components/CourseZipBar'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -973,7 +974,11 @@ function App() {
       setResumeTarget(target)
       const from = libraryStudyModeRef.current
       setReturnStudy(
-        from === 'annotations' || from === 'projects' || from === 'playlists' || from === 'cierres'
+        from === 'annotations' ||
+          from === 'projects' ||
+          from === 'playlists' ||
+          from === 'cierres' ||
+          from === 'flashcards'
           ? { mode: from, ...(from === 'annotations' ? origin : null) }
           : null
       )
@@ -1114,7 +1119,8 @@ function App() {
       section === 'projects' ||
       section === 'annotations' ||
       section === 'playlists' ||
-      section === 'cierres'
+      section === 'cierres' ||
+      section === 'flashcards'
     ) {
       setLibraryStudyMode(section)
       return
@@ -1195,6 +1201,27 @@ function App() {
         <ProjectsKanban courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'cierres' ? (
         <CierresFeed courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
+      ) : libraryStudyMode === 'flashcards' ? (
+        <FlashcardsView
+          courses={courses}
+          onNavigate={navigateApp}
+          onOpenLesson={({ coursePath, lessonRelativePath, timeSec }) => {
+            const course = courses.find((item) => item.path === coursePath)
+            if (!course) {
+              toast.error('Curso no encontrado en la biblioteca')
+              return
+            }
+            openCourse(course, { lessonRelativePath, timeSec: timeSec ?? null })
+          }}
+          onOpenNote={(note) => {
+            setAnnotationsCoursePath('')
+            setReturnStudy({
+              mode: 'annotations',
+              note: note?.id ? { id: note.id, coursePath: note.coursePath || null } : null
+            })
+            setLibraryStudyMode('annotations')
+          }}
+        />
       ) : libraryStudyMode === 'playlists' ? (
         <PlaylistCanvas
           courses={courses}

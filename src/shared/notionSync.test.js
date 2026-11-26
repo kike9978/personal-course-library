@@ -57,7 +57,10 @@ describe('notion wire text', () => {
     assert.equal(findingIdFromBlocks(blocks), '')
     assert.equal(playlistIdFromBlocks(blocks), 'list-1')
     assert.equal(playlistIsLegacy(blocks), false)
-    assert.equal(blocks.some((block) => block.type === 'bulleted_list_item'), true)
+    assert.equal(
+      blocks.some((block) => block.type === 'bulleted_list_item'),
+      true
+    )
     const asRead = blocks.map((block) => {
       const rich = (block[block.type].rich_text || []).map((item) => ({
         plain_text: item.text.content,
@@ -69,13 +72,19 @@ describe('notion wire text', () => {
         type: block.type,
         [block.type]: {
           rich_text: rich,
-          ...(caption ? { caption: caption.map((item) => ({ plain_text: item.text.content })) } : {})
+          ...(caption
+            ? { caption: caption.map((item) => ({ plain_text: item.text.content })) }
+            : {})
         }
       }
     })
     assert.equal(playlistBodyFromBlocks(blocks), wire.body)
     assert.equal(playlistBodyFromBlocks(asRead), wire.body)
-    assert.equal(asRead.find((block) => block.type === 'bulleted_list_item').bulleted_list_item.rich_text[0].plain_text, 'pack\nporque')
+    assert.equal(
+      asRead.find((block) => block.type === 'bulleted_list_item').bulleted_list_item.rich_text[0]
+        .plain_text,
+      'pack\nporque'
+    )
     assert.deepEqual(playlistFromBody(playlistBodyFromBlocks(blocks)), {
       why: 'Cierre',
       coursePaths: ['pack'],
@@ -85,7 +94,16 @@ describe('notion wire text', () => {
     const legacy = bodyToBlocks(wire.body, 'list-1', 'playlist')
     assert.equal(playlistIsLegacy(legacy), true)
     assert.equal(playlistBodyFromBlocks(legacy), wire.body)
-    assert.equal(playlistWire({ title: 'Repaso', why: 'Cierre', coursePaths: ['pack'], childIds: ['child-1'], courseWhys: { pack: 'porque' } }).body, wire.body)
+    assert.equal(
+      playlistWire({
+        title: 'Repaso',
+        why: 'Cierre',
+        coursePaths: ['pack'],
+        childIds: ['child-1'],
+        courseWhys: { pack: 'porque' }
+      }).body,
+      wire.body
+    )
   })
 
   it('round-trips markdown through one code block', () => {
@@ -298,7 +316,9 @@ describe('course progress wire', () => {
     const merged = mergeCourseProgress(
       {
         inProcess: false,
-        lessons: { 'a.mp4': { completed: true, positionSec: 10, durationSec: 10, lastOpenedAt: 1 } },
+        lessons: {
+          'a.mp4': { completed: true, positionSec: 10, durationSec: 10, lastOpenedAt: 1 }
+        },
         lastLessonRelativePath: 'a.mp4',
         lastLessonTitle: 'A',
         lastPositionSec: 10,
@@ -351,9 +371,17 @@ describe('course progress wire', () => {
     const parsed = progressFromBody(wire.body)
     assert.equal(parsed.excitement, 4)
     assert.equal(parsed.excitementAt, 9)
-    assert.equal(progressSyncKey(plain), progressSyncKey(progressFromBody(progressWire(plain).body)))
+    assert.equal(
+      progressSyncKey(plain),
+      progressSyncKey(progressFromBody(progressWire(plain).body))
+    )
     assert.notEqual(progressSyncKey(plain), progressSyncKey(parsed))
-    assert.equal(progressIsEmpty(progressWire({ inProcess: false, lessons: {}, excitement: 3, excitementAt: 1 })), false)
+    assert.equal(
+      progressIsEmpty(
+        progressWire({ inProcess: false, lessons: {}, excitement: 3, excitementAt: 1 })
+      ),
+      false
+    )
     const merged = mergeCourseProgress(
       { ...plain, excitement: 2, excitementAt: 10 },
       { ...plain, excitement: 5, excitementAt: 4 }
@@ -384,7 +412,10 @@ describe('note titles', () => {
 
   it('keeps a name the person typed', () => {
     assert.equal(canonicalNoteTitle('Terminología', body), 'Terminología')
-    assert.notEqual(noteWireHash({ title: 'Terminología', body }), noteWireHash({ title: 'Sin título', body }))
+    assert.notEqual(
+      noteWireHash({ title: 'Terminología', body }),
+      noteWireHash({ title: 'Sin título', body })
+    )
   })
 
   it('shows a conflict body once when the title only repeats it', () => {
@@ -457,7 +488,8 @@ describe('notion errors', () => {
   it('names a missing share of the database', () => {
     assert.match(
       notionErrorMessage({
-        message: "Can't edit page on block with an archived ancestor. You must unarchive the ancestor before editing page."
+        message:
+          "Can't edit page on block with an archived ancestor. You must unarchive the ancestor before editing page."
       }),
       /archivado/
     )
@@ -469,7 +501,8 @@ describe('notion errors', () => {
     assert.match(
       notionErrorMessage({
         status: 400,
-        message: "Provided `filename` has an extension that is not supported for the File Upload API."
+        message:
+          'Provided `filename` has an extension that is not supported for the File Upload API.'
       }),
       /dibujo/
     )

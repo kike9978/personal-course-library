@@ -58,7 +58,10 @@ describe('semantic neighborhood', () => {
     const groups = clusterCourses(mixed)
     assert.ok(groups.length >= 2)
     const names = groups.map((group) => group.courses.map((course) => course.path).join('|'))
-    assert.equal(names.some((row) => row.includes('Storyboard') && row.includes('Product Lighting')), false)
+    assert.equal(
+      names.some((row) => row.includes('Storyboard') && row.includes('Product Lighting')),
+      false
+    )
   })
 
   it('returns nothing when the query has no shared words', () => {

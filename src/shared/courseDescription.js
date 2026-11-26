@@ -98,10 +98,7 @@ function listFacts(value) {
  * First JSON value in a chat reply. A fenced block wins; otherwise the
  * substring from the first { or [ through the matching last } or ].
  */
-export function extractJsonValue(text) {
-  const raw = String(text ?? '')
-  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  const slice = fence ? fence[1] : raw
+function parseOuterJson(slice) {
   const start = slice.search(/[{[]/)
   if (start < 0) return null
   const open = slice[start]
@@ -113,6 +110,19 @@ export function extractJsonValue(text) {
   } catch {
     return null
   }
+}
+
+/**
+ * The JSON value in a pasted reply. The outermost braces are tried first, so a
+ * reply whose strings hold ``` code blocks still parses; a ``` fence is the fallback
+ * for replies with other braces around the JSON.
+ */
+export function extractJsonValue(text) {
+  const raw = String(text ?? '')
+  const whole = parseOuterJson(raw)
+  if (whole != null) return whole
+  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  return fence ? parseOuterJson(fence[1]) : null
 }
 
 export function outlineForBrief(outline, limits = {}) {

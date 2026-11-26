@@ -41,10 +41,7 @@ describe('knowledge graph', () => {
       'Use #Tips and #Tipsy.\n# Heading\n`#Tips`\n```\n#Tips\n```\nSee [[topic|Tips|t1]] and @[topic|Tips](t1).',
       { id: 't1', title: 'Tips' }
     )
-    assert.equal(
-      stripped,
-      'Use and #Tipsy.\n# Heading\n`#Tips`\n```\n#Tips\n```\nSee and.'
-    )
+    assert.equal(stripped, 'Use and #Tipsy.\n# Heading\n`#Tips`\n```\n#Tips\n```\nSee and.')
     assert.deepEqual(hashtagTitlesFromBody(stripped), ['Tipsy'])
   })
 
@@ -113,15 +110,15 @@ describe('knowledge graph', () => {
     assert.equal(overlap[0].title, 'Appeal')
     assert.equal(overlap[0].courseCount, 2)
     assert.equal(overlap[0].items.length, 2)
-    const linked = backlinksTo(
-      { id: 'a' },
-      [
-        { id: 'a', body: '' },
-        { id: 'b', body: 'See [[note|From A|a]]', topicIds: ['appeal'] },
-        { id: 'c', body: 'Same tag only', topicIds: ['appeal'] }
-      ]
+    const linked = backlinksTo({ id: 'a' }, [
+      { id: 'a', body: '' },
+      { id: 'b', body: 'See [[note|From A|a]]', topicIds: ['appeal'] },
+      { id: 'c', body: 'Same tag only', topicIds: ['appeal'] }
+    ])
+    assert.deepEqual(
+      linked.map((item) => item.id),
+      ['b']
     )
-    assert.deepEqual(linked.map((item) => item.id), ['b'])
   })
 
   it('draws a link from a note to the note it mentions', () => {
@@ -179,7 +176,9 @@ describe('knowledge graph', () => {
     ])
     assert.equal(graph.nodes.find((node) => node.id === 'finding:plain').data.orphan, true)
     assert.equal(graph.nodes.find((node) => node.id === 'finding:a').data.orphan, undefined)
-    const topicEdge = graph.edges.find((edge) => edge.edgeType === 'topic' && edge.source === 'finding:a')
+    const topicEdge = graph.edges.find(
+      (edge) => edge.edgeType === 'topic' && edge.source === 'finding:a'
+    )
     assert.equal(topicEdge.target, 'topic:appeal')
     assert.equal(topicEdge.label, '')
     const fileNode = graph.nodes.find((node) => node.data.kind === 'file')
@@ -188,12 +187,24 @@ describe('knowledge graph', () => {
     assert.equal(fileEdges.length, 2)
     assert.deepEqual(fileEdges.map((edge) => edge.source).sort(), ['finding:a', 'finding:b'])
     const courseEdges = graph.edges.filter((edge) => edge.edgeType === 'course')
-    assert.deepEqual(courseEdges.map((edge) => edge.source).sort(), ['finding:a', 'finding:b', 'finding:plain'])
+    assert.deepEqual(courseEdges.map((edge) => edge.source).sort(), [
+      'finding:a',
+      'finding:b',
+      'finding:plain'
+    ])
     assert.equal(courseEdges[0].target, 'course:course-a')
-    assert.equal(graph.edges.some((edge) => edge.edgeType === 'same-file'), false)
+    assert.equal(
+      graph.edges.some((edge) => edge.edgeType === 'same-file'),
+      false
+    )
     const overview = visibleGraph({ ...graph, viewMode: 'topics' })
     assert.equal(overview.highlightIds, null)
-    const focused = visibleGraph({ ...graph, selectedId: 'topic:appeal', depth: 1, viewMode: 'topics' })
+    const focused = visibleGraph({
+      ...graph,
+      selectedId: 'topic:appeal',
+      depth: 1,
+      viewMode: 'topics'
+    })
     assert.deepEqual(focused.highlightIds.sort(), ['finding:a', 'finding:b', 'topic:appeal'])
   })
 
@@ -202,7 +213,12 @@ describe('knowledge graph', () => {
       viewMode: 'topics',
       topics: [{ id: 'appeal', title: 'Appeal' }],
       findings: [
-        { id: 'tagged', title: 'Tagged', topicIds: ['appeal'], anchors: [{ coursePath: 'course-a' }] },
+        {
+          id: 'tagged',
+          title: 'Tagged',
+          topicIds: ['appeal'],
+          anchors: [{ coursePath: 'course-a' }]
+        },
         {
           id: 'shared-file',
           title: 'Shared file',
@@ -235,8 +251,17 @@ describe('knowledge graph', () => {
     assert.equal(empty.data.orphan, true)
     assert.ok(Math.hypot(loose.x, loose.y) > Math.hypot(tagged.x, tagged.y))
     assert.ok(Math.hypot(shared.x, shared.y) < Math.hypot(loose.x, loose.y))
-    assert.ok(graph.edges.some((edge) => edge.source === 'finding:loose' && edge.target === 'course:course-b'))
-    assert.equal(graph.edges.some((edge) => edge.source === 'finding:empty' || edge.target === 'finding:empty'), false)
+    assert.ok(
+      graph.edges.some(
+        (edge) => edge.source === 'finding:loose' && edge.target === 'course:course-b'
+      )
+    )
+    assert.equal(
+      graph.edges.some(
+        (edge) => edge.source === 'finding:empty' || edge.target === 'finding:empty'
+      ),
+      false
+    )
   })
 
   it('highlights a budget of notes around a selected tag and keeps the rest on screen', () => {
@@ -251,7 +276,12 @@ describe('knowledge graph', () => {
       topics: [{ id: 'appeal', title: 'Appeal' }],
       findings
     })
-    const focused = visibleGraph({ ...graph, selectedId: 'topic:appeal', depth: 1, viewMode: 'topics' })
+    const focused = visibleGraph({
+      ...graph,
+      selectedId: 'topic:appeal',
+      depth: 1,
+      viewMode: 'topics'
+    })
     assert.equal(focused.truncated, true)
     assert.equal(focused.highlightIds.length, 25)
     assert.equal(focused.highlightIds.includes('finding:f25'), false)
@@ -353,7 +383,12 @@ describe('knowledge graph', () => {
     const linked = graph.nodes.find((node) => node.id === 'course:course-a')
     const loose = graph.nodes.find((node) => node.id === 'course:course-c')
     assert.ok(Math.hypot(loose.x, loose.y) > Math.hypot(linked.x, linked.y))
-    const highlight = visibleGraph({ ...graph, selectedId: 'course:course-a', depth: 1, viewMode: 'courses' })
+    const highlight = visibleGraph({
+      ...graph,
+      selectedId: 'course:course-a',
+      depth: 1,
+      viewMode: 'courses'
+    })
     assert.deepEqual(highlight.highlightIds.sort(), ['course:course-a', 'course:course-b'])
   })
 
@@ -444,8 +479,7 @@ describe('knowledge graph', () => {
   })
 
   it('labels a playback mark with written text, not an image source', () => {
-    const image =
-      '![Captura en 2:42](course-media://note/?file=mw2pazt9-4b174209be23.jpg)'
+    const image = '![Captura en 2:42](course-media://note/?file=mw2pazt9-4b174209be23.jpg)'
     assert.equal(plainNoteText(image), '')
     assert.equal(plainNoteText(`**buenas** noches\n\n${image}`), 'buenas noches')
     assert.equal(
@@ -478,5 +512,4 @@ describe('knowledge graph', () => {
     assert.equal(clampLabelZoom('1.2'), 1.2)
     assert.equal(clampLabelZoom('nope'), 1.15)
   })
-
 })

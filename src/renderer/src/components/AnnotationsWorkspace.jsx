@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   EllipsisVertical,
   Group,
+  Layers,
   Library,
   Locate,
   Plus,
@@ -12,6 +13,7 @@ import {
   Settings,
   Tags
 } from 'lucide-react'
+import FlashcardBuilder from './FlashcardBuilder'
 import NoteEditor from './NoteEditor'
 import { NotionSyncConflict, NotionSyncNoteButton } from './NotionSyncControl'
 import { TreeSection } from './LessonTree'
@@ -21,8 +23,7 @@ import { askConfirm } from '../utils/askConfirm'
 import { cn } from '../ui/cn'
 import { btnGhost, btnPrimary, iconBtn, iconBtnGhost } from '../ui/classes'
 
-const page =
-  'flex h-full min-h-0 flex-1 flex-col bg-white text-ink'
+const page = 'flex h-full min-h-0 flex-1 flex-col bg-white text-ink'
 const pageBody =
   'grid min-h-0 flex-1 max-[900px]:grid-cols-1 max-[900px]:grid-rows-[minmax(140px,28%)_minmax(0,1fr)_minmax(220px,36%)]'
 const pageBodyOpen =
@@ -130,6 +131,14 @@ function countNotes(node) {
   return own + nested
 }
 
+function noteIdsIn(node, ids = []) {
+  for (const item of node.items || []) {
+    if (item?.id && !ids.includes(item.id)) ids.push(item.id)
+  }
+  for (const child of node.children || []) noteIdsIn(child, ids)
+  return ids
+}
+
 function noteListParts(item, fullTitle) {
   const fromClock = typeof item?.timeSec === 'number' ? formatNoteTimestamp(item.timeSec) : ''
   const name = fullTitle || ''
@@ -143,11 +152,18 @@ function AnnotationBranch({
   onToggle,
   isRowActive,
   displayName,
-  onOpen
+  onOpen,
+  selecting = false,
+  selectedIds,
+  onToggleSelect,
+  onToggleSection
 }) {
   const open = !collapsedIds.has(node.id)
   const count = countNotes(node)
   const loose = String(node.id).endsWith('__loose__')
+  const sectionIds = selecting ? noteIdsIn(node) : []
+  const pickedCount = sectionIds.filter((id) => selectedIds?.has(id)).length
+  const sectionTitle = node.title || 'sección'
   return (
     <TreeSection
       id={node.id}
@@ -159,6 +175,16 @@ function AnnotationBranch({
       dense
       className={loose ? 'is-loose' : undefined}
       onToggle={() => onToggle(node.id)}
+      pick={
+        selecting && sectionIds.length
+          ? {
+              checked: pickedCount === sectionIds.length,
+              indeterminate: pickedCount > 0 && pickedCount < sectionIds.length,
+              label: `Incluir ${sectionTitle}`,
+              onChange: () => onToggleSection?.(sectionIds, pickedCount !== sectionIds.length)
+            }
+          : null
+      }
     >
       {node.children?.map((child) => (
         <AnnotationBranch
@@ -170,31 +196,49 @@ function AnnotationBranch({
           isRowActive={isRowActive}
           displayName={displayName}
           onOpen={onOpen}
+          selecting={selecting}
+          selectedIds={selectedIds}
+          onToggleSelect={onToggleSelect}
+          onToggleSection={onToggleSection}
         />
       ))}
       {node.items?.map((item) => {
         const parts = noteListParts(item, displayName(item))
+        const picked = Boolean(selecting && selectedIds?.has(item.id))
         return (
-          <button
+          <div
             key={`${node.id}-${item.coursePath || 'local'}-${item.id}`}
-            type="button"
             data-annotation-item=""
-            className={cn(listItem, isRowActive(item) && 'is-active')}
+            className={cn(listItem, isRowActive(item) && 'is-active', picked && 'bg-coral/10')}
             title={parts.name}
-            onClick={() => onOpen(item)}
           >
-            <span className="flex min-w-0 flex-1 flex-col items-stretch gap-[0.05rem] overflow-hidden">
-              <span className="block max-w-full min-w-0 truncate text-[0.8rem] leading-[1.3] font-medium">
-                {parts.name}
-              </span>
-              {item.notion?.conflict ? <small>Conflicto con Notion</small> : null}
-            </span>
-            {parts.time ? (
-              <span className="shrink-0 text-[0.68rem] font-bold text-ink-soft tabular-nums">
-                {parts.time}
-              </span>
+            {selecting ? (
+              <input
+                type="checkbox"
+                className="mt-[0.15rem] shrink-0 accent-coral"
+                checked={picked}
+                aria-label={parts.name ? `Incluir ${parts.name}` : 'Incluir nota'}
+                onChange={() => onToggleSelect?.(item)}
+              />
             ) : null}
-          </button>
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 cursor-pointer items-baseline justify-between gap-[0.55rem] border-0 bg-transparent p-0 text-left font-[inherit] text-inherit"
+              onClick={() => onOpen(item)}
+            >
+              <span className="flex min-w-0 flex-1 flex-col items-stretch gap-[0.05rem] overflow-hidden">
+                <span className="block max-w-full min-w-0 truncate text-[0.8rem] leading-[1.3] font-medium">
+                  {parts.name}
+                </span>
+                {item.notion?.conflict ? <small>Conflicto con Notion</small> : null}
+              </span>
+              {parts.time ? (
+                <span className="shrink-0 text-[0.68rem] font-bold text-ink-soft tabular-nums">
+                  {parts.time}
+                </span>
+              ) : null}
+            </button>
+          </div>
         )
       })}
     </TreeSection>
@@ -438,7 +482,8 @@ function AnnotationsWorkspace({
   programs = [],
   corpus = null,
   onUpsertTopic,
-  onDeleteTopic
+  onDeleteTopic,
+  onOpenDecks
 }) {
   const [query, setQuery] = useState('')
   const [outlineTool, setOutlineTool] = useState(null)
@@ -526,6 +571,9 @@ function AnnotationsWorkspace({
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
+  const [pickingCards, setPickingCards] = useState(false)
+  const [cardPick, setCardPick] = useState(() => new Set())
+  const [cardBuilderOpen, setCardBuilderOpen] = useState(false)
   const [tagViewId, setTagViewId] = useState(null)
   const [tagsManageOpen, setTagsManageOpen] = useState(false)
   const [jsonTitles, setJsonTitles] = useState({})
@@ -799,6 +847,42 @@ function AnnotationsWorkspace({
       return hay.includes(q)
     })
   }, [annotations, query, titles])
+
+  const toggleCardPick = (item) => {
+    if (!item?.id) return
+    setCardPick((current) => {
+      const next = new Set(current)
+      if (next.has(item.id)) next.delete(item.id)
+      else next.add(item.id)
+      return next
+    })
+  }
+
+  const toggleCardSection = (ids, selected) => {
+    setCardPick((current) => {
+      const next = new Set(current)
+      for (const id of ids) {
+        if (selected) next.add(id)
+        else next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const selectVisibleCards = () => {
+    setCardPick((current) => {
+      const next = new Set(current)
+      const visibleIds = filtered.map((item) => item.id).filter(Boolean)
+      const allOn = visibleIds.length > 0 && visibleIds.every((id) => next.has(id))
+      for (const id of visibleIds) {
+        if (allOn) next.delete(id)
+        else next.add(id)
+      }
+      return next
+    })
+  }
+
+  const pickedNotes = annotations.filter((item) => cardPick.has(item.id))
 
   useEffect(() => {
     const pending = []
@@ -1504,9 +1588,18 @@ function AnnotationsWorkspace({
   }
 
   return (
-    <div
-      className={cn(page, (listResizing || graphResizing) && 'cursor-col-resize select-none')}
-    >
+    <div className={cn(page, (listResizing || graphResizing) && 'cursor-col-resize select-none')}>
+      {cardBuilderOpen ? (
+        <FlashcardBuilder
+          notes={pickedNotes}
+          onClose={() => setCardBuilderOpen(false)}
+          onSaved={() => {
+            setCardPick(new Set())
+            setPickingCards(false)
+          }}
+          onOpenDecks={() => onOpenDecks?.()}
+        />
+      ) : null}
       <header className="relative z-[6] flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-ink/10 px-5 py-[0.7rem]">
         <div className="flex min-w-0 flex-wrap items-center gap-[0.85rem]">
           {onBack ? (
@@ -1598,7 +1691,9 @@ function AnnotationsWorkspace({
             </button>
             {!listCollapsed ? (
               <>
-                <span className="ml-auto text-[0.72rem] font-bold text-ink-soft">{filtered.length}</span>
+                <span className="ml-auto text-[0.72rem] font-bold text-ink-soft">
+                  {filtered.length}
+                </span>
                 {onCreate ? (
                   <button
                     type="button"
@@ -1615,11 +1710,36 @@ function AnnotationsWorkspace({
           </div>
           {!listCollapsed ? (
             <>
-              <div className="relative z-[4] flex flex-col gap-[0.45rem] px-[0.6rem] pt-[0.45rem] pb-[0.15rem]" ref={outlineToolsRef}>
+              <div
+                className="relative z-[4] flex flex-col gap-[0.45rem] px-[0.6rem] pt-[0.45rem] pb-[0.15rem]"
+                ref={outlineToolsRef}
+              >
                 <div className="flex items-center justify-center gap-[0.15rem]">
                   <button
                     type="button"
-                    className={cn(toolBtn, (outlineTool === 'search' || query.trim()) && 'text-coral-deep')}
+                    className={cn(toolBtn, pickingCards && 'text-coral-deep')}
+                    title="Elegir notas para tarjetas"
+                    aria-label="Elegir notas para tarjetas"
+                    aria-pressed={pickingCards}
+                    onClick={() => {
+                      setPickingCards((current) => {
+                        if (current) {
+                          setCardPick(new Set())
+                          setCardBuilderOpen(false)
+                        }
+                        return !current
+                      })
+                      setOutlineTool(null)
+                    }}
+                  >
+                    <Layers size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      toolBtn,
+                      (outlineTool === 'search' || query.trim()) && 'text-coral-deep'
+                    )}
                     title="Buscar"
                     aria-label="Buscar"
                     aria-pressed={outlineTool === 'search'}
@@ -1633,7 +1753,10 @@ function AnnotationsWorkspace({
                     <div className="static">
                       <button
                         type="button"
-                        className={cn(toolBtn, (outlineTool === 'course' || courseFilter.value) && 'text-coral-deep')}
+                        className={cn(
+                          toolBtn,
+                          (outlineTool === 'course' || courseFilter.value) && 'text-coral-deep'
+                        )}
                         title={
                           courseFilter.options.find((option) => option.value === courseFilter.value)
                             ?.label || 'Curso'
@@ -1649,7 +1772,10 @@ function AnnotationsWorkspace({
                       </button>
                       {outlineTool === 'course' ? (
                         <div
-                          className={cn(popoverScroll, 'top-[calc(0.45rem+2rem+6px)] right-[0.6rem] left-[0.6rem] z-[8] w-auto min-w-0 [&_button]:max-w-full [&_button]:min-w-0 [&_span]:block [&_span]:max-w-full [&_span]:truncate')}
+                          className={cn(
+                            popoverScroll,
+                            'top-[calc(0.45rem+2rem+6px)] right-[0.6rem] left-[0.6rem] z-[8] w-auto min-w-0 [&_button]:max-w-full [&_button]:min-w-0 [&_span]:block [&_span]:max-w-full [&_span]:truncate'
+                          )}
                           role="menu"
                           aria-label="Curso"
                         >
@@ -1688,7 +1814,10 @@ function AnnotationsWorkspace({
                   <div className="static">
                     <button
                       type="button"
-                      className={cn(toolBtn, (outlineTool === 'group' || groupMode !== 'target') && 'text-coral-deep')}
+                      className={cn(
+                        toolBtn,
+                        (outlineTool === 'group' || groupMode !== 'target') && 'text-coral-deep'
+                      )}
                       title={GROUP_MODES.find((mode) => mode.id === groupMode)?.label || 'Agrupar'}
                       aria-label="Agrupar"
                       aria-haspopup="menu"
@@ -1701,7 +1830,10 @@ function AnnotationsWorkspace({
                     </button>
                     {outlineTool === 'group' ? (
                       <div
-                        className={cn(popoverScroll, 'top-[calc(0.45rem+2rem+6px)] right-[0.6rem] left-[0.6rem] z-[8] w-auto min-w-0 [&_button]:max-w-full [&_button]:min-w-0 [&_span]:block [&_span]:max-w-full [&_span]:truncate')}
+                        className={cn(
+                          popoverScroll,
+                          'top-[calc(0.45rem+2rem+6px)] right-[0.6rem] left-[0.6rem] z-[8] w-auto min-w-0 [&_button]:max-w-full [&_button]:min-w-0 [&_span]:block [&_span]:max-w-full [&_span]:truncate'
+                        )}
                         role="menu"
                         aria-label="Agrupar"
                       >
@@ -1746,7 +1878,10 @@ function AnnotationsWorkspace({
                   </div>
                 ) : null}
               </div>
-              <div className="flex min-h-0 flex-1 flex-col gap-[0.55rem] overflow-auto px-[0.45rem] pt-[0.55rem] pb-[0.85rem]" ref={listItemsRef}>
+              <div
+                className="flex min-h-0 flex-1 flex-col gap-[0.55rem] overflow-auto px-[0.45rem] pt-[0.55rem] pb-[0.85rem]"
+                ref={listItemsRef}
+              >
                 {loading ? (
                   <p className="mx-2 my-[0.8rem] text-[0.82rem] text-ink-soft">Cargando…</p>
                 ) : filtered.length === 0 ? (
@@ -1763,10 +1898,36 @@ function AnnotationsWorkspace({
                       isRowActive={isRowActive}
                       displayName={displayName}
                       onOpen={openFinding}
+                      selecting={pickingCards}
+                      selectedIds={cardPick}
+                      onToggleSelect={toggleCardPick}
+                      onToggleSection={toggleCardSection}
                     />
                   ))
                 )}
               </div>
+              {pickingCards ? (
+                <div className="flex flex-wrap items-center gap-2 border-t border-ink/10 px-[0.6rem] py-[0.45rem]">
+                  <span className="text-[0.75rem] font-bold text-ink-soft">
+                    {cardPick.size === 1 ? '1 nota' : `${cardPick.size} notas`}
+                  </span>
+                  <button
+                    type="button"
+                    className={cn(btnGhost, 'px-2 py-1 text-[0.75rem] shadow-none')}
+                    onClick={selectVisibleCards}
+                  >
+                    Visibles
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(btnPrimary, 'px-2 py-1 text-[0.75rem] shadow-none')}
+                    disabled={!cardPick.size}
+                    onClick={() => setCardBuilderOpen(true)}
+                  >
+                    Crear tarjetas
+                  </button>
+                </div>
+              ) : null}
             </>
           ) : null}
         </aside>
@@ -1822,11 +1983,7 @@ function AnnotationsWorkspace({
           ) : tagsManageOpen ? (
             <div className={docStack}>
               <div className="mb-[0.85rem] flex items-center justify-between gap-3 text-[0.78rem] font-bold text-ink-soft">
-                <button
-                  type="button"
-                  className={btnGhost}
-                  onClick={() => setTagsManageOpen(false)}
-                >
+                <button type="button" className={btnGhost} onClick={() => setTagsManageOpen(false)}>
                   Volver
                 </button>
               </div>
@@ -1897,7 +2054,10 @@ function AnnotationsWorkspace({
                         aria-live="polite"
                       >
                         {saveStatus === 'saving' ? (
-                          <span className="size-[0.35rem] animate-loader-text rounded-full bg-current" aria-hidden="true" />
+                          <span
+                            className="size-[0.35rem] animate-loader-text rounded-full bg-current"
+                            aria-hidden="true"
+                          />
                         ) : null}
                         {saveStatusLabel(saveStatus)}
                       </span>
@@ -2021,9 +2181,7 @@ function AnnotationsWorkspace({
                   ) : null}
                   {selected.coursePath || selected.lessonRelativePath || selected.projectId ? (
                     <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-[0.88rem] max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
-                      <span className={propLabel}>
-                        {targetPropLabel(selected)}
-                      </span>
+                      <span className={propLabel}>{targetPropLabel(selected)}</span>
                       <span>{targetPropValue(selected)}</span>
                     </div>
                   ) : null}
@@ -2035,7 +2193,10 @@ function AnnotationsWorkspace({
                         {onJump && selected.coursePath ? (
                           <button
                             type="button"
-                            className={cn(btnGhost, 'px-2 py-[0.12rem] text-[0.75rem] leading-[1.2]')}
+                            className={cn(
+                              btnGhost,
+                              'px-2 py-[0.12rem] text-[0.75rem] leading-[1.2]'
+                            )}
                             onClick={() => onJump(selected)}
                           >
                             Ir al video
@@ -2144,7 +2305,11 @@ function AnnotationsWorkspace({
                     <ul className="m-0 mt-[0.4rem] flex list-none flex-col gap-[0.35rem] p-0">
                       {related.map((finding) => (
                         <li key={finding.id}>
-                          <button type="button" className={relatedLink} onClick={() => onSelect?.(finding)}>
+                          <button
+                            type="button"
+                            className={relatedLink}
+                            onClick={() => onSelect?.(finding)}
+                          >
                             <strong>{noteTitle(finding)}</strong>
                             <span>
                               {(finding.anchors || [])
@@ -2164,7 +2329,10 @@ function AnnotationsWorkspace({
           )}
         </main>
 
-        <aside className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border-l border-ink/10 bg-white" aria-label="Gráfica de la biblioteca">
+        <aside
+          className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border-l border-ink/10 bg-white"
+          aria-label="Gráfica de la biblioteca"
+        >
           <div
             className={cn(
               'absolute top-0 left-0 z-[3] h-full w-2 cursor-col-resize touch-none hover:bg-[rgba(232,69,112,0.45)] focus-visible:bg-[rgba(232,69,112,0.45)] focus-visible:outline-none max-[900px]:hidden',
@@ -2216,11 +2384,7 @@ function AnnotationsWorkspace({
                 <Settings size={16} />
               </button>
               {graphSettingsOpen ? (
-                <div
-                  className={graphPanel}
-                  role="dialog"
-                  aria-label="Ajustes de la gráfica"
-                >
+                <div className={graphPanel} role="dialog" aria-label="Ajustes de la gráfica">
                   <label className={rangeLabel}>
                     Profundidad
                     <input

@@ -254,6 +254,24 @@ function sectionIdForSelection({
   return sectionIdForPath(sections, courseResources, selectedPath)
 }
 
+function SectionPick({ checked, indeterminate, label, onChange }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = Boolean(indeterminate) && !checked
+  }, [checked, indeterminate])
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className="ml-[var(--ann-pad-x,0.35rem)] size-3.5 shrink-0 cursor-pointer accent-coral"
+      checked={checked}
+      aria-label={label}
+      onClick={(event) => event.stopPropagation()}
+      onChange={() => onChange?.()}
+    />
+  )
+}
+
 function TreeSection({
   id,
   title,
@@ -266,6 +284,7 @@ function TreeSection({
   idPrefix,
   actions,
   className,
+  pick,
   children
 }) {
   const panelId = panelIdFor(id, idPrefix)
@@ -274,6 +293,14 @@ function TreeSection({
   return (
     <div className={sectionClass({ nested, dense, bar, open, className })}>
       <h3 className={sectionHeadClass({ bar, nested })}>
+        {pick ? (
+          <SectionPick
+            checked={pick.checked}
+            indeterminate={pick.indeterminate}
+            label={pick.label}
+            onChange={pick.onChange}
+          />
+        ) : null}
         <button
           type="button"
           className={sectionToggleClass({ nested, dense, bar })}

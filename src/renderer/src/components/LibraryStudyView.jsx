@@ -221,6 +221,7 @@ function LibraryStudyView({
         onSave={handleSave}
         onDelete={handleDelete}
         onJump={handleJump}
+        onOpenDecks={() => onNavigate?.('flashcards')}
         onOpenPopOut={() => {
           window.api
             .openAnnotationsWindow(courseFilter ? { coursePath: courseFilter } : {})

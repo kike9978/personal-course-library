@@ -9,7 +9,8 @@ function AppNav({ active = 'library', onSelect }) {
     { id: 'annotations', label: 'Anotaciones' },
     { id: 'projects', label: 'Proyectos' },
     { id: 'cierres', label: 'Cierres' },
-    { id: 'playlists', label: 'Listas' }
+    { id: 'playlists', label: 'Listas' },
+    { id: 'flashcards', label: 'Tarjetas' }
   ]
 
   return (

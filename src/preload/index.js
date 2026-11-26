@@ -65,6 +65,22 @@ const api = {
     ipcRenderer.invoke('upsert-project', { coursePath, project }),
   deleteProject: (coursePath, projectId) =>
     ipcRenderer.invoke('delete-project', { coursePath, projectId }),
+  listDecks: () => ipcRenderer.invoke('list-decks'),
+  createDeck: (deck) => ipcRenderer.invoke('create-deck', deck || {}),
+  deleteDeck: (deckId) => ipcRenderer.invoke('delete-deck', deckId),
+  appendDeckCards: (deckId, cards) => ipcRenderer.invoke('append-deck-cards', { deckId, cards }),
+  updateDeckCard: (deckId, cardId, patch) =>
+    ipcRenderer.invoke('update-deck-card', { deckId, cardId, patch }),
+  deleteDeckCard: (deckId, cardId) => ipcRenderer.invoke('delete-deck-card', { deckId, cardId }),
+  readLessonTranscripts: (coursePath, items) =>
+    ipcRenderer.invoke('read-lesson-transcripts', { coursePath, items }),
+  ankiStatus: () => ipcRenderer.invoke('anki-status'),
+  getAnkiSettings: () => ipcRenderer.invoke('get-anki-settings'),
+  setAnkiSettings: (settings) => ipcRenderer.invoke('set-anki-settings', settings || {}),
+  syncDeckToAnki: (deckId) => ipcRenderer.invoke('sync-deck-to-anki', deckId),
+  exportDeckForAnki: (deckId) => ipcRenderer.invoke('export-deck-anki', deckId),
+  setDeckCardKnown: (deckId, cardId, known) =>
+    ipcRenderer.invoke('set-deck-card-known', { deckId, cardId, known }),
   listPlaylists: () => ipcRenderer.invoke('list-playlists'),
   upsertPlaylist: (playlist) => ipcRenderer.invoke('upsert-playlist', playlist),
   deletePlaylist: (playlistId) => ipcRenderer.invoke('delete-playlist', playlistId),

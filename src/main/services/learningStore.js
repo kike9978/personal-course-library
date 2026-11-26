@@ -24,6 +24,7 @@ import {
   topicKey
 } from '../../shared/knowledgeGraph.js'
 import { clampExcitement, viewSession } from '../../shared/notionSync.js'
+import { cardKey, cardType, checkCardFields } from '../../shared/flashcardCards.js'
 import {
   cierreCourseKey,
   findCierreForSubject,
@@ -46,7 +47,8 @@ function emptyStore() {
     playlists: [],
     topics: [],
     findings: [],
-    cierres: []
+    cierres: [],
+    decks: []
   }
 }
 
@@ -285,7 +287,8 @@ function loadStoreFromDisk() {
     if (!fs.existsSync(filePath)) return { store: emptyStore(), ok: true }
     const raw = fs.readFileSync(filePath, 'utf8')
     const data = JSON.parse(raw)
-    if (!data || typeof data !== 'object' || !data.courses) return { store: emptyStore(), ok: false }
+    if (!data || typeof data !== 'object' || !data.courses)
+      return { store: emptyStore(), ok: false }
     let dirty = false
     for (const key of ['paths', 'courseBriefs', 'learnerGoals', 'activePathId']) {
       if (Object.prototype.hasOwnProperty.call(data, key)) {
@@ -299,6 +302,10 @@ function loadStoreFromDisk() {
     }
     if (!Array.isArray(data.cierres)) {
       data.cierres = []
+      dirty = true
+    }
+    if (!Array.isArray(data.decks)) {
+      data.decks = []
       dirty = true
     }
     for (const course of Object.values(data.courses || {})) ensureArrays(course)
@@ -473,7 +480,8 @@ export function writeCourseProgress(coursePath, patch = {}) {
     course.lastLessonRelativePath = patch.lastLessonRelativePath || null
   }
   if ('lastLessonTitle' in patch) course.lastLessonTitle = patch.lastLessonTitle || null
-  if ('lastPositionSec' in patch) course.lastPositionSec = Math.max(0, Number(patch.lastPositionSec) || 0)
+  if ('lastPositionSec' in patch)
+    course.lastPositionSec = Math.max(0, Number(patch.lastPositionSec) || 0)
   if ('lastOpenedAt' in patch) course.lastOpenedAt = Number(patch.lastOpenedAt) || null
   if ('lastViewedAt' in patch) course.lastViewedAt = Number(patch.lastViewedAt) || null
   if ('excitement' in patch) course.excitement = clampExcitement(patch.excitement)
@@ -1452,7 +1460,9 @@ function playlistsForDisplay(playlists) {
 
 export function listPlaylistRecords() {
   const store = readStore()
-  return settleNesting((store.playlists || []).map((playlist) => normalizePlaylist(playlist, playlist)))
+  return settleNesting(
+    (store.playlists || []).map((playlist) => normalizePlaylist(playlist, playlist))
+  )
 }
 
 export function readPlaylist(id) {
@@ -1496,6 +1506,201 @@ export function upsertPlaylist(payload) {
   writeStore(store)
   emitPlaylistWrite({ op: 'upsert', id: next.id })
   return playlistForDisplay(next, hiddenCoursePathSet())
+}
+
+const DECK_IMAGE_FILE_RE = /^[a-z0-9-]+\.(png|jpe?g|webp|gif|bmp|svg)$/i
+
+function deckCardImage(image) {
+  const file = String(image?.file || '').trim()
+  if (!DECK_IMAGE_FILE_RE.test(file)) return null
+  return {
+    file,
+    alt: String(image?.alt || '')
+      .trim()
+      .slice(0, 120)
+  }
+}
+
+function publicCard(card) {
+  return {
+    id: card.id,
+    type: cardType(card.type),
+    noteId: card.noteId || null,
+    coursePath: card.coursePath || null,
+    lessonPath: card.lessonPath || null,
+    lesson: card.lesson || '',
+    timeSec: typeof card.timeSec === 'number' ? card.timeSec : null,
+    source: card.source || '',
+    front: card.front,
+    back: card.back || '',
+    image: deckCardImage(card.image),
+    known: Boolean(card.known)
+  }
+}
+
+function publicDeck(deck) {
+  return {
+    id: deck.id,
+    title: deck.title || 'Tarjetas',
+    createdAt: deck.createdAt || null,
+    updatedAt: deck.updatedAt || null,
+    ankiSyncedAt: deck.ankiSyncedAt || null,
+    cards: (deck.cards || []).map(publicCard)
+  }
+}
+
+/** A card from the renderer, checked for its type. Null when it does not hold up. */
+function storedCard(input) {
+  const checked = checkCardFields(input)
+  if (!checked.ok) return null
+  const noteId = String(input?.noteId || '').trim() || null
+  const lessonPath = input?.lessonPath ? String(input.lessonPath) : null
+  if (!noteId && !lessonPath) return null
+  return {
+    id: makeId(),
+    ...checked.card,
+    noteId,
+    coursePath: input?.coursePath ? String(input.coursePath) : null,
+    lessonPath,
+    lesson: String(input?.lesson || '')
+      .trim()
+      .slice(0, 160),
+    timeSec:
+      typeof input?.timeSec === 'number' && input.timeSec >= 0 ? Math.floor(input.timeSec) : null,
+    source: String(input?.source || '')
+      .trim()
+      .slice(0, 240),
+    image: deckCardImage(input?.image),
+    known: false
+  }
+}
+
+function findDeck(store, deckId) {
+  const deck = (store.decks || []).find((item) => item.id === deckId)
+  if (!deck) throw new Error('Mazo no encontrado')
+  return deck
+}
+
+/** Add cards to a deck. Cards already in it (same text) are left out. */
+export function appendDeckCards(deckId, cards) {
+  const store = readStore()
+  const deck = findDeck(store, deckId)
+  const keys = new Set((deck.cards || []).map(cardKey))
+  const fresh = []
+  for (const input of Array.isArray(cards) ? cards : []) {
+    const card = storedCard(input)
+    if (!card || keys.has(cardKey(card))) continue
+    keys.add(cardKey(card))
+    fresh.push(card)
+  }
+  if (!fresh.length) throw new Error('No hay tarjetas nuevas para este mazo')
+  deck.cards = [...(deck.cards || []), ...fresh]
+  deck.updatedAt = Date.now()
+  writeStore(store)
+  return { deck: publicDeck(deck), added: fresh.length }
+}
+
+/** Edit a card's text or image. The type stays: Anki keeps one note type per card. */
+export function updateDeckCard(deckId, cardId, patch = {}) {
+  const store = readStore()
+  const deck = findDeck(store, deckId)
+  const card = (deck.cards || []).find((item) => item.id === cardId)
+  if (!card) throw new Error('Tarjeta no encontrada')
+  const checked = checkCardFields({
+    type: card.type,
+    front: patch.front !== undefined ? patch.front : card.front,
+    back: patch.back !== undefined ? patch.back : card.back
+  })
+  if (!checked.ok) throw new Error(checked.error)
+  card.front = checked.card.front
+  card.back = checked.card.back
+  if (patch.image !== undefined) card.image = deckCardImage(patch.image)
+  deck.updatedAt = Date.now()
+  writeStore(store)
+  return publicDeck(deck)
+}
+
+export function deleteDeckCard(deckId, cardId) {
+  const store = readStore()
+  const deck = findDeck(store, deckId)
+  const before = (deck.cards || []).length
+  deck.cards = (deck.cards || []).filter((item) => item.id !== cardId)
+  if (deck.cards.length !== before) {
+    deck.updatedAt = Date.now()
+    writeStore(store)
+  }
+  return publicDeck(deck)
+}
+
+export function getDeck(deckId) {
+  const deck = (readStore().decks || []).find((item) => item.id === deckId)
+  return deck ? publicDeck(deck) : null
+}
+
+export function markDeckAnkiSynced(deckId, at = Date.now()) {
+  const store = readStore()
+  const deck = (store.decks || []).find((item) => item.id === deckId)
+  if (!deck) throw new Error('Mazo no encontrado')
+  deck.ankiSyncedAt = at
+  writeStore(store)
+  return publicDeck(deck)
+}
+
+export function listDecks() {
+  const store = readStore()
+  return (store.decks || [])
+    .filter((deck) => deck?.id)
+    .map(publicDeck)
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+}
+
+export function createDeck(payload = {}) {
+  const store = readStore()
+  if (!Array.isArray(store.decks)) store.decks = []
+  const keys = new Set()
+  const cards = []
+  for (const input of Array.isArray(payload.cards) ? payload.cards : []) {
+    const card = storedCard(input)
+    if (!card || keys.has(cardKey(card))) continue
+    keys.add(cardKey(card))
+    cards.push(card)
+  }
+  if (!cards.length) throw new Error('El mazo no tiene tarjetas')
+  const now = Date.now()
+  const deck = {
+    id: makeId(),
+    title: String(payload.title || '').trim() || 'Tarjetas',
+    createdAt: now,
+    updatedAt: now,
+    cards
+  }
+  store.decks.push(deck)
+  writeStore(store)
+  return publicDeck(deck)
+}
+
+export function deleteDeck(deckId) {
+  const store = readStore()
+  if (!Array.isArray(store.decks)) store.decks = []
+  const id = String(deckId || '')
+  const next = store.decks.filter((deck) => deck.id !== id)
+  if (next.length !== store.decks.length) {
+    store.decks = next
+    writeStore(store)
+  }
+  return { ok: true }
+}
+
+export function setDeckCardKnown(deckId, cardId, known) {
+  const store = readStore()
+  const deck = (store.decks || []).find((item) => item.id === deckId)
+  if (!deck) throw new Error('Mazo no encontrado')
+  const card = (deck.cards || []).find((item) => item.id === cardId)
+  if (!card) throw new Error('Tarjeta no encontrada')
+  card.known = Boolean(known)
+  deck.updatedAt = Date.now()
+  writeStore(store)
+  return publicDeck(deck)
 }
 
 export function deletePlaylist(playlistId) {
