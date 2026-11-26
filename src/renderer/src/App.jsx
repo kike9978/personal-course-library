@@ -17,6 +17,7 @@ import FlashcardsView from './components/FlashcardsView'
 import SourcesView from './components/SourcesView'
 import LibraryHeader from './components/LibraryHeader'
 import AppHeader from './components/AppHeader'
+import { NotionSyncButton } from './components/NotionSyncControl'
 import CourseZipBar from './components/CourseZipBar'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
@@ -183,7 +184,7 @@ function LibrarySetup({ onPathSet, onNavigate }) {
 
   return (
     <div className={pageShell}>
-      <AppHeader active="library" onNavigate={onNavigate} />
+      <AppHeader active="library" onNavigate={onNavigate} actions={<NotionSyncButton />} />
       {prompt}
     </div>
   )
