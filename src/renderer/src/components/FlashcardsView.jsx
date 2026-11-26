@@ -399,7 +399,10 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
       .then((status) => setNotionOn(Boolean(status?.enabled)))
       .catch(() => {})
     const stop = window.api.onDeckNotion?.((saved) => {
-      if (saved?.id) putDeck(saved)
+      if (!saved?.id) return
+      // Deleted on another install, or brought in / changed from Notion.
+      if (saved.removed) setDecks((current) => current.filter((item) => item.id !== saved.id))
+      else putDeck(saved)
     })
     return () => stop?.()
     // putDeck only calls setDecks.

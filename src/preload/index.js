@@ -139,6 +139,9 @@ const api = {
   deleteCierreComment: (cierreId, commentId) =>
     ipcRenderer.invoke('delete-cierre-comment', { cierreId, commentId }),
   pickProjectFolder: () => ipcRenderer.invoke('pick-project-folder'),
+  getProjectsRoot: () => ipcRenderer.invoke('get-projects-root'),
+  pickProjectsRoot: () => ipcRenderer.invoke('pick-projects-root'),
+  clearProjectsRoot: () => ipcRenderer.invoke('clear-projects-root'),
   pickNoteImage: () => ipcRenderer.invoke('pick-note-image'),
   pickNoteImages: () => ipcRenderer.invoke('pick-note-images'),
   captureWindowRegion: (rect) => ipcRenderer.invoke('capture-window-region', rect),

@@ -1056,7 +1056,15 @@ export function createNotionClient({
    * A flashcard deck row (kind "deck"): create or find it, set its title, then
    * replace the page content with `children`. One way: the app owns the deck.
    */
-  async function saveDeckPage({ deckId, title, children, pageId: knownPageId = null, emoji = null }) {
+  async function saveDeckPage({
+    deckId,
+    title,
+    children,
+    pageId: knownPageId = null,
+    emoji = null,
+    dataTitle = '',
+    dataChildren = []
+  }) {
     const names = await loadSchema()
     const externalId = String(deckId || '')
     let pageId = knownPageId
@@ -1085,7 +1093,92 @@ export function createNotionClient({
       })
     }
     await replaceContent(pageId, children || [])
+    if (dataTitle && dataChildren.length) {
+      const blocks = await listChildren(pageId)
+      const toggle = blocks.findLast(
+        (block) => block.type === 'toggle' && blockText(block).trim() === dataTitle
+      )
+      if (!toggle) throw new Error('Notion: no se encontró el bloque de datos del mazo')
+      // One code block per request keeps a long deck under Notion's size limit.
+      for (const block of dataChildren) await appendChildren(toggle.id, [block])
+    }
     return { pageId, editedAt: (await pageEditedAt(pageId)) || null }
+  }
+
+  /** Every live deck row (kind "deck"), with its id and last edit. */
+  async function listDeckRows() {
+    const names = await loadSchema()
+    const rows = []
+    const seen = new Set()
+    let cursor = ''
+    do {
+      let data
+      try {
+        data = await request(`/data_sources/${names.dataSourceId}/query`, {
+          method: 'POST',
+          body: {
+            page_size: 100,
+            ...(cursor ? { start_cursor: cursor } : {}),
+            filter: { property: names.kindName, select: { equals: 'deck' } }
+          }
+        })
+      } catch (error) {
+        // No deck pushed yet: the "deck" option does not exist.
+        if (error?.status === 400 && /select option .* not found/i.test(error?.message || '')) {
+          return []
+        }
+        throw error
+      }
+      for (const page of data.results || []) {
+        if (page.archived || page.in_trash) continue
+        rows.push({
+          pageId: page.id,
+          title: pageTitle(page, names.titleName),
+          editedAt: page.last_edited_time || null,
+          externalId: rowFields(page, names).externalId
+        })
+      }
+      cursor = advanceCursor(data, seen)
+    } while (cursor)
+    return rows
+  }
+
+  function blockText(block) {
+    return plainRichText(block?.[block?.type]?.rich_text || [])
+  }
+
+  /** A deck page: the data toggle's JSON and the card toggles, in page order. */
+  async function readDeckPage(pageId, dataTitle) {
+    const blocks = await listChildren(pageId)
+    const toggles = blocks.filter((block) => block.type === 'toggle')
+    const data = toggles.find((block) => blockText(block).trim() === dataTitle)
+    if (!data) return { dataText: '', cardToggles: [] }
+    const parts = await listChildren(data.id)
+    return {
+      dataText: parts
+        .filter((block) => block.type === 'code')
+        .map(blockText)
+        .join(''),
+      cardToggles: toggles.filter((block) => block !== data).map((block) => block.id)
+    }
+  }
+
+  /** The first image inside a block (a card toggle), as a download url. */
+  async function firstImageUrl(blockId) {
+    const children = await listChildren(blockId)
+    const image = children.find((block) => block.type === 'image')
+    return image?.image?.file?.url || image?.image?.external?.url || ''
+  }
+
+  /** True when the page was deleted or sent to the trash. */
+  async function pageGone(pageId) {
+    try {
+      const page = await request(`/pages/${pageId}`)
+      return page?.archived === true || page?.in_trash === true
+    } catch (error) {
+      if (error.status === 404 || error.code === 'object_not_found') return true
+      throw error
+    }
   }
 
   async function archivePage(pageId) {
@@ -1122,6 +1215,10 @@ export function createNotionClient({
     archivePage,
     uploadFile,
     saveDeckPage,
+    listDeckRows,
+    readDeckPage,
+    firstImageUrl,
+    pageGone,
     acceptedDatabaseId: () => acceptedId
   }
 }

@@ -188,6 +188,9 @@ function ProjectPanel({
   const [status, setStatus] = useState(project?.status || 'todo')
   const [anchor, setAnchor] = useState(() => anchorFromProject(project))
   const [linkedFolderPath, setLinkedFolderPath] = useState(project?.linkedFolderPath || '')
+  // Only a folder the person picked or removed is sent on save. A project linked on another
+  // computer has no local path until this one sets its projects root, and saving must keep it.
+  const [folderTouched, setFolderTouched] = useState(false)
   const [saving, setSaving] = useState(false)
   const { groups, fileSection } = buildAnchorCatalog(
     sections,
@@ -203,10 +206,10 @@ function ProjectPanel({
     () => setAnchor(anchorFromProject(project)),
     [project?.id, project?.sectionId, project?.fileRelativePath]
   )
-  useEffect(
-    () => setLinkedFolderPath(project?.linkedFolderPath || ''),
-    [project?.id, project?.linkedFolderPath]
-  )
+  useEffect(() => {
+    setLinkedFolderPath(project?.linkedFolderPath || '')
+    setFolderTouched(false)
+  }, [project?.id, project?.linkedFolderPath, project?.linkedFolderRelative])
 
   const changeStatus = async (next) => {
     if (next === status) return
@@ -231,6 +234,7 @@ function ProjectPanel({
       const nextName = result.name || folderNameFromPath(result.path)
       const previousName = folderNameFromPath(linkedFolderPath)
       setLinkedFolderPath(result.path)
+      setFolderTouched(true)
       // Prefill title from folder when empty, or when it still matches the previous folder name.
       if (!title.trim() || (previousName && title.trim() === previousName)) {
         setTitle(nextName)
@@ -256,7 +260,7 @@ function ProjectPanel({
         status,
         sectionId: placement.sectionId,
         fileRelativePath: placement.fileRelativePath,
-        linkedFolderPath: linkedFolderPath.trim() || null
+        ...(isNew || folderTouched ? { linkedFolderPath: linkedFolderPath.trim() || null } : {})
       })
       const saved =
         list.find((p) => p.id === project?.id) ||
@@ -281,13 +285,25 @@ function ProjectPanel({
     (title.trim() !== (project?.title || '') ||
       notes.trim() !== (project?.notes || '') ||
       anchor !== savedAnchor ||
-      linkedFolderPath !== savedFolder)
+      folderTouched)
 
   const discard = () => {
     setTitle(project?.title || '')
     setNotes(project?.notes || '')
     setAnchor(savedAnchor)
     setLinkedFolderPath(savedFolder)
+    setFolderTouched(false)
+  }
+
+  const pickProjectsRoot = async () => {
+    try {
+      const result = await window.api.pickProjectsRoot()
+      if (result?.canceled) return
+      // The board and course room reload on the projects-changed broadcast.
+      toast.success('Carpeta de proyectos guardada en este equipo')
+    } catch (err) {
+      toast.error(err.message || 'No se pudo elegir la carpeta de proyectos')
+    }
   }
 
   const openLink = async () => {
@@ -353,9 +369,13 @@ function ProjectPanel({
 
   // The stored link is what open/reveal act on; an unsaved folder change hides them.
   const canOpen = !isNew && Boolean(savedFolder) && !project.linkMissing
-  const linkBroken =
-    !isNew && Boolean(savedFolder) && project.linkMissing && linkedFolderPath === savedFolder
-  const folderName = folderNameFromPath(linkedFolderPath)
+  const linkBroken = !isNew && Boolean(savedFolder) && project.linkMissing && !folderTouched
+  // Linked on another computer; this one has not set its projects root yet.
+  const needsRoot = !isNew && project?.linkNeedsRoot && !folderTouched
+  const sharedFolder = !isNew && !folderTouched && Boolean(project?.linkedFolderRelative)
+  const folderName = needsRoot
+    ? folderNameFromPath(project.linkedFolderRelative)
+    : folderNameFromPath(linkedFolderPath)
 
   return (
     <div
@@ -466,7 +486,15 @@ function ProjectPanel({
               aria-hidden="true"
             />
             <div className="min-w-0 flex-1 tracking-normal">
-              {linkedFolderPath ? (
+              {needsRoot ? (
+                <>
+                  <div className="truncate text-sm font-semibold text-ink">{folderName}</div>
+                  <div className="text-2xs font-medium text-ink-soft">
+                    Vinculada en otro equipo ({project.linkedFolderRelative}). Elige dónde está tu
+                    carpeta de proyectos en este equipo.
+                  </div>
+                </>
+              ) : linkedFolderPath ? (
                 <>
                   <div className="truncate text-sm font-semibold text-ink">{folderName}</div>
                   <div
@@ -476,6 +504,13 @@ function ProjectPanel({
                     {linkBroken ? 'No se encuentra: ' : ''}
                     {linkedFolderPath}
                   </div>
+                  {!isNew && !folderTouched ? (
+                    <div className="text-2xs font-medium text-ink-faint">
+                      {sharedFolder
+                        ? 'En tu carpeta de proyectos: se abre en todos tus equipos'
+                        : 'Fuera de la carpeta de proyectos: solo en este equipo'}
+                    </div>
+                  ) : null}
                 </>
               ) : (
                 <div className="text-sm font-medium text-ink-soft">
@@ -483,6 +518,15 @@ function ProjectPanel({
                 </div>
               )}
             </div>
+            {needsRoot ? (
+              <button
+                type="button"
+                className={cn(btnPrimary, btnCompact)}
+                onClick={pickProjectsRoot}
+              >
+                Carpeta de proyectos…
+              </button>
+            ) : null}
             <button
               type="button"
               className={cn(linkBroken ? btnPrimary : btnGhost, btnCompact)}
@@ -490,11 +534,14 @@ function ProjectPanel({
             >
               {linkBroken ? 'Volver a vincular' : linkedFolderPath ? 'Cambiar…' : 'Elegir…'}
             </button>
-            {linkedFolderPath ? (
+            {linkedFolderPath || needsRoot ? (
               <button
                 type="button"
                 className={cn(btnQuiet, btnCompact)}
-                onClick={() => setLinkedFolderPath('')}
+                onClick={() => {
+                  setLinkedFolderPath('')
+                  setFolderTouched(true)
+                }}
                 title="Quitar vínculo (no borra la carpeta)"
               >
                 Quitar

@@ -19,6 +19,8 @@ import {
   playlistIdFromBlocks,
   playlistIsLegacy,
   playlistWire,
+  projectFromBody,
+  projectWire,
   progressFromBody,
   progressIdFromBlocks,
   progressIsEmpty,
@@ -527,5 +529,24 @@ describe('notion errors', () => {
       /al mismo tiempo/
     )
     assert.equal(isRetryableNotionError({ status: 409, code: 'conflict_error' }), true)
+  })
+})
+
+describe('projectWire folder', () => {
+  const base = { title: 'Donut', notes: 'n', status: 'todo', sectionId: '', fileRelativePath: '' }
+
+  it('keeps the old body when there is no shared folder', () => {
+    assert.equal(
+      projectWire({ ...base, linkedFolderPath: 'C:\\local\\x' }).body,
+      projectWire(base).body
+    )
+    assert.doesNotMatch(projectWire(base).body, /linkedFolderRelative/)
+  })
+
+  it('round-trips the relative folder', () => {
+    const wire = projectWire({ ...base, linkedFolderRelative: '3D/Donut' })
+    const parsed = projectFromBody(wire.body)
+    assert.equal(parsed.linkedFolderRelative, '3D/Donut')
+    assert.equal(projectWire({ title: 'Donut', ...parsed }).body, wire.body)
   })
 })

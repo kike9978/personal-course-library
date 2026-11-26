@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Clock,
   Columns3,
+  FolderCog,
   List,
   MoreHorizontal,
   Plus,
@@ -238,7 +239,34 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
   const [cierreDraft, setCierreDraft] = useState(null)
   const [cierres, setCierres] = useState([])
   const [creating, setCreating] = useState(false)
+  const [projectsRoot, setProjectsRoot] = useState(null)
   const focusAfterMove = useRef(null)
+
+  useEffect(() => {
+    let alive = true
+    window.api
+      .getProjectsRoot?.()
+      .then((status) => alive && setProjectsRoot(status || null))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const pickProjectsRoot = async () => {
+    try {
+      const result = await window.api.pickProjectsRoot()
+      setProjectsRoot(result || null)
+      if (result?.canceled) return
+      toast.success(
+        result.adopted
+          ? `Carpeta de proyectos guardada. ${result.adopted} vínculo(s) ahora se comparten entre equipos.`
+          : 'Carpeta de proyectos guardada en este equipo'
+      )
+    } catch (err) {
+      toast.error(err.message || 'No se pudo elegir la carpeta de proyectos')
+    }
+  }
 
   const catalogKey = useMemo(
     () => [...courses.map((course) => course.path)].sort().join('\0'),
@@ -573,6 +601,10 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
 
   const openFolder = async (event, project) => {
     event.stopPropagation()
+    if (project.linkNeedsRoot) {
+      void pickProjectsRoot()
+      return
+    }
     if (!project.linkedFolderPath || project.linkMissing) {
       toast.error(project.linkMissing ? 'La carpeta vinculada no existe' : 'Sin carpeta vinculada')
       return
@@ -696,18 +728,27 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
           ) : null}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
             {renderMeta(project)}
-            {project.linkedFolderPath ? (
+            {project.linkedFolderPath || project.linkNeedsRoot ? (
               <button
                 type="button"
                 className={cn(
                   cardAction,
                   'ml-auto',
-                  project.linkMissing &&
+                  (project.linkMissing || project.linkNeedsRoot) &&
                     'border-warn-border bg-warn text-warn-text enabled:hover:bg-warn'
                 )}
                 onClick={(e) => openFolder(e, project)}
+                title={
+                  project.linkNeedsRoot
+                    ? 'Vinculada en otro equipo. Elige la carpeta de proyectos de este equipo.'
+                    : undefined
+                }
               >
-                {project.linkMissing ? 'Vínculo roto' : 'Abrir carpeta'}
+                {project.linkNeedsRoot
+                  ? 'Elegir carpeta de proyectos'
+                  : project.linkMissing
+                    ? 'Vínculo roto'
+                    : 'Abrir carpeta'}
               </button>
             ) : null}
           </div>
@@ -1006,14 +1047,32 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
           </div>
         }
         actions={
-          <button
-            type="button"
-            className={cn(btnPrimary, btnCompact)}
-            onClick={() => setCreating(true)}
-          >
-            <Plus size={15} aria-hidden="true" />
-            Nuevo proyecto
-          </button>
+          <>
+            <button
+              type="button"
+              className={cn(
+                projectsRoot?.path && projectsRoot.valid ? btnQuiet : btnGhost,
+                btnCompact
+              )}
+              onClick={pickProjectsRoot}
+              title={
+                projectsRoot?.path
+                  ? `${projectsRoot.valid ? '' : 'No se encuentra: '}${projectsRoot.path}\nLas carpetas dentro se abren en todos tus equipos.`
+                  : 'Elige la carpeta donde guardas tus proyectos (p. ej. la de Syncthing) en este equipo.'
+              }
+            >
+              <FolderCog size={15} aria-hidden="true" />
+              {projectsRoot?.path ? 'Carpeta de proyectos' : 'Elegir carpeta de proyectos'}
+            </button>
+            <button
+              type="button"
+              className={cn(btnPrimary, btnCompact)}
+              onClick={() => setCreating(true)}
+            >
+              <Plus size={15} aria-hidden="true" />
+              Nuevo proyecto
+            </button>
+          </>
         }
       />
 

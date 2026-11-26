@@ -10,6 +10,12 @@ import {
   visibleFinding
 } from '../../shared/courseHide.js'
 import { hiddenCoursePathSet } from './courses.js'
+import { getProjectsRoot } from './config.js'
+import {
+  folderRelativeToRoot,
+  normalizeFolderRelative,
+  resolveFolderRelative
+} from './projectFolders.js'
 import {
   findingFromLegacyNote,
   findingsForCourse,
@@ -1306,11 +1312,37 @@ function linkStatus(linkedFolderPath) {
   }
 }
 
-function decorateProject(project) {
+/**
+ * The folder on this computer: the shared relative path under this device's projects root,
+ * or a local absolute path for folders kept elsewhere.
+ */
+function projectFolderPath(project, root = getProjectsRoot()) {
+  if (project?.linkedFolderRelative) {
+    return resolveFolderRelative(root, project.linkedFolderRelative)
+  }
+  return project?.linkedFolderPath || null
+}
+
+function decorateProject(project, root = getProjectsRoot()) {
+  const linkedFolderPath = projectFolderPath(project, root)
   return {
     ...project,
-    ...linkStatus(project.linkedFolderPath)
+    linkedFolderPath,
+    linkedFolderRelative: project.linkedFolderRelative || null,
+    // Linked on another computer, but this one has no projects root yet.
+    linkNeedsRoot: Boolean(project.linkedFolderRelative && !root),
+    ...linkStatus(linkedFolderPath)
   }
+}
+
+/** Split a picked folder into the shared relative form, or keep it as a local absolute path. */
+function splitFolderLink(folder, root = getProjectsRoot()) {
+  const text = folder ? String(folder).trim() : ''
+  if (!text) return { linkedFolderPath: null, linkedFolderRelative: null }
+  const relative = folderRelativeToRoot(root, text, { platform: process.platform })
+  return relative
+    ? { linkedFolderPath: null, linkedFolderRelative: relative }
+    : { linkedFolderPath: text, linkedFolderRelative: null }
 }
 
 export function listProjects(coursePath) {
@@ -1318,6 +1350,7 @@ export function listProjects(coursePath) {
   if (key && hiddenCoursePathSet().has(key)) return []
   const store = readStore()
   const { course } = getMutableCourse(store, coursePath)
+  const root = getProjectsRoot()
   return [...course.projects]
     .sort((a, b) =>
       String(a.title || '').localeCompare(String(b.title || ''), undefined, {
@@ -1325,7 +1358,7 @@ export function listProjects(coursePath) {
         sensitivity: 'base'
       })
     )
-    .map(decorateProject)
+    .map((project) => decorateProject(project, root))
 }
 
 /**
@@ -1356,13 +1389,14 @@ export function readStoredProject(coursePath, projectId) {
 export function listAllProjects() {
   const store = readStore()
   const hidden = hiddenCoursePathSet()
+  const root = getProjectsRoot()
   const items = []
   for (const [coursePath, value] of Object.entries(store.courses || {})) {
     if (hidden.has(coursePath)) continue
     const course = ensureArrays(value)
     for (const project of course.projects) {
       items.push({
-        ...decorateProject(project),
+        ...decorateProject(project, root),
         coursePath
       })
     }
@@ -1411,12 +1445,13 @@ export function upsertProject(coursePath, payload) {
 
   const status = PROJECT_STATUSES.has(payload.status) ? payload.status : 'todo'
   let savedId = payload.id || null
-  const linkedFolderPath =
-    payload.linkedFolderPath === undefined
-      ? undefined
-      : payload.linkedFolderPath
-        ? String(payload.linkedFolderPath).trim() || null
-        : null
+  // A picked folder (absolute) wins; a bare relative path comes from another computer via Notion.
+  let link
+  if (payload.linkedFolderPath !== undefined) link = splitFolderLink(payload.linkedFolderPath)
+  else if (payload.linkedFolderRelative !== undefined) {
+    const relative = normalizeFolderRelative(payload.linkedFolderRelative)
+    link = relative ? { linkedFolderPath: null, linkedFolderRelative: relative } : null
+  }
 
   const sortIndex =
     payload.sortIndex === undefined ? undefined : normalizeSortIndex(payload.sortIndex)
@@ -1449,8 +1484,8 @@ export function upsertProject(coursePath, payload) {
         payload.title !== undefined
           ? title || course.projects[idx].title
           : course.projects[idx].title,
-      linkedFolderPath:
-        linkedFolderPath !== undefined ? linkedFolderPath : course.projects[idx].linkedFolderPath,
+      // Notion clearing the shared folder keeps a folder linked only on this computer.
+      ...(link === undefined ? {} : link ? link : { linkedFolderRelative: null }),
       notes:
         payload.notes !== undefined
           ? String(payload.notes || '').trim()
@@ -1473,7 +1508,8 @@ export function upsertProject(coursePath, payload) {
     course.projects.push({
       id: savedId,
       title,
-      linkedFolderPath: linkedFolderPath ?? null,
+      linkedFolderPath: link?.linkedFolderPath ?? null,
+      linkedFolderRelative: link?.linkedFolderRelative ?? null,
       notes: String(payload.notes || '').trim(),
       status,
       sectionId: payload.sectionId || null,
@@ -1529,8 +1565,42 @@ export function getProjectLinkedPath(coursePath, projectId) {
   const { course } = getMutableCourse(store, coursePath)
   const project = course.projects.find((p) => p.id === projectId)
   if (!project) throw new Error('Proyecto no encontrado')
-  if (!project.linkedFolderPath) throw new Error('Este proyecto no tiene carpeta vinculada')
-  return project.linkedFolderPath
+  const root = getProjectsRoot()
+  if (project.linkedFolderRelative && !root) {
+    throw new Error('Elige la carpeta de proyectos de este equipo para abrir esta carpeta')
+  }
+  const folder = projectFolderPath(project, root)
+  if (!folder) throw new Error('Este proyecto no tiene carpeta vinculada')
+  return folder
+}
+
+/**
+ * After the projects root changes: folders already linked inside it switch to the shared
+ * relative form, so other computers can open them. Returns the ids that changed.
+ */
+export function adoptProjectFoldersUnderRoot(root = getProjectsRoot()) {
+  if (!root) return []
+  const store = readStore()
+  const changed = []
+  const now = Date.now()
+  for (const [coursePath, value] of Object.entries(store.courses || {})) {
+    const course = ensureArrays(value)
+    for (const project of course.projects) {
+      if (project.linkedFolderRelative || !project.linkedFolderPath) continue
+      const relative = folderRelativeToRoot(root, project.linkedFolderPath, {
+        platform: process.platform
+      })
+      if (!relative) continue
+      project.linkedFolderRelative = relative
+      project.linkedFolderPath = null
+      project.updatedAt = now
+      changed.push({ coursePath: courseKey(coursePath) || coursePath, id: project.id })
+    }
+  }
+  if (!changed.length) return []
+  writeStore(store)
+  for (const item of changed) emitProjectWrite({ op: 'upsert', ...item })
+  return changed
 }
 
 /**
@@ -1794,6 +1864,7 @@ function publicDeck(deck) {
           pageId: deck.notion.pageId || null,
           hash: deck.notion.hash || null,
           syncedAt: deck.notion.syncedAt || null,
+          remoteEditedAt: deck.notion.remoteEditedAt || null,
           error: deck.notion.error || null
         }
       : null,
@@ -1895,6 +1966,50 @@ export function setDeckNotion(deckId, patch = {}) {
   const deck = (store.decks || []).find((item) => item.id === deckId)
   if (!deck) return null
   deck.notion = { ...(deck.notion || {}), ...patch }
+  writeStore(store)
+  return publicDeck(deck)
+}
+
+/**
+ * Save a deck as another install pushed it to Notion: same id, its cards in its
+ * order. Study marks ("known") stay as they were here, per card id.
+ */
+export function saveDeckFromNotion(remote, notion = {}) {
+  const store = readStore()
+  if (!Array.isArray(store.decks)) store.decks = []
+  const id = String(remote?.id || '')
+  if (!id) return null
+  let deck = store.decks.find((item) => item.id === id)
+  const known = new Map((deck?.cards || []).map((card) => [card.id, Boolean(card.known)]))
+  const cards = []
+  const ids = new Set()
+  for (const input of Array.isArray(remote.cards) ? remote.cards : []) {
+    const checked = checkCardFields(input)
+    const cardId = String(input?.id || '')
+    if (!checked.ok || !cardId || ids.has(cardId)) continue
+    ids.add(cardId)
+    cards.push({
+      id: cardId,
+      ...checked.card,
+      noteId: input.noteId ? String(input.noteId) : null,
+      coursePath: input.coursePath ? String(input.coursePath) : null,
+      lessonPath: input.lessonPath ? String(input.lessonPath) : null,
+      lesson: String(input.lesson || '').slice(0, 160),
+      timeSec: typeof input.timeSec === 'number' && input.timeSec >= 0 ? input.timeSec : null,
+      source: String(input.source || '').slice(0, 240),
+      image: deckCardImage(input.image),
+      known: known.get(cardId) || false
+    })
+  }
+  const now = Date.now()
+  if (!deck) {
+    deck = { id, createdAt: now }
+    store.decks.push(deck)
+  }
+  deck.title = String(remote.title || '').trim() || 'Tarjetas'
+  deck.cards = cards
+  deck.updatedAt = now
+  deck.notion = { ...(deck.notion || {}), ...notion }
   writeStore(store)
   return publicDeck(deck)
 }

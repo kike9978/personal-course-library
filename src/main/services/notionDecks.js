@@ -1,17 +1,34 @@
 /**
- * Push flashcard decks to Notion, one way. Each deck is a row of kind "deck"
- * in the Notion database; its page shows one toggle per card. A deck is pushed
- * a few seconds after it changes, and only when its content did change.
+ * Flashcard decks in Notion. Each deck is a row of kind "deck" in the Notion
+ * database; its page shows one toggle per card, plus a data toggle with the
+ * deck as JSON. A deck is pushed a few seconds after it changes here, and other
+ * installs read it back from the data toggle. Study marks stay on each install.
  */
 
 import fs from 'fs'
 import { getNotionConfig } from './config.js'
-import { getDeck, listDecks, setDeckNotion } from './learningStore.js'
-import { resolveExistingNoteAttachments, getNoteAttachmentMime } from './noteAttachments.js'
+import { deleteDeck, getDeck, listDecks, saveDeckFromNotion, setDeckNotion } from './learningStore.js'
+import {
+  resolveExistingNoteAttachments,
+  getNoteAttachmentMime,
+  noteAttachmentExists,
+  saveNoteAttachmentBytes
+} from './noteAttachments.js'
 import { runNotionTask } from './notionSync.js'
-import { DECK_ICON, deckBlocks, deckImageFiles, deckNotionHash } from '../../shared/notionDeck.js'
+import {
+  DECK_DATA_TITLE,
+  DECK_ICON,
+  deckBlocks,
+  deckDataBlocks,
+  deckFromData,
+  deckImageFiles,
+  deckNotionHash
+} from '../../shared/notionDeck.js'
 
 const PUSH_DELAY_MS = 3000
+const PULL_EVERY_MS = 2 * 60 * 1000
+let pulling = null
+let pullTimer = null
 const timers = new Map()
 let notify = () => {}
 
@@ -56,7 +73,9 @@ export async function pushDeckToNotion(deckId, { force = false } = {}) {
       title: deck.title,
       children: deckBlocks(deck, uploads),
       pageId: deck.notion?.pageId || null,
-      emoji: DECK_ICON
+      emoji: DECK_ICON,
+      dataTitle: DECK_DATA_TITLE,
+      dataChildren: deckDataBlocks(deck)
     })
   })
   if (!result) return deck
@@ -64,6 +83,7 @@ export async function pushDeckToNotion(deckId, { force = false } = {}) {
     pageId: result.pageId,
     hash,
     syncedAt: Date.now(),
+    remoteEditedAt: result.editedAt || null,
     error: null
   })
   notify(saved)
@@ -105,4 +125,81 @@ export function queueAllNotionDecks() {
       enqueueNotionDeck(deck.id)
     }
   }
+}
+
+/** True when the deck has changes here that were not pushed yet. */
+function hasLocalChanges(deck) {
+  return !deck.notion?.hash || deck.notion.hash !== deckNotionHash(deck)
+}
+
+/** Download the images of pulled cards that this install does not have. */
+async function fetchImages(client, remote, cardToggles) {
+  for (const [index, card] of remote.cards.entries()) {
+    const file = card.image?.file
+    if (!file || noteAttachmentExists(file) || !cardToggles[index]) continue
+    try {
+      const url = await client.firstImageUrl(cardToggles[index])
+      if (!url) continue
+      const bytes = await client.downloadAsset(url)
+      if (bytes?.byteLength) saveNoteAttachmentBytes(file, bytes)
+    } catch {
+      // The card comes without its image; the next change brings it again.
+    }
+  }
+}
+
+async function pullAll(client) {
+  const rows = await client.listDeckRows()
+  const local = new Map(listDecks().map((deck) => [deck.id, deck]))
+  const seen = new Set()
+  for (const row of rows) {
+    if (!row.externalId) continue
+    seen.add(row.externalId)
+    const deck = local.get(row.externalId)
+    if (deck && deck.notion?.remoteEditedAt && deck.notion.remoteEditedAt === row.editedAt) continue
+    // Unpushed changes here win; they go to Notion next.
+    if (deck && deck.notion?.hash && hasLocalChanges(deck)) continue
+    const page = await client.readDeckPage(row.pageId, DECK_DATA_TITLE)
+    const remote = deckFromData(page.dataText)
+    if (!remote || remote.id !== row.externalId) continue
+    const hash = deckNotionHash(remote)
+    const cursor = { pageId: row.pageId, remoteEditedAt: row.editedAt, error: null }
+    if (deck && deck.notion?.hash === hash) {
+      setDeckNotion(deck.id, cursor)
+      continue
+    }
+    await fetchImages(client, remote, page.cardToggles)
+    const saved = saveDeckFromNotion(remote, { ...cursor, hash, syncedAt: Date.now() })
+    if (saved) notify(saved)
+  }
+  // A deck deleted on another install: its page went to the trash.
+  for (const deck of local.values()) {
+    if (seen.has(deck.id) || !deck.notion?.pageId || hasLocalChanges(deck)) continue
+    if (!(await client.pageGone(deck.notion.pageId))) continue
+    deleteDeck(deck.id)
+    notify({ id: deck.id, removed: true })
+  }
+}
+
+/** Bring in decks that other installs pushed or changed. */
+export function pullNotionDecks() {
+  if (!getNotionConfig().enabled) return Promise.resolve()
+  if (pulling) return pulling
+  pulling = runNotionTask(pullAll)
+    .catch(() => {
+      // Tried again on the next focus or timer.
+    })
+    .finally(() => {
+      pulling = null
+    })
+  return pulling
+}
+
+/** Pull now and every couple of minutes while Notion sync is on. */
+export function startNotionDeckPull() {
+  clearInterval(pullTimer)
+  pullTimer = null
+  if (!getNotionConfig().enabled) return
+  void pullNotionDecks()
+  pullTimer = setInterval(() => void pullNotionDecks(), PULL_EVERY_MS)
 }

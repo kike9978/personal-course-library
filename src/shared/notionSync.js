@@ -547,14 +547,20 @@ export function topicFromBody(body) {
 
 const PROJECT_STATUSES = new Set(['todo', 'in_progress', 'paused', 'done'])
 
-/** Project brief and status. The linked folder path stays on this machine. */
+/**
+ * Project brief and status. A folder inside the projects root travels as its relative path
+ * (each computer resolves it under its own root); an absolute folder stays on this machine.
+ * The key is left out when empty so projects without one keep their old hash.
+ */
 export function projectWire(project) {
   const status = PROJECT_STATUSES.has(project?.status) ? project.status : 'todo'
+  const folder = String(project?.linkedFolderRelative || '')
   const body = normalizeBody(
     JSON.stringify({
       notes: String(project?.notes || ''),
       sectionId: String(project?.sectionId || ''),
       fileRelativePath: String(project?.fileRelativePath || ''),
+      ...(folder ? { linkedFolderRelative: folder } : {}),
       status
     })
   )
@@ -658,6 +664,7 @@ export function projectFromBody(body) {
       notes: String(data.notes || ''),
       sectionId: String(data.sectionId || ''),
       fileRelativePath: String(data.fileRelativePath || ''),
+      linkedFolderRelative: String(data.linkedFolderRelative || ''),
       status
     }
   } catch {

@@ -95,6 +95,33 @@ export function setNotionConfig(notion) {
   return getNotionConfig()
 }
 
+/**
+ * Where this computer keeps project folders (e.g. a Syncthing folder). Each device sets its
+ * own; projects store their folder relative to it, so the link works on every computer.
+ */
+export function getProjectsRoot() {
+  const { projectsRoot } = readConfig()
+  if (!projectsRoot || typeof projectsRoot !== 'string') return null
+  return path.normalize(projectsRoot)
+}
+
+export function setProjectsRoot(projectsRoot) {
+  const config = readConfig()
+  if (!projectsRoot) {
+    delete config.projectsRoot
+    writeConfig(config)
+    return null
+  }
+  const normalized = path.normalize(String(projectsRoot))
+  const stat = fs.statSync(normalized, { throwIfNoEntry: false })
+  if (!stat?.isDirectory()) {
+    throw new Error(`La carpeta de proyectos no existe: ${normalized}`)
+  }
+  config.projectsRoot = normalized
+  writeConfig(config)
+  return normalized
+}
+
 /** Opt-in Instagram sign-in for the Fuentes viewer (Phase 2b). Off unless the person turns it on. */
 export function getInstagramViewerConfig() {
   const value = readConfig().instagramViewer

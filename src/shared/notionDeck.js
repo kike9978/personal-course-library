@@ -9,6 +9,12 @@ import { wireHash } from './notionSync.js'
 
 const RICH_LIMIT = 1900
 const TOGGLE_TITLE_MAX = 1900
+// Sent one block per request, well under Notion's 500 KB body limit.
+const CODE_BLOCK_CHARS = RICH_LIMIT * 20
+const DATA_VERSION = 1
+
+/** Title of the toggle that holds the deck as JSON, for other installs to read back. */
+export const DECK_DATA_TITLE = 'Datos del mazo (para la app, no editar)'
 
 export const DECK_ICON = '🗂️'
 
@@ -178,7 +184,76 @@ export function deckBlocks(deck, uploads = new Map()) {
       )
     }
   }
-  return [intro, ...cards.map((card) => cardBlock(card, uploads))]
+  return [intro, ...cards.map((card) => cardBlock(card, uploads)), dataBlock()]
+}
+
+const DATA_FIELDS = [
+  'id',
+  'type',
+  'front',
+  'back',
+  'noteId',
+  'coursePath',
+  'lessonPath',
+  'lesson',
+  'timeSec',
+  'source',
+  'image'
+]
+
+/** The deck as JSON, without study marks: those stay on each install. */
+export function deckData(deck) {
+  return {
+    v: DATA_VERSION,
+    id: String(deck?.id || ''),
+    title: String(deck?.title || ''),
+    cards: (deck?.cards || []).map((card) => {
+      const out = {}
+      for (const field of DATA_FIELDS) {
+        if (card[field] !== undefined && card[field] !== null && card[field] !== '')
+          out[field] = card[field]
+      }
+      return out
+    })
+  }
+}
+
+/** The data toggle, empty: its code blocks go in afterwards (see deckDataBlocks). */
+function dataBlock() {
+  return {
+    object: 'block',
+    type: 'toggle',
+    toggle: { rich_text: textItems(DECK_DATA_TITLE, { color: 'gray' }) }
+  }
+}
+
+/** The deck as JSON code blocks, to append inside the data toggle. */
+export function deckDataBlocks(deck) {
+  const text = JSON.stringify(deckData(deck))
+  const blocks = []
+  for (let index = 0; index < text.length; index += CODE_BLOCK_CHARS) {
+    blocks.push({
+      object: 'block',
+      type: 'code',
+      code: { rich_text: textItems(text.slice(index, index + CODE_BLOCK_CHARS)), language: 'json' }
+    })
+  }
+  return blocks
+}
+
+/** A deck read back from its data toggle's text. Null when it is missing or does not parse. */
+export function deckFromData(text) {
+  let data
+  try {
+    data = JSON.parse(String(text || ''))
+  } catch {
+    return null
+  }
+  if (!data || data.v !== DATA_VERSION || !data.id || !Array.isArray(data.cards)) return null
+  const cards = data.cards
+    .filter((card) => card && card.id && typeof card.front === 'string' && card.front.trim())
+    .map((card) => ({ ...card, type: cardType(card.type), back: String(card.back || '') }))
+  return { id: String(data.id), title: String(data.title || 'Tarjetas'), cards }
 }
 
 /** What decides whether the page needs a new push: title and card content, not study marks. */
@@ -191,7 +266,8 @@ export function deckNotionHash(deck) {
     card.image?.alt || '',
     card.source || ''
   ])
-  return wireHash(String(deck?.title || ''), JSON.stringify(cards))
+  // v2: pages now carry the data toggle, so decks pushed before it go again.
+  return wireHash(`v2:${String(deck?.title || '')}`, JSON.stringify(cards))
 }
 
 /** Image files a deck page needs, once each. */

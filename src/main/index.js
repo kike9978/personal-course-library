@@ -5,7 +5,13 @@ import fsPromises from 'fs/promises'
 import { Readable } from 'stream'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { getLibraryPath, setLibraryPath, isLibraryPathValid } from './services/config.js'
+import {
+  getLibraryPath,
+  setLibraryPath,
+  isLibraryPathValid,
+  getProjectsRoot,
+  setProjectsRoot
+} from './services/config.js'
 import {
   listCourses,
   NEW_COURSE_MS,
@@ -71,6 +77,7 @@ import {
   upsertProject,
   deleteProject,
   getProjectLinkedPath,
+  adoptProjectFoldersUnderRoot,
   getNotesSearchByCourse,
   ensureLearningStoreFile,
   flushLearningStore,
@@ -152,9 +159,11 @@ import { readLessonTranscripts } from './services/lessonTranscripts.js'
 import {
   archiveNotionDeck,
   enqueueNotionDeck,
+  pullNotionDecks,
   pushDeckToNotion,
   queueAllNotionDecks,
-  setDeckNotionListener
+  setDeckNotionListener,
+  startNotionDeckPull
 } from './services/notionDecks.js'
 import { canonicalSourceUrl } from '../shared/sources.js'
 import {
@@ -1117,9 +1126,45 @@ function registerIpcHandlers() {
     return saved
   })
 
+  const projectsRootStatus = () => {
+    const root = getProjectsRoot()
+    let valid = false
+    try {
+      valid = Boolean(root) && fs.statSync(root).isDirectory()
+    } catch {
+      valid = false
+    }
+    return { path: root, valid }
+  }
+
+  ipcMain.handle('get-projects-root', () => projectsRootStatus())
+
+  ipcMain.handle('pick-projects-root', async () => {
+    const current = getProjectsRoot()
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Carpeta de proyectos de este equipo',
+      ...(current ? { defaultPath: current } : {}),
+      properties: ['openDirectory']
+    })
+    if (result.canceled || !result.filePaths[0]) return { canceled: true, ...projectsRootStatus() }
+    const root = setProjectsRoot(result.filePaths[0])
+    // Folders already linked under the new root become shareable with other computers.
+    const adopted = adoptProjectFoldersUnderRoot(root).length
+    broadcastToWindows('projects-changed', {})
+    return { canceled: false, adopted, ...projectsRootStatus() }
+  })
+
+  ipcMain.handle('clear-projects-root', () => {
+    setProjectsRoot(null)
+    broadcastToWindows('projects-changed', {})
+    return projectsRootStatus()
+  })
+
   ipcMain.handle('pick-project-folder', async () => {
+    const root = getProjectsRoot()
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Vincular carpeta del proyecto',
+      ...(root ? { defaultPath: root } : {}),
       properties: ['openDirectory']
     })
     if (result.canceled || !result.filePaths[0]) {
@@ -1349,6 +1394,7 @@ function registerIpcHandlers() {
   ipcMain.handle('get-notion-debug', () => notionDebugReport())
   ipcMain.handle('set-notion-sync', async (_event, payload = {}) => {
     const result = await saveNotionSettings(payload)
+    startNotionDeckPull()
     queueAllNotionDecks()
     return result
   })
@@ -1423,9 +1469,11 @@ app.whenReady().then(() => {
     isActive: () => Boolean(BrowserWindow.getFocusedWindow())
   })
   setDeckNotionListener((deck) => broadcastToWindows('deck-notion', deck))
+  startNotionDeckPull()
   queueAllNotionDecks()
   app.on('browser-window-focus', () => {
     pollNotionChanges()
+    void pullNotionDecks()
   })
   startLibraryWatcher()
 

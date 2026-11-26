@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { deckBlocks, deckImageFiles, deckNotionHash } from './notionDeck.js'
+import {
+  DECK_DATA_TITLE,
+  deckBlocks,
+  deckDataBlocks,
+  deckFromData,
+  deckImageFiles,
+  deckNotionHash
+} from './notionDeck.js'
 
 const deck = {
   id: 'd1',
@@ -42,8 +49,44 @@ describe('notion deck page', () => {
     const blocks = deckBlocks(deck, new Map([['abc-1.png', 'upload-1']]))
     assert.equal(blocks[0].type, 'callout')
     assert.match(text(blocks[0].callout.rich_text), /4 tarjetas/)
-    assert.equal(blocks.length, 5)
+    assert.equal(blocks.length, 6)
     assert.ok(blocks.slice(1).every((block) => block.type === 'toggle'))
+    assert.equal(text(blocks.at(-1).toggle.rich_text), DECK_DATA_TITLE)
+  })
+
+  it('ends with the deck as JSON that reads back the same, without study marks', () => {
+    const marked = { ...deck, cards: deck.cards.map((card) => ({ ...card, known: true })) }
+    const data = deckDataBlocks(marked)
+    const back = deckFromData(data.map((block) => text(block.code.rich_text)).join(''))
+    assert.equal(back.id, 'd1')
+    assert.equal(back.title, 'Expresiones')
+    assert.deepEqual(
+      back.cards.map((card) => card.id),
+      deck.cards.map((card) => card.id)
+    )
+    assert.ok(back.cards.every((card) => card.known === undefined))
+    assert.deepEqual(back.cards[0].image, deck.cards[0].image)
+    assert.equal(deckNotionHash(back), deckNotionHash(deck))
+  })
+
+  it('splits a long deck over several code blocks and refuses broken data', () => {
+    const long = {
+      id: 'd2',
+      title: 'Largo',
+      cards: Array.from({ length: 400 }, (_, index) => ({
+        id: `c${index}`,
+        type: 'basic',
+        front: `Pregunta ${index} ${'x'.repeat(400)}`,
+        back: 'Respuesta'
+      }))
+    }
+    const data = deckDataBlocks(long)
+    assert.ok(data.length > 1)
+    assert.ok(data.every((block) => block.code.rich_text.length <= 100))
+    const back = deckFromData(data.map((block) => text(block.code.rich_text)).join(''))
+    assert.equal(back.cards.length, 400)
+    assert.equal(deckFromData('{"v":1'), null)
+    assert.equal(deckFromData('{"v":9,"id":"x","cards":[]}'), null)
   })
 
   it('puts the answer, image and source inside the toggle and inline code in the title', () => {

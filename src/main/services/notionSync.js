@@ -2522,6 +2522,7 @@ async function adoptRemoteProject(client, id, coursePath) {
       sectionId: parsed.sectionId || null,
       fileRelativePath: parsed.fileRelativePath || null,
       linkedFolderPath: null,
+      linkedFolderRelative: parsed.linkedFolderRelative || null,
       notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
     })
   })
@@ -2559,6 +2560,7 @@ async function reconcileProject(client, id, coursePath) {
         status: parsed.status,
         sectionId: parsed.sectionId || null,
         fileRelativePath: parsed.fileRelativePath || null,
+        linkedFolderRelative: parsed.linkedFolderRelative || null,
         notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
       })
     })
@@ -4704,6 +4706,7 @@ export async function resolveNotionProjectConflict(projectId, choice) {
           status: parsed.status,
           sectionId: parsed.sectionId || null,
           fileRelativePath: parsed.fileRelativePath || null,
+          linkedFolderRelative: parsed.linkedFolderRelative || null,
           notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
         })
       })
@@ -4745,7 +4748,11 @@ export async function resolveNotionProjectDelete(projectId, choice) {
           status: parsed.status,
           sectionId: parsed.sectionId || tomb.snapshot?.sectionId || null,
           fileRelativePath: parsed.fileRelativePath || tomb.snapshot?.fileRelativePath || null,
-          linkedFolderPath: tomb.snapshot?.linkedFolderPath || null,
+          linkedFolderPath: parsed.linkedFolderRelative
+            ? null
+            : tomb.snapshot?.linkedFolderPath || null,
+          linkedFolderRelative:
+            parsed.linkedFolderRelative || tomb.snapshot?.linkedFolderRelative || null,
           notion: cursorFrom(remote, hash, { pulledAt: Date.now() })
         })
       })
