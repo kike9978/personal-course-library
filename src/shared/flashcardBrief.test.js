@@ -531,3 +531,16 @@ describe('code cards', () => {
     assert.equal(why.back, 'So it matches wiggle1 at the loop point.')
   })
 })
+
+describe('note text for briefs', () => {
+  it('keeps escaped stars and underscores and turns video stamps into clocks', async () => {
+    const { noteSourceText } = await import('./flashcardBrief.js')
+    assert.equal(
+      noteSourceText('angle / 360 \\* 100, off = time%10\\*50 {t:109.677} *bold* snake\\_case'),
+      'angle / 360 * 100, off = time%10*50 [1:49] bold snake_case'
+    )
+    const [source] = sourcesFromNotes([{ id: 'n', body: 'amp = Math.sin(2 \\* Math.PI \\* time)' }])
+      .sources
+    assert.match(source.text, /Math\.sin\(2 \* Math\.PI \* time\)/)
+  })
+})

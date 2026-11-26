@@ -146,8 +146,8 @@ export function noteImagesForCards(markdown) {
     const caption = markdownImageDestination(match[2]).title.replace(/^"|"$/g, '')
     const rawLabel = fact(caption || match[1])
     const label = FILE_LABEL_RE.test(rawLabel) ? '' : rawLabel
-    const before = plainNoteText(text.slice(0, match.index))
-    const after = plainNoteText(text.slice(match.index + match[0].length))
+    const before = noteSourceText(text.slice(0, match.index))
+    const after = noteSourceText(text.slice(match.index + match[0].length))
     const clock = CAPTION_CLOCK_RE.exec(label)
     images.push({
       ref: `img${images.length + 1}`,
@@ -177,6 +177,31 @@ function countWords(text) {
     .filter((word) => /[\p{L}\p{N}]{2,}/u.test(word)).length
 }
 
+/** Private-use stand-ins so escaped Markdown survives the plain-text cleaner. */
+const ESCAPE_MARKS = {
+  '*': '\uE000',
+  _: '\uE001',
+  '~': '\uE002',
+  '`': '\uE003',
+  '[': '\uE004',
+  ']': '\uE005',
+  '#': '\uE006'
+}
+
+/**
+ * Note text for a brief. Like the note list's plain text, but an escaped `\*`
+ * stays a `*` (notes write multiplication that way) and inline video stamps
+ * `{t:109.6}` become clocks `[1:49]` the chat can read.
+ */
+export function noteSourceText(markdown) {
+  const body = String(markdown || '')
+    .replace(/\{t:(\d+(?:\.\d+)?)\}/g, (_, sec) => ` [${formatClock(Number(sec))}] `)
+    .replace(/\\([*_~`[\]#])/g, (_, ch) => ESCAPE_MARKS[ch])
+  let text = plainNoteText(body)
+  for (const [ch, mark] of Object.entries(ESCAPE_MARKS)) text = text.split(mark).join(ch)
+  return text
+}
+
 /** One source per note that has words or code. */
 export function sourcesFromNotes(notes) {
   const out = []
@@ -186,7 +211,7 @@ export function sourcesFromNotes(notes) {
     if (!id) continue
     const stored = fact(note?.title)
     const title = stored && !isDefaultNoteTitle(stored) ? clip(stored, MAX_TITLE) : ''
-    const text = clip(plainNoteText(note?.body), MAX_NOTE_TEXT)
+    const text = clip(noteSourceText(note?.body), MAX_NOTE_TEXT)
     const code = noteCodeBlocks(note?.body).join('\n\n').slice(0, MAX_CODE)
     if (!title && !text && !code) {
       empty += 1
