@@ -6,9 +6,9 @@ import { cn } from '../ui/cn'
 const graphSvg =
   'absolute inset-0 block h-full w-full cursor-grab touch-none [&:not(.is-detailed)_text]:hidden [&.is-detailed_g_text]:!block [&.is-labels.is-detailed_.kg-edge]:!block [&_g.is-selected_text]:!block [&_g:hover_text]:!block [&:not(.is-labels)_g_text[data-kind]]:!hidden [&:not(.is-labels)_.kg-edge]:!hidden'
 const nodeText =
-  'pointer-events-none font-body text-2xs fill-ink stroke-white stroke-[3px] [paint-order:stroke]'
+  'pointer-events-none font-body [font-size:var(--kg-font,12px)] font-medium fill-ink stroke-white [stroke-width:calc(var(--kg-font,12px)*0.28)] [paint-order:stroke]'
 const edgeLabel =
-  'kg-edge pointer-events-none hidden font-body text-2xs fill-ink-soft stroke-white stroke-[3px] [paint-order:stroke] [text-anchor:middle]'
+  'kg-edge pointer-events-none hidden font-body [font-size:calc(var(--kg-font,12px)*0.9)] fill-ink-soft stroke-white [stroke-width:calc(var(--kg-font,12px)*0.28)] [paint-order:stroke] [text-anchor:middle]'
 
 const FILL = {
   finding: '#e84570',
@@ -139,6 +139,8 @@ function KnowledgeGraphView({
     const { x, y, k } = cameraRef.current
     worldRef.current?.setAttribute('transform', `translate(${x} ${y}) scale(${k})`)
     svgRef.current?.classList.toggle('is-detailed', k >= labelZoomRef.current)
+    // Labels live inside the zoomed group; counter-scale so they read at ~12px on screen.
+    svgRef.current?.style.setProperty('--kg-font', `${(12 / Math.max(k, 0.05)).toFixed(2)}px`)
   }
 
   const cancelFocusAnim = () => {

@@ -76,7 +76,7 @@ function sectionClass({ nested, dense, bar, open, className }) {
     dense &&
       nested &&
       !bar &&
-      'm-0 mt-[0.04rem] ml-[var(--ann-indent)] border-0 border-l-0 bg-transparent p-0 pl-0',
+      'm-0 mt-[0.04rem] ml-[var(--ann-indent)] border-0 border-l border-ink/8 bg-transparent p-0 pl-1',
     nested &&
       bar &&
       'mt-0 mr-0 mb-0 ml-[0.8rem] border-b-0 border-l-2 border-ink/18 bg-surface pl-0',

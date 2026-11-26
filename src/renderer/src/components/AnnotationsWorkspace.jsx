@@ -3,8 +3,11 @@ import { toast } from 'react-hot-toast'
 import {
   AppWindow,
   CalendarDays,
+  ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Clock,
   Film,
   Hash,
@@ -35,18 +38,23 @@ import {
   btnCompact,
   btnGhost,
   btnPrimary,
+  btnQuiet,
   iconOnly,
   menuItem,
-  popover
+  popover,
+  searchIcon,
+  searchInput
 } from '../ui/classes'
 
 const page = 'flex h-full min-h-0 flex-1 flex-col bg-white text-ink'
 const pageBody =
   'grid min-h-0 flex-1 max-[900px]:grid-cols-1 max-[900px]:grid-rows-[minmax(140px,28%)_minmax(0,1fr)_minmax(220px,36%)]'
 const pageBodyOpen =
-  'grid-cols-[var(--annotations-list-w,268px)_minmax(280px,1fr)_minmax(280px,min(var(--annotations-graph-w,34%),70%))]'
+  'grid-cols-[var(--annotations-list-w,268px)_minmax(280px,1fr)_minmax(280px,min(var(--annotations-graph-w,34%),50%))]'
+const pageBodyOpenNoGraph = 'grid-cols-[var(--annotations-list-w,268px)_minmax(280px,1fr)_0px]'
+const pageBodyCollapsedNoGraph = 'grid-cols-[3rem_minmax(280px,1fr)_0px]'
 const pageBodyCollapsed =
-  'grid-cols-[3rem_minmax(280px,1fr)_minmax(280px,min(var(--annotations-graph-w,34%),70%))]'
+  'grid-cols-[3rem_minmax(280px,1fr)_minmax(280px,min(var(--annotations-graph-w,34%),50%))]'
 const headerIcon = iconOnly
 const menu = 'relative z-[8] shrink-0'
 const docStack = 'mx-auto max-w-[46rem] px-7 pt-5 pb-12'
@@ -62,9 +70,8 @@ const popoverScroll = cn(popover, 'max-h-[min(60vh,22rem)] overflow-auto')
 const iconSquare = iconOnly
 const iconCreate = cn(btnPrimary, btnCompact, 'h-8 px-2.5')
 const iconOn = 'border-coral bg-[rgba(232,69,112,0.12)] text-coral-deep'
-const toolBtn = cn(iconOnly, 'aria-pressed:bg-coral-soft aria-pressed:text-coral-deep')
 const listItem =
-  'mt-[0.02rem] mb-[0.02rem] ml-[var(--ann-indent)] box-border flex w-[calc(100%-var(--ann-indent))] min-w-0 cursor-pointer flex-row items-baseline justify-between gap-[0.55rem] rounded-md border-0 bg-transparent px-[var(--ann-pad-x)] py-[0.2rem] text-left font-[inherit] text-ink hover:bg-[rgba(23,21,28,0.045)] [&.is-active]:bg-[rgba(23,21,28,0.08)] [&.is-active]:shadow-none [&.is-active:hover]:bg-[rgba(23,21,28,0.08)] [&_small]:text-2xs [&_small]:text-coral-deep [&.is-active_span_span]:font-semibold'
+  'mt-[0.02rem] mb-[0.02rem] ml-[var(--ann-indent)] box-border flex w-[calc(100%-var(--ann-indent))] min-w-0 cursor-pointer flex-row items-baseline justify-between gap-[0.55rem] rounded-md border-0 bg-transparent px-[var(--ann-pad-x)] py-[0.2rem] text-left font-[inherit] text-ink hover:bg-[rgba(23,21,28,0.045)] [&.is-active]:bg-coral-soft [&.is-active]:text-coral-deep [&.is-active]:shadow-none [&.is-active:hover]:bg-coral-soft [&_small]:text-2xs [&_small]:text-coral-deep [&.is-active_span_span]:font-semibold'
 const savePill =
   'inline-flex appearance-none items-center gap-[0.3rem] rounded-full border border-ink/16 bg-cream px-[0.55rem] py-[0.18rem] font-body text-2xs leading-[1.2] font-semibold text-ink-soft shadow-none'
 const saveWarm = 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
@@ -76,8 +83,9 @@ const propKey =
   'flex items-center gap-2 text-sm text-ink-soft [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-ink-faint'
 const topicChip =
   'inline-flex cursor-pointer items-center rounded-full border border-chip-status-border bg-chip-status px-2 py-px text-xs font-medium text-chip-status-text hover:border-chip-status-text/40'
-const searchInList =
-  'relative w-full min-w-0 max-w-none flex-none [&_input]:h-8 [&_input]:w-full [&_input]:rounded-full [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:py-0 [&_input]:pr-[0.85rem] [&_input]:pl-[2.15rem] [&_input]:text-sm [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-find [&_svg]:pointer-events-none [&_svg]:absolute [&_svg]:top-1/2 [&_svg]:left-[0.7rem] [&_svg]:size-[0.9rem] [&_svg]:-translate-y-1/2 [&_svg]:opacity-55'
+const outlineChip =
+  'inline-flex h-7 min-w-0 cursor-pointer items-center gap-1 rounded-full border border-ink/10 bg-surface px-2.5 text-xs font-medium text-ink-soft transition-colors duration-150 hover:border-ink/20 hover:text-ink [&_svg]:size-3.5 [&_svg]:shrink-0'
+const outlineChipOn = 'border-coral/35 bg-coral-soft text-coral-deep hover:text-coral-deep'
 const graphPanel =
   'absolute top-[3.15rem] right-[0.65rem] z-[6] flex max-h-[calc(100%-4rem)] w-[min(16.5rem,calc(100%-1.3rem))] flex-col gap-[0.65rem] overflow-auto rounded-md border border-ink/10 bg-surface px-[0.85rem] py-3 text-xs font-medium text-ink-soft shadow-lift'
 const rangeLabel =
@@ -124,9 +132,17 @@ function noteTitle(item) {
   return clipTitle(noteTextTitle(item))
 }
 
+const UNTITLED_RE = /^(sin t[ií]tulo|untitled)$/i
+
+/** Generated names ("new note 1:23", "Sin título") are placeholders, not titles. */
+function isPlaceholderTitle(value) {
+  const text = String(value || '').trim()
+  return !text || isDefaultNoteTitle(text) || UNTITLED_RE.test(text) || /^new note\b/i.test(text)
+}
+
 function editableTitle(value) {
   const text = String(value || '').trim()
-  return isDefaultNoteTitle(text) ? '' : text
+  return isPlaceholderTitle(text) ? '' : text
 }
 
 function topicTitlesOf(item, topics = []) {
@@ -169,7 +185,8 @@ function AnnotationBranch({
   selecting = false,
   selectedIds,
   onToggleSelect,
-  onToggleSection
+  onToggleSection,
+  kicker = false
 }) {
   const open = !collapsedIds.has(node.id)
   const count = countNotes(node)
@@ -186,7 +203,11 @@ function AnnotationBranch({
       open={open}
       nested={nested}
       dense
-      className={loose ? 'is-loose' : undefined}
+      className={cn(
+        loose && 'is-loose',
+        kicker &&
+          'mt-1 border-b-0 [&>h3_button]:text-2xs [&>h3_button]:font-semibold [&>h3_button]:tracking-[0.07em] [&>h3_button]:text-ink-soft [&>h3_button]:uppercase'
+      )}
       onToggle={() => onToggle(node.id)}
       pick={
         selecting && sectionIds.length
@@ -240,7 +261,12 @@ function AnnotationBranch({
               onClick={() => onOpen(item)}
             >
               <span className="flex min-w-0 flex-1 flex-col items-stretch gap-[0.05rem] overflow-hidden">
-                <span className="block max-w-full min-w-0 truncate text-sm leading-[1.3] font-medium">
+                <span
+                  className={cn(
+                    'block max-w-full min-w-0 truncate text-sm leading-[1.3] font-medium',
+                    isPlaceholderTitle(parts.name) && 'font-normal text-ink-soft'
+                  )}
+                >
                   {parts.name}
                 </span>
                 {item.notion?.conflict ? <small>Conflicto con Notion</small> : null}
@@ -284,15 +310,30 @@ function saveStatusLabel(status) {
 function formatDateTime(ts) {
   if (!ts) return '—'
   try {
-    return new Date(ts).toLocaleString(undefined, {
+    return new Date(ts).toLocaleString('es', {
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric',
-      hour: 'numeric',
+      hour: '2-digit',
       minute: '2-digit'
     })
   } catch {
     return '—'
+  }
+}
+
+function formatShortDate(ts) {
+  if (!ts) return ''
+  try {
+    const date = new Date(ts)
+    const sameYear = date.getFullYear() === new Date().getFullYear()
+    return date.toLocaleDateString('es', {
+      day: 'numeric',
+      month: 'short',
+      ...(sameYear ? {} : { year: 'numeric' })
+    })
+  } catch {
+    return ''
   }
 }
 
@@ -307,9 +348,12 @@ const GROUP_MODES = [
 const GROUP_MODE_KEY = 'pcl.annotations.group-mode'
 
 const GRAPH_SETTINGS_KEY = 'pcl.graph.node-visibility'
-const GRAPH_WIDTH_KEY = 'pcl.graph.pane-width'
+// v2: the default got narrower; older stored widths were often oversized.
+const GRAPH_WIDTH_KEY = 'pcl.graph.pane-width.v2'
+const GRAPH_HIDDEN_KEY = 'pcl.annotations.graph-hidden'
+const PROPS_OPEN_KEY = 'pcl.annotations.props-open'
 const GRAPH_PANE_MIN = 280
-const GRAPH_PANE_DEFAULT = 420
+const GRAPH_PANE_DEFAULT = 340
 const LIST_WIDTH_KEY = 'pcl.annotations.list-width'
 const LIST_PANE_MIN = 200
 const LIST_PANE_DEFAULT = 268
@@ -451,7 +495,7 @@ function AnnotationTitleField({ value, onChange, placeholder }) {
       <div
         className={cn(
           'm-0 line-clamp-3 font-display text-[clamp(1.6rem,2.4vw,2.1rem)] leading-[1.15] font-semibold tracking-[-0.03em] whitespace-pre-wrap wrap-anywhere text-ink pointer-events-none',
-          !shown && 'text-ink-soft opacity-55'
+          !shown && 'text-ink-faint'
         )}
         aria-hidden="true"
       >
@@ -462,6 +506,8 @@ function AnnotationTitleField({ value, onChange, placeholder }) {
         value={shown}
         rows={1}
         autoFocus
+        spellCheck={false}
+        placeholder={hint}
         aria-label="Título de la anotación"
         onChange={(event) => onChange(event.target.value.replace(/\r?\n/g, ' '))}
         onKeyDown={(event) => {
@@ -533,6 +579,36 @@ function AnnotationsWorkspace({
   const [graphQueryIndex, setGraphQueryIndex] = useState(0)
   const [graphReset, setGraphReset] = useState(0)
   const [graphWidth, setGraphWidth] = useState(() => readStoredGraphWidth() ?? GRAPH_PANE_DEFAULT)
+  const [propsOpen, setPropsOpen] = useState(() => {
+    try {
+      return localStorage.getItem(PROPS_OPEN_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const togglePropsOpen = (next) => {
+    setPropsOpen(next)
+    try {
+      localStorage.setItem(PROPS_OPEN_KEY, next ? '1' : '0')
+    } catch {
+      // Still applies for this session.
+    }
+  }
+  const [graphHidden, setGraphHidden] = useState(() => {
+    try {
+      return localStorage.getItem(GRAPH_HIDDEN_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const setGraphShown = (shown) => {
+    setGraphHidden(!shown)
+    try {
+      localStorage.setItem(GRAPH_HIDDEN_KEY, shown ? '0' : '1')
+    } catch {
+      // Still applies for this session.
+    }
+  }
   const [graphResizing, setGraphResizing] = useState(false)
   const [graphSettingsOpen, setGraphSettingsOpen] = useState(false)
   const graphSettingsRef = useRef(null)
@@ -580,7 +656,11 @@ function AnnotationsWorkspace({
       event.preventDefault()
       event.stopPropagation()
       if (listCollapsedRef.current) setListCollapsed(false)
-      setOutlineTool('search')
+      setOutlineTool(null)
+      requestAnimationFrame(() => {
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select()
+      })
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
@@ -1659,7 +1739,16 @@ function AnnotationsWorkspace({
       />
 
       <div
-        className={cn(pageBody, listCollapsed ? pageBodyCollapsed : pageBodyOpen)}
+        className={cn(
+          pageBody,
+          graphHidden
+            ? listCollapsed
+              ? pageBodyCollapsedNoGraph
+              : pageBodyOpenNoGraph
+            : listCollapsed
+              ? pageBodyCollapsed
+              : pageBodyOpen
+        )}
         ref={bodyRef}
         style={{
           '--annotations-graph-w': `${graphWidth}px`,
@@ -1729,15 +1818,68 @@ function AnnotationsWorkspace({
           {!listCollapsed ? (
             <>
               <div
-                className="relative z-[4] flex flex-col gap-[0.45rem] px-[0.6rem] pt-[0.45rem] pb-[0.15rem]"
+                className="relative z-[4] flex flex-col gap-2 border-b border-ink/6 px-2.5 pt-2.5 pb-2.5"
                 ref={outlineToolsRef}
               >
-                <div className="flex items-center justify-center gap-[0.15rem]">
+                <div className="relative">
+                  <Search className={searchIcon} aria-hidden="true" />
+                  <input
+                    ref={searchInputRef}
+                    type="search"
+                    className={cn(searchInput, 'h-8 text-sm')}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Buscar notas…"
+                    aria-label="Buscar anotaciones"
+                    title="Buscar (Ctrl+F)"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-1">
                   <button
                     type="button"
-                    className={cn(toolBtn, pickingCards && 'text-coral-deep')}
-                    title="Elegir notas para tarjetas"
-                    aria-label="Elegir notas para tarjetas"
+                    className={cn(outlineChip, (outlineTool === 'group' || groupMode !== 'target') && outlineChipOn)}
+                    aria-haspopup="menu"
+                    aria-expanded={outlineTool === 'group'}
+                    title="Cómo agrupar la lista"
+                    onClick={() =>
+                      setOutlineTool((current) => (current === 'group' ? null : 'group'))
+                    }
+                  >
+                    <Group aria-hidden="true" />
+                    {GROUP_MODES.find((mode) => mode.id === groupMode)?.label || 'Agrupar'}
+                    <ChevronDown className="!size-3 opacity-60" aria-hidden="true" />
+                  </button>
+                  {courseFilter ? (
+                    <button
+                      type="button"
+                      className={cn(
+                        outlineChip,
+                        'max-w-[10rem]',
+                        (outlineTool === 'course' || courseFilter.value) && outlineChipOn
+                      )}
+                      aria-haspopup="menu"
+                      aria-expanded={outlineTool === 'course'}
+                      aria-label="Filtrar por curso"
+                      title={
+                        courseFilter.options.find((option) => option.value === courseFilter.value)
+                          ?.label || 'Filtrar por curso'
+                      }
+                      onClick={() =>
+                        setOutlineTool((current) => (current === 'course' ? null : 'course'))
+                      }
+                    >
+                      <Library aria-hidden="true" />
+                      <span className="truncate">
+                        {courseFilter.options.find((option) => option.value === courseFilter.value)
+                          ?.label || 'Cursos'}
+                      </span>
+                      <ChevronDown className="!size-3 shrink-0 opacity-60" aria-hidden="true" />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={cn(outlineChip, pickingCards && outlineChipOn)}
+                    title="Elegir notas para crear tarjetas"
                     aria-pressed={pickingCards}
                     onClick={() => {
                       setPickingCards((current) => {
@@ -1750,49 +1892,41 @@ function AnnotationsWorkspace({
                       setOutlineTool(null)
                     }}
                   >
-                    <Layers size={16} />
+                    <Layers aria-hidden="true" />
+                    {pickingCards ? 'Eligiendo…' : 'Tarjetas'}
                   </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      toolBtn,
-                      (outlineTool === 'search' || query.trim()) && 'text-coral-deep'
-                    )}
-                    title="Buscar"
-                    aria-label="Buscar"
-                    aria-pressed={outlineTool === 'search'}
-                    onClick={() =>
-                      setOutlineTool((current) => (current === 'search' ? null : 'search'))
-                    }
-                  >
-                    <Search size={16} />
-                  </button>
-                  {courseFilter ? (
-                    <div className="static">
-                      <button
-                        type="button"
+                </div>
+                {outlineTool === 'group' ? (
+                      <div
                         className={cn(
-                          toolBtn,
-                          (outlineTool === 'course' || courseFilter.value) && 'text-coral-deep'
+                          popoverScroll,
+                          'top-[calc(100%+4px)] right-2.5 left-2.5 z-[8] w-auto min-w-0 [&_button]:max-w-full [&_button]:min-w-0 [&_span]:block [&_span]:max-w-full [&_span]:truncate'
                         )}
-                        title={
-                          courseFilter.options.find((option) => option.value === courseFilter.value)
-                            ?.label || 'Curso'
-                        }
-                        aria-label="Filtrar por curso"
-                        aria-haspopup="menu"
-                        aria-expanded={outlineTool === 'course'}
-                        onClick={() =>
-                          setOutlineTool((current) => (current === 'course' ? null : 'course'))
-                        }
+                        role="menu"
+                        aria-label="Agrupar"
                       >
-                        <Library size={16} />
-                      </button>
-                      {outlineTool === 'course' ? (
+                        {GROUP_MODES.map((mode) => (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            className={menuItem}
+                            role="menuitemradio"
+                            aria-checked={groupMode === mode.id}
+                            onClick={() => {
+                              setGroupMode(mode.id)
+                              setOutlineTool(null)
+                            }}
+                          >
+                            <span>{mode.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                      {outlineTool === 'course' && courseFilter ? (
                         <div
                           className={cn(
                             popoverScroll,
-                            'top-[calc(0.45rem+2rem+6px)] right-[0.6rem] left-[0.6rem] z-[8] w-auto min-w-0 [&_button]:max-w-full [&_button]:min-w-0 [&_span]:block [&_span]:max-w-full [&_span]:truncate'
+                            'top-[calc(100%+4px)] right-2.5 left-2.5 z-[8] w-auto min-w-0 [&_button]:max-w-full [&_button]:min-w-0 [&_span]:block [&_span]:max-w-full [&_span]:truncate'
                           )}
                           role="menu"
                           aria-label="Curso"
@@ -1827,74 +1961,6 @@ function AnnotationsWorkspace({
                           ))}
                         </div>
                       ) : null}
-                    </div>
-                  ) : null}
-                  <div className="static">
-                    <button
-                      type="button"
-                      className={cn(
-                        toolBtn,
-                        (outlineTool === 'group' || groupMode !== 'target') && 'text-coral-deep'
-                      )}
-                      title={GROUP_MODES.find((mode) => mode.id === groupMode)?.label || 'Agrupar'}
-                      aria-label="Agrupar"
-                      aria-haspopup="menu"
-                      aria-expanded={outlineTool === 'group'}
-                      onClick={() =>
-                        setOutlineTool((current) => (current === 'group' ? null : 'group'))
-                      }
-                    >
-                      <Group size={16} />
-                    </button>
-                    {outlineTool === 'group' ? (
-                      <div
-                        className={cn(
-                          popoverScroll,
-                          'top-[calc(0.45rem+2rem+6px)] right-[0.6rem] left-[0.6rem] z-[8] w-auto min-w-0 [&_button]:max-w-full [&_button]:min-w-0 [&_span]:block [&_span]:max-w-full [&_span]:truncate'
-                        )}
-                        role="menu"
-                        aria-label="Agrupar"
-                      >
-                        {GROUP_MODES.map((mode) => (
-                          <button
-                            key={mode.id}
-                            type="button"
-                            className={menuItem}
-                            role="menuitemradio"
-                            aria-checked={groupMode === mode.id}
-                            onClick={() => {
-                              setGroupMode(mode.id)
-                              setOutlineTool(null)
-                            }}
-                          >
-                            <span>{mode.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                {outlineTool === 'search' ? (
-                  <div className={searchInList}>
-                    <svg
-                      className="pointer-events-none"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      aria-hidden="true"
-                    >
-                      <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-                    </svg>
-                    <input
-                      ref={searchInputRef}
-                      type="search"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Buscar…"
-                      aria-label="Buscar anotaciones"
-                      title="Buscar (Ctrl+F)"
-                    />
-                  </div>
-                ) : null}
               </div>
               <div
                 className="flex min-h-0 flex-1 flex-col gap-[0.55rem] overflow-auto px-[0.45rem] pt-[0.55rem] pb-[0.85rem]"
@@ -1911,6 +1977,7 @@ function AnnotationsWorkspace({
                     <AnnotationBranch
                       key={node.id}
                       node={node}
+                      kicker={groupMode === 'week'}
                       collapsedIds={collapsedIds}
                       onToggle={toggleTreeNode}
                       isRowActive={isRowActive}
@@ -2104,13 +2171,27 @@ function AnnotationsWorkspace({
                   ) : null}
                   <button
                     type="button"
-                    className={headerIcon}
-                    title="Enfocar en la gráfica"
-                    aria-label="Enfocar en la gráfica"
-                    onClick={() => focusFindingInGraph(selected)}
+                    className={cn(btnQuiet, btnCompact, 'h-8 px-2.5')}
+                    title="Mostrar esta nota y sus conexiones en la gráfica"
+                    onClick={() => {
+                      setGraphShown(true)
+                      focusFindingInGraph(selected)
+                    }}
                   >
-                    <Locate size={20} />
+                    <Locate size={15} aria-hidden="true" />
+                    Ver en gráfica
                   </button>
+                  {graphHidden ? (
+                    <button
+                      type="button"
+                      className={headerIcon}
+                      title="Mostrar gráfica"
+                      aria-label="Mostrar gráfica"
+                      onClick={() => setGraphShown(true)}
+                    >
+                      <PanelRightOpen aria-hidden="true" />
+                    </button>
+                  ) : null}
                   <MoreMenu label="Más acciones de la anotación">
                     {(close) => (
                       <>
@@ -2179,10 +2260,64 @@ function AnnotationsWorkspace({
                   key={`title-${selected.id}`}
                   value={draftTitle}
                   onChange={handleTitleChange}
-                  placeholder={noteTitle(selected) || 'Título'}
+                  placeholder={
+                    isPlaceholderTitle(noteTitle(selected)) ? 'Añade un título' : noteTitle(selected)
+                  }
                 />
 
-                <div className="-mx-1.5 mb-5 flex flex-col gap-0.5 border-b border-ink/8 pb-4">
+                {propsOpen ? null : (
+                  <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-ink-soft [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-ink-faint">
+                    {courseColumn ? (
+                      <span className="inline-flex min-w-0 max-w-[18rem] items-center gap-1.5">
+                        <Library aria-hidden="true" />
+                        <span className="truncate">
+                          {selected.coursePath
+                            ? resolveCourseTitle(selected.coursePath, titles)
+                            : 'Sin curso'}
+                        </span>
+                      </span>
+                    ) : null}
+                    {selected.lessonRelativePath || selected.projectId ? (
+                      <span className="inline-flex min-w-0 max-w-[18rem] items-center gap-1.5">
+                        <Film aria-hidden="true" />
+                        <span className="truncate">{targetPropValue(selected)}</span>
+                      </span>
+                    ) : null}
+                    {typeof selected.timeSec === 'number' ? (
+                      onJump && selected.coursePath ? (
+                        <button
+                          type="button"
+                          className="inline-flex cursor-pointer items-center gap-1 rounded-full border-0 bg-coral-soft px-2 py-0.5 text-xs font-medium text-coral-deep tabular-nums hover:bg-coral/15 [&_svg]:!text-coral-deep"
+                          title="Ir a este momento del video"
+                          onClick={() => onJump(selected)}
+                        >
+                          <Play className="!size-3 fill-current" aria-hidden="true" />
+                          {formatTime(selected.timeSec)}
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 tabular-nums">
+                          <Clock aria-hidden="true" />
+                          {formatTime(selected.timeSec)}
+                        </span>
+                      )
+                    ) : null}
+                    <span className="inline-flex items-center gap-1.5">
+                      <History aria-hidden="true" />
+                      {formatShortDate(selected.updatedAt || selected.createdAt)}
+                    </span>
+                    <button
+                      type="button"
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-xs border-0 bg-transparent px-1.5 py-0.5 text-xs font-medium text-ink-soft hover:bg-ink/5 hover:text-ink"
+                      aria-expanded={false}
+                      onClick={() => togglePropsOpen(true)}
+                    >
+                      Detalles
+                      <ChevronDown aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
+                {propsOpen ? (
+                <div className="-mx-1.5 mb-1 flex flex-col gap-0.5">
                   <div className={propRow}>
                     <span className={propKey}>
                       <CalendarDays aria-hidden="true" />
@@ -2259,9 +2394,19 @@ function AnnotationsWorkspace({
                       </span>
                     </div>
                   ) : null}
+                  <button
+                    type="button"
+                    className="mt-1 ml-1.5 inline-flex w-max cursor-pointer items-center gap-1 rounded-xs border-0 bg-transparent px-1.5 py-0.5 text-xs font-medium text-ink-soft hover:bg-ink/5 hover:text-ink [&_svg]:size-3.5"
+                    aria-expanded
+                    onClick={() => togglePropsOpen(false)}
+                  >
+                    Menos detalles
+                    <ChevronDown className="rotate-180" aria-hidden="true" />
+                  </button>
                 </div>
+                ) : null}
 
-                <div className="-mx-1.5 -mt-4 mb-5 border-b border-ink/8 pb-4" data-annotation-topics="">
+                <div className="-mx-1.5 mb-5 border-b border-ink/8 pb-3" data-annotation-topics="">
                   <div className={cn(propRow, 'items-start')}>
                   <span className={cn(propKey, 'pt-0.5')}>
                     <Hash aria-hidden="true" />
@@ -2369,8 +2514,9 @@ function AnnotationsWorkspace({
         </main>
 
         <aside
-          className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border-l border-ink/10 bg-white"
+          className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border-l border-ink/8 bg-surface"
           aria-label="Gráfica de la biblioteca"
+          hidden={graphHidden}
         >
           <div
             className={cn(
@@ -2389,13 +2535,13 @@ function AnnotationsWorkspace({
             onKeyDown={onGraphResizeKey}
             onDoubleClick={resetGraphWidth}
           />
-          <div className="flex items-center justify-between gap-2 px-3 py-[0.55rem] font-display text-base font-semibold text-ink">
+          <div className="flex h-12 items-center justify-between gap-2 border-b border-ink/6 px-3 text-sm font-semibold text-ink">
             <span>Gráfica</span>
             <div className="static ml-auto flex items-center gap-[0.15rem]" ref={graphSettingsRef}>
               <button
                 type="button"
                 className={cn(
-                  'inline-flex size-[1.85rem] cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-ink-soft hover:text-ink focus-visible:text-ink focus-visible:outline-none',
+                  iconOnly,
                   tagsManageOpen && 'text-ink'
                 )}
                 aria-label="Tags"
@@ -2412,7 +2558,7 @@ function AnnotationsWorkspace({
               <button
                 type="button"
                 className={cn(
-                  'inline-flex size-[1.85rem] cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-ink-soft hover:text-ink focus-visible:text-ink focus-visible:outline-none',
+                  iconOnly,
                   graphSettingsOpen && 'text-ink'
                 )}
                 aria-label="Ajustes de la gráfica"
@@ -2421,6 +2567,19 @@ function AnnotationsWorkspace({
                 onClick={() => setGraphSettingsOpen((open) => !open)}
               >
                 <Settings size={16} />
+              </button>
+              <button
+                type="button"
+                className={iconOnly}
+                aria-label="Ocultar gráfica"
+                title="Ocultar gráfica"
+                onClick={() => {
+                  setGraphSettingsOpen(false)
+                  setTagsManageOpen(false)
+                  setGraphShown(false)
+                }}
+              >
+                <PanelRightClose aria-hidden="true" />
               </button>
               {graphSettingsOpen ? (
                 <div className={graphPanel} role="dialog" aria-label="Ajustes de la gráfica">
@@ -2540,18 +2699,12 @@ function AnnotationsWorkspace({
               ) : null}
             </div>
           </div>
-          <div className="relative px-3 pb-[0.35rem]" data-graph-finder="">
-            <div className={searchInList}>
-              <svg
-                className="pointer-events-none"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-              </svg>
+          <div className="relative px-3 pt-2.5 pb-1" data-graph-finder="">
+            <div className="relative">
+              <Search className={searchIcon} aria-hidden="true" />
               <input
                 type="search"
+                className={cn(searchInput, 'h-8 text-sm')}
                 value={graphQuery}
                 placeholder="Buscar y enfocar…"
                 aria-label="Buscar un nodo de la gráfica"

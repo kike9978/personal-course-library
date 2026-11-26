@@ -1,5 +1,7 @@
 import {
   Bold as BoldIcon,
+  ChevronDown as ChevronDownIcon,
+  Plus as PlusIcon,
   Check as CheckIcon,
   Code as CodeIcon,
   Heading2 as Heading2Icon,
@@ -535,7 +537,25 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState('https://')
   const [toolsOpen, setToolsOpen] = useState(!compact)
+  const [insertOpen, setInsertOpen] = useState(false)
+  const insertRef = useRef(null)
   const linkInputRef = useRef(null)
+
+  useEffect(() => {
+    if (!insertOpen) return undefined
+    const onPointerDown = (event) => {
+      if (!insertRef.current?.contains(event.target)) setInsertOpen(false)
+    }
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setInsertOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [insertOpen])
 
   useEffect(() => {
     const sync = () => {
@@ -695,7 +715,7 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-0.5 border-b border-ink/8 bg-surface px-1.5 py-1',
+        'relative z-20 flex flex-wrap items-center gap-0.5 border-b border-ink/8 bg-surface px-1.5 py-1',
         variant === 'document' && 'mb-2 bg-transparent',
         compact && !toolsOpen && 'justify-end px-[0.3rem] py-[0.2rem]'
       )}
@@ -854,16 +874,6 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
       <span className="mx-1 h-4 w-px bg-ink/10" aria-hidden="true" />
       <button
         type="button"
-        className={toolBtn(false)}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={insertHr}
-        title="Separador"
-        aria-label="Separador"
-      >
-        <MinusIcon aria-hidden="true" />
-      </button>
-      <button
-        type="button"
         className={toolBtn(formats.link || linkOpen)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => (linkOpen ? setLinkOpen(false) : openLinkEditor())}
@@ -873,36 +883,55 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
       >
         <LinkIcon aria-hidden="true" />
       </button>
-      <button
-        type="button"
-        className={toolBtn(false)}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={insertImage}
-        title="Adjuntar imagen"
-        aria-label="Adjuntar imagen"
-      >
-        <ImagePlusIcon aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        className={toolBtn(false)}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={insertExcalidraw}
-        title="Dibujo Excalidraw"
-        aria-label="Dibujo Excalidraw"
-      >
-        <PenToolIcon aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        className={toolBtn(false)}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={insertTable}
-        title="Insertar tabla"
-        aria-label="Insertar tabla"
-      >
-        <Table2Icon aria-hidden="true" />
-      </button>
+      <div className="relative" ref={insertRef}>
+        <button
+          type="button"
+          className={cn(toolBtn(insertOpen), 'w-auto gap-1 px-1.5 text-xs font-medium')}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setInsertOpen((open) => !open)}
+          aria-haspopup="menu"
+          aria-expanded={insertOpen}
+          title="Insertar"
+        >
+          <PlusIcon aria-hidden="true" />
+          Insertar
+          <ChevronDownIcon className="!size-3 text-ink-faint" aria-hidden="true" />
+        </button>
+        {insertOpen ? (
+          <div
+            className="absolute top-[calc(100%+4px)] right-0 z-30 min-w-[12rem] rounded-md border border-ink/8 bg-surface p-1 shadow-panel animate-fade-in"
+            role="menu"
+            aria-label="Insertar"
+          >
+            {[
+              { label: 'Imagen', hint: 'Desde un archivo', Icon: ImagePlusIcon, run: insertImage },
+              { label: 'Dibujo', hint: 'Lienzo de Excalidraw', Icon: PenToolIcon, run: insertExcalidraw },
+              { label: 'Tabla', hint: '3 × 3 para empezar', Icon: Table2Icon, run: insertTable },
+              { label: 'Separador', hint: 'Línea horizontal', Icon: MinusIcon, run: insertHr }
+            ].map(({ label, hint, Icon, run }) => (
+              <button
+                key={label}
+                type="button"
+                role="menuitem"
+                className="flex w-full cursor-pointer items-center gap-2.5 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-sm text-ink hover:bg-ink/5"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setInsertOpen(false)
+                  run()
+                }}
+              >
+                <span className="grid size-7 shrink-0 place-items-center rounded-xs border border-ink/8 bg-cream text-ink-soft [&_svg]:size-4">
+                  <Icon aria-hidden="true" />
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="font-medium">{label}</span>
+                  <span className="text-xs text-ink-soft">{hint}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
         </>
       )}
       {linkOpen && (!compact || toolsOpen) ? (
