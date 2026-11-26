@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDownUp, Ellipsis, FolderOpen, LayoutGrid, List, RefreshCw, Search } from 'lucide-react'
+import {
+  ArrowDownUp,
+  Ellipsis,
+  FolderOpen,
+  LayoutGrid,
+  List,
+  RefreshCw,
+  Search
+} from 'lucide-react'
 import AppHeader from './AppHeader'
 import CourseFilterBar from './CourseFilterBar'
 import { NotionSyncButton } from './NotionSyncControl'
@@ -68,7 +76,9 @@ function LibraryHeader({
   missingCoverCount = 0,
   missingDescriptionCount = 0,
   onSearchCovers,
-  onWriteDescriptions
+  onWriteDescriptions,
+  missingProgramsCount = 0,
+  onGuessPrograms
 }) {
   const [moreOpen, setMoreOpen] = useState(false)
   const moreRef = useRef(null)
@@ -166,7 +176,7 @@ function LibraryHeader({
                   <span>{isExporting ? 'Exportando…' : 'Exportar metadatos de cursos'}</span>
                   <small>JSON con metadatos</small>
                 </button>
-                {missingCoverCount > 0 || missingDescriptionCount > 0 ? (
+                {missingCoverCount > 0 || missingDescriptionCount > 0 || onGuessPrograms ? (
                   <hr className={menuDivider} />
                 ) : null}
                 {missingCoverCount > 0 ? (
@@ -199,6 +209,25 @@ function LibraryHeader({
                     <small>
                       {missingDescriptionCount} curso{missingDescriptionCount === 1 ? '' : 's'} sin
                       descripción
+                    </small>
+                  </button>
+                ) : null}
+                {onGuessPrograms ? (
+                  <button
+                    type="button"
+                    className={menuItem}
+                    role="menuitem"
+                    disabled={isLoading || !canExport}
+                    onClick={() => {
+                      setMoreOpen(false)
+                      onGuessPrograms()
+                    }}
+                  >
+                    <span>Deducir programas</span>
+                    <small>
+                      {missingProgramsCount > 0
+                        ? `${missingProgramsCount} curso${missingProgramsCount === 1 ? '' : 's'} sin programas`
+                        : 'A partir de lecciones y archivos'}
                     </small>
                   </button>
                 ) : null}

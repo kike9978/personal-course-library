@@ -6,6 +6,7 @@ import ImportMissingPropsModal from './components/ImportMissingPropsModal'
 import CoverSearchModal from './components/CoverSearchModal'
 import CourseDetailPanel from './components/CourseDetailPanel'
 import CourseDescriptionBatch from './components/CourseDescriptionBatch'
+import CourseProgramsBatch from './components/CourseProgramsBatch'
 import CourseRoom from './components/CourseRoom'
 import LibraryStudyView from './components/LibraryStudyView'
 import AnnotationsPopoutView from './components/AnnotationsPopoutView'
@@ -95,7 +96,10 @@ function BannerDismiss({ onClick }) {
   return (
     <button
       type="button"
-      className={cn(iconOnly, 'size-7 text-warn-text/70 enabled:hover:bg-warn-text/10 enabled:hover:text-warn-text')}
+      className={cn(
+        iconOnly,
+        'size-7 text-warn-text/70 enabled:hover:bg-warn-text/10 enabled:hover:text-warn-text'
+      )}
       onClick={onClick}
       aria-label="Ocultar aviso"
       title="Ocultar aviso"
@@ -230,6 +234,7 @@ function FilterableCoursesGrid({
   const [importMissingOpen, setImportMissingOpen] = useState(false)
   const [coverSearch, setCoverSearch] = useState(null)
   const [descriptionBatchOpen, setDescriptionBatchOpen] = useState(false)
+  const [programsBatchOpen, setProgramsBatchOpen] = useState(false)
   const [dismissedCoverSignature, setDismissedCoverSignature] = useState(() =>
     readStoredSignature(COVER_BANNER_DISMISS_KEY)
   )
@@ -244,6 +249,10 @@ function FilterableCoursesGrid({
   const missingCoverCourses = useMemo(() => courses.filter((c) => !c.hasCover), [courses])
   const missingDescriptionCourses = useMemo(
     () => courses.filter((c) => !c.description?.summary),
+    [courses]
+  )
+  const missingProgramsCount = useMemo(
+    () => courses.filter((c) => !c.missingProps && !(c.programs || []).length).length,
     [courses]
   )
   const missingCoverSignature = useMemo(
@@ -611,6 +620,8 @@ function FilterableCoursesGrid({
         missingDescriptionCount={missingDescriptionCourses.length}
         onSearchCovers={handleOpenCoverSearch}
         onWriteDescriptions={handleOpenDescriptionBatch}
+        missingProgramsCount={missingProgramsCount}
+        onGuessPrograms={() => setProgramsBatchOpen(true)}
       />
 
       <div
@@ -677,7 +688,11 @@ function FilterableCoursesGrid({
                         >
                           Verlos
                         </button>
-                        <button type="button" className={noticeBtn} onClick={handleOpenImportMissing}>
+                        <button
+                          type="button"
+                          className={noticeBtn}
+                          onClick={handleOpenImportMissing}
+                        >
                           Elegir e importar
                         </button>
                       </div>
@@ -879,6 +894,13 @@ function FilterableCoursesGrid({
                   onClose={() => setDescriptionBatchOpen(false)}
                 />
               ) : null}
+
+              {programsBatchOpen ? (
+                <CourseProgramsBatch
+                  courses={courses.filter((c) => !c.missingProps)}
+                  onClose={() => setProgramsBatchOpen(false)}
+                />
+              ) : null}
             </>
           )}
         </div>
@@ -893,9 +915,7 @@ function FilterableCoursesGrid({
             onGenerateProps={
               selectedCourse.missingProps ? () => handleGenerateOne(selectedCourse) : null
             }
-            onSearchCover={() =>
-              setCoverSearch({ courses: [selectedCourse] })
-            }
+            onSearchCover={() => setCoverSearch({ courses: [selectedCourse] })}
           />
         )}
       </div>
