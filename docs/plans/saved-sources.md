@@ -299,7 +299,10 @@ If a later need appears that only such a service can meet, add it as an explicit
 **Not synced**
 
 - Playback position (`lastPositionSec`) and `lastOpenedAt` are per computer, like how far you scrolled.
-- The thumbnail file. Each install fetches its own from the link. A link that arrives from Notion or another computer gets its thumbnail fetched on adoption.
+- **Thumbnails.** Neither the image nor its address is synced, and Notion rows hold none.
+  - Each computer fetches its own, like a first save. This happens when a link arrives from Notion or its URL changes there, and once per launch for any link without a thumbnail file here (`sourceThumbs.js`).
+  - Instagram uses `instagram.com/p/<code>/media/?size=l`. It redirects to the current image without a login, so the address never expires the way the page's image links do.
+  - *Fixed 2026-11-26:* links synced to a Mac had no thumbnail, because adopting one only re-downloaded a stored image address, and that address is not part of the sync.
 - Captures. *As built:* not uploaded yet. Uploading them as image blocks, and downloading them on another install, comes with Phase 3 copies.
 - The Instagram session (Phase 2b) never leaves the computer. Neither does anything else in its partition.
 - Collections are covered in Phase 4.

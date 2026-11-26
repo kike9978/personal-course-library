@@ -113,6 +113,7 @@ import {
   saveSourceCaptions,
   saveSourceCopy
 } from './services/sourceCopy.js'
+import { backfillSourceThumbnails } from './services/sourceThumbs.js'
 import {
   installSourceViewerGuards,
   instagramSessionStatus,
@@ -1400,6 +1401,11 @@ app.whenReady().then(() => {
   registerCourseMediaProtocol()
   installSourceViewerGuards()
   registerIpcHandlers()
+  // Thumbnails are per computer. Links that came from another one (through Notion) or lost
+  // their file get one fetched here, like a first save.
+  setTimeout(() => {
+    backfillSourceThumbnails(() => broadcastToWindows('sources-changed', {})).catch(() => {})
+  }, 4000)
   startNotionSync({
     notifyNotes: () => broadcastToWindows('notes-changed', {}),
     notifyPlaylists: () => broadcastToWindows('playlists-changed', {}),

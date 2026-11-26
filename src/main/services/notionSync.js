@@ -86,7 +86,8 @@ import {
   wireHash
 } from '../../shared/notionSync.js'
 import { canonicalSourceUrl } from '../../shared/sources.js'
-import { cacheSourceThumbnail, resolveSourceMeta } from './sourceMeta.js'
+import { resolveSourceMeta } from './sourceMeta.js'
+import { ensureSourceThumbnail } from './sourceThumbs.js'
 import {
   noteAttachmentExists,
   readNoteAttachment,
@@ -2303,10 +2304,14 @@ function sourceRow(source, pageId) {
 function applyRemoteSource(id, remote, shape) {
   const canonical = canonicalSourceUrl(shape.url)
   const hash = sourceWireHash(wireHash, shape)
+  const before = readSource(id)
+  // Another link now: the old picture is wrong, fetch the new one.
+  const moved = Boolean(before) && before.url !== (canonical?.url || shape.url)
   try {
     withoutNoteWriteHook(() => {
       restoreSource({
-        ...(readSource(id) || {}),
+        ...(before || {}),
+        ...(moved ? { thumbnail: null, thumbnailFile: null } : {}),
         id,
         title: shape.title,
         url: canonical?.url || shape.url,
@@ -2325,6 +2330,7 @@ function applyRemoteSource(id, remote, shape) {
   }
   notifyNotes()
   hooks.notifySources()
+  if (moved || !before) void fetchSourceThumbnail(id)
   return true
 }
 
@@ -2350,7 +2356,7 @@ async function reconcileSource(client, id) {
     const remote = await loadKindPage(client, 'source', id, null)
     const shape = remote ? sourceFromRow(remote) : null
     if (!remote || !shape?.url) return
-    if (applyRemoteSource(id, remote, shape)) await fetchSourceThumbnail(id)
+    applyRemoteSource(id, remote, shape)
     return
   }
   if (source.notion?.conflict) return
@@ -2399,13 +2405,9 @@ async function reconcileSource(client, id) {
   await pushSource(client, source, remote)
 }
 
+/** Thumbnails never travel through Notion: this computer fetches its own, like a first save. */
 async function fetchSourceThumbnail(id) {
-  const source = readSource(id)
-  if (!source?.thumbnail || source.thumbnailFile) return
-  const file = await cacheSourceThumbnail(id, source.thumbnail)
-  if (!file) return
-  withoutNoteWriteHook(() => restoreSource({ ...readSource(id), thumbnailFile: file }))
-  hooks.notifySources()
+  if (await ensureSourceThumbnail(id)) hooks.notifySources()
 }
 
 /**

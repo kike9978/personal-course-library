@@ -445,3 +445,14 @@ describe('Phase 3 helpers', async () => {
     assert.equal(linkCheckState(null), 'unknown')
   })
 })
+
+describe('instagramThumbnailUrl', async () => {
+  const { instagramThumbnailUrl } = await import('./sources.js')
+  it('uses the stable media address for posts and reels', () => {
+    assert.equal(
+      instagramThumbnailUrl('https://www.instagram.com/reel/DfTDB71oXxu/'),
+      'https://www.instagram.com/p/DfTDB71oXxu/media/?size=l'
+    )
+    assert.equal(instagramThumbnailUrl('https://www.instagram.com/stories/a/1/'), null)
+  })
+})

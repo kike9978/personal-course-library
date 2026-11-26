@@ -379,3 +379,12 @@ export function linkCheckState(code) {
   if (typeof code === 'number' && code >= 200 && code < 400) return 'ok'
   return 'unknown'
 }
+
+/**
+ * A stable image address for an Instagram post or reel. Instagram answers it, without a login,
+ * with a redirect to the current image, so unlike the page's own image links it does not expire.
+ */
+export function instagramThumbnailUrl(input) {
+  const code = instagramShortcode(input)
+  return code ? `https://www.instagram.com/p/${code}/media/?size=l` : null
+}

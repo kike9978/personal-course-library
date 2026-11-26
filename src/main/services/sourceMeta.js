@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { app, net } from 'electron'
 import {
+  instagramThumbnailUrl,
   linkCheckState,
   canonicalSourceUrl,
   splitInstagramTitle,
@@ -117,7 +118,8 @@ export async function resolveSourceMeta(rawUrl) {
     title: null,
     author: null,
     siteName: null,
-    thumbnail: null,
+    // Instagram's page rarely gives an image without a login; this address always does.
+    thumbnail: canonical.kind === 'instagram' ? instagramThumbnailUrl(canonical.url) : null,
     publishedAt: null
   }
   try {
@@ -126,6 +128,8 @@ export async function resolveSourceMeta(rawUrl) {
     else if (canonical.kind === 'instagram') meta = tidyInstagram(await pageMeta(canonical.url))
     else meta = await pageMeta(canonical.url)
     const result = { ...base, ...Object.fromEntries(Object.entries(meta).filter(([, v]) => v)) }
+    // Keep the stable Instagram address over the page's image link, which expires.
+    if (result.kind === 'instagram') result.thumbnail = base.thumbnail
     return {
       ok: Boolean(result.title),
       ...result,
