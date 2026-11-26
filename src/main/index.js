@@ -106,7 +106,12 @@ import {
   setSourcePosition,
   upsertSource
 } from './services/learningStore.js'
-import { installSourceViewerGuards } from './services/sourceViewer.js'
+import {
+  installSourceViewerGuards,
+  instagramSessionStatus,
+  signInToInstagram,
+  signOutOfInstagram
+} from './services/sourceViewer.js'
 import {
   enqueueNotionDelete,
   enqueueNotionPlaylistDelete,
@@ -923,6 +928,17 @@ function registerIpcHandlers() {
     broadcastToWindows('sources-changed', { id })
     if (result.noteCount) broadcastToWindows('notes-changed', {})
     return { noteCount: result.noteCount, removed: Boolean(result.removed) }
+  })
+  ipcMain.handle('instagram-session-status', () => instagramSessionStatus())
+  ipcMain.handle('instagram-sign-in', async () => {
+    const status = await signInToInstagram(mainWindow)
+    broadcastToWindows('instagram-session-changed', status)
+    return status
+  })
+  ipcMain.handle('instagram-sign-out', async () => {
+    const status = await signOutOfInstagram()
+    broadcastToWindows('instagram-session-changed', status)
+    return status
   })
   ipcMain.handle('set-source-position', (_event, { id, positionSec, durationSec } = {}) =>
     setSourcePosition(id, { positionSec, durationSec })

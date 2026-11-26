@@ -12,6 +12,7 @@ import {
   Inbox,
   Link2,
   Loader2,
+  LogOut,
   Pencil,
   RefreshCw,
   Search,
@@ -621,6 +622,27 @@ function SourcesView({ onNavigate, openTarget }) {
   // The viewer replaces the grid while a link is open in it.
   const [viewing, setViewing] = useState(null) // { id, startSec, nonce }
   const [playerTime, setPlayerTime] = useState(0)
+  // Opt-in Instagram session for the viewer (Phase 2b): { enabled, signedIn }.
+  const [instagram, setInstagram] = useState({ enabled: false, signedIn: false })
+  useEffect(() => {
+    window.api.instagramSessionStatus?.().then((status) => status && setInstagram(status))
+    return window.api.onInstagramSessionChanged?.((status) => status && setInstagram(status))
+  }, [])
+  const signOutOfInstagram = async () => {
+    const ok = await askConfirm({
+      title: 'Cerrar sesión de Instagram',
+      message:
+        'Se borran las cookies de Instagram de esta app. Los reels con música, historias y cuentas privadas vuelven a mostrarse solo con la portada.',
+      confirmLabel: 'Cerrar sesión'
+    })
+    if (!ok) return
+    try {
+      setInstagram(await window.api.instagramSignOut())
+      toast.success('Sesión de Instagram cerrada')
+    } catch (error) {
+      toast.error(error?.message || 'No se pudo cerrar la sesión')
+    }
+  }
   const viewerRef = useRef(null)
   const linkInputRef = useRef(null)
 
@@ -866,6 +888,17 @@ function SourcesView({ onNavigate, openTarget }) {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
+        {instagram.signedIn ? (
+          <button
+            type="button"
+            className={cn(btnQuiet, btnCompact, 'shrink-0')}
+            title="La app guarda una sesión de Instagram para ver reels con música, historias y cuentas privadas"
+            onClick={signOutOfInstagram}
+          >
+            <LogOut aria-hidden="true" className="size-3.5" />
+            Instagram: cerrar sesión
+          </button>
+        ) : null}
       </AppHeader>
       <div className="flex min-h-0 flex-1 max-[900px]:flex-col">
         {viewingSource ? (
@@ -883,9 +916,10 @@ function SourcesView({ onNavigate, openTarget }) {
             </div>
             <div className="min-h-0 flex-1">
               <SourceViewer
-                key={`${viewingSource.id}-${viewing.nonce}`}
+                key={`${viewingSource.id}-${viewing.nonce}-${instagram.signedIn ? 'ig' : 'public'}`}
                 ref={viewerRef}
                 source={viewingSource}
+                instagram={instagram}
                 startSec={viewing.startSec}
                 autoplay={viewing.autoplay}
                 onTime={setPlayerTime}

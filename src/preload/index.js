@@ -57,6 +57,14 @@ const api = {
   refreshSource: (id) => ipcRenderer.invoke('refresh-source', id),
   deleteSource: (id) => ipcRenderer.invoke('delete-source', id),
   openSourceUrl: (id) => ipcRenderer.invoke('open-source-url', id),
+  instagramSessionStatus: () => ipcRenderer.invoke('instagram-session-status'),
+  instagramSignIn: () => ipcRenderer.invoke('instagram-sign-in'),
+  instagramSignOut: () => ipcRenderer.invoke('instagram-sign-out'),
+  onInstagramSessionChanged: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('instagram-session-changed', listener)
+    return () => ipcRenderer.removeListener('instagram-session-changed', listener)
+  },
   setSourcePosition: (payload) => ipcRenderer.invoke('set-source-position', payload || {}),
   addSourceCapture: (id) => ipcRenderer.invoke('add-source-capture', id),
   removeSourceCapture: (id, file) => ipcRenderer.invoke('remove-source-capture', { id, file }),

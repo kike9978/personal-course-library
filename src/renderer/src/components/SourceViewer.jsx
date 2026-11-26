@@ -1,12 +1,42 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { ExternalLink, ImagePlus, Loader2, RotateCw, Trash2 } from 'lucide-react'
-import { sourceViewer } from '../../../shared/sources.js'
+import { ExternalLink, ImagePlus, Loader2, LogIn, RotateCw, Trash2 } from 'lucide-react'
+import { instagramSessionViewer, sourceViewer } from '../../../shared/sources.js'
+import { askConfirm } from '../utils/askConfirm'
 import { cn } from '../ui/cn'
 import { btnCompact, btnGhost, btnQuiet, iconOnly, notice } from '../ui/classes'
 
 const POLL_MS = 1000
 const SAVE_EVERY_MS = 5000
+
+/**
+ * Signed-in Instagram pages are trimmed to the post. If Instagram renames these parts the
+ * full page still works; nothing depends on the trim.
+ */
+const INSTAGRAM_TRIM_CSS = `
+  nav, footer, [role="navigation"], [role="contentinfo"] { display: none !important; }
+  body { overflow-x: hidden !important; }
+`
+
+/** Ask first, then open Instagram's own login window (Phase 2b). */
+export async function confirmInstagramSignIn() {
+  const ok = await askConfirm({
+    title: 'Iniciar sesión en Instagram',
+    message:
+      'Se abrirá la página de Instagram para que entres con tu cuenta. La app no ve tu contraseña. La sesión se guarda en la carpeta de datos de esta app y solo se usa para ver enlaces de Instagram en Fuentes. Puedes cerrarla cuando quieras desde Fuentes.',
+    confirmLabel: 'Continuar'
+  })
+  if (!ok) return null
+  try {
+    const status = await window.api.instagramSignIn()
+    if (status?.signedIn) toast.success('Sesión de Instagram iniciada')
+    else toast('No se completó el inicio de sesión')
+    return status
+  } catch (error) {
+    toast.error(error?.message || 'No se pudo abrir Instagram')
+    return null
+  }
+}
 
 const READ_VIDEO = `(() => {
   const v = document.querySelector('video')
@@ -71,8 +101,14 @@ function Captures({ source }) {
  *
  * Ref: `seek(sec)` and `getTime()` for YouTube.
  */
-const SourceViewer = forwardRef(function SourceViewer({ source, startSec, autoplay, onTime }, ref) {
-  const plan = sourceViewer(source)
+const SourceViewer = forwardRef(function SourceViewer(
+  { source, startSec, autoplay, onTime, instagram = null },
+  ref
+) {
+  // Signed in to Instagram in the app (opt-in): show the real page in that session instead.
+  const sessionPlan = instagram?.signedIn ? instagramSessionViewer(source) : null
+  const plan = sessionPlan || sourceViewer(source)
+  const [expired, setExpired] = useState(false)
   const webviewRef = useRef(null)
   const [state, setState] = useState('loading')
   const [loginWall, setLoginWall] = useState(false)
@@ -114,7 +150,10 @@ const SourceViewer = forwardRef(function SourceViewer({ source, startSec, autopl
     const view = webviewRef.current
     if (!view) return undefined
     setState('loading')
-    const ready = () => setState('ready')
+    const ready = () => {
+      setState('ready')
+      if (plan.mode === 'instagram-session') view.insertCSS?.(INSTAGRAM_TRIM_CSS).catch?.(() => {})
+    }
     const failed = (event) => {
       // -3 is an aborted load, usually because the page navigated on its own.
       if (event.errorCode === -3 || event.isMainFrame === false) return
@@ -128,7 +167,14 @@ const SourceViewer = forwardRef(function SourceViewer({ source, startSec, autopl
     }
   }, [src, reloadKey, plan.mode])
 
-  useEffect(() => window.api.onSourceViewerLogin?.(() => setLoginWall(true)), [])
+  useEffect(
+    () =>
+      window.api.onSourceViewerLogin?.((data) => {
+        setLoginWall(true)
+        if (data?.expired) setExpired(true)
+      }),
+    []
+  )
 
   // Instagram leaves the video out of the embed for reels with licensed music:
   // only the cover and "Watch on Instagram" come back. Say so instead of a dead play button.
@@ -189,6 +235,14 @@ const SourceViewer = forwardRef(function SourceViewer({ source, startSec, autopl
     }
   }
 
+  const signInButton =
+    source.kind === 'instagram' && !instagram?.signedIn ? (
+      <button type="button" className={cn(btnGhost, btnCompact)} onClick={confirmInstagramSignIn}>
+        <LogIn aria-hidden="true" className="size-3.5" />
+        Iniciar sesión en Instagram
+      </button>
+    ) : null
+
   const hasCaptures = Boolean(source.captures?.length)
   const blocked = plan.mode === 'none' || loginWall
   const canEmbed = !blocked
@@ -219,7 +273,13 @@ const SourceViewer = forwardRef(function SourceViewer({ source, startSec, autopl
           Adjuntar captura
         </button>
       ) : null}
-      <span className="ml-auto text-xs text-ink-faint">Sin iniciar sesión · nada se guarda</span>
+      <span className="ml-auto text-xs text-ink-faint">
+        {expired
+          ? 'Sesión de Instagram caducada'
+          : sessionPlan
+            ? 'Sesión de Instagram activa'
+            : 'Sin iniciar sesión · nada se guarda'}
+      </span>
     </div>
   )
 
@@ -232,12 +292,26 @@ const SourceViewer = forwardRef(function SourceViewer({ source, startSec, autopl
               <Captures source={source} />
             </div>
           ) : (
-            <div className={cn(notice, 'mx-auto mt-10 max-w-[32rem]')}>
+            <div className={cn(notice, 'mx-auto mt-10 max-w-[32rem] flex-col items-start gap-3')}>
               <p className="m-0 text-sm">
-                {source.kind === 'instagram'
-                  ? 'Esta publicación necesita iniciar sesión en Instagram. Guárdala desde el navegador con una captura para verla aquí.'
-                  : 'Esta página pide iniciar sesión. Ábrela en el navegador.'}
+                {expired
+                  ? 'Tu sesión de Instagram caducó. Vuelve a iniciar sesión para ver esta publicación aquí.'
+                  : source.kind === 'instagram'
+                    ? 'Esta publicación necesita iniciar sesión en Instagram. Inicia sesión en la app, o guárdala desde el navegador con una captura.'
+                    : 'Esta página pide iniciar sesión. Ábrela en el navegador.'}
               </p>
+              {expired ? (
+                <button
+                  type="button"
+                  className={cn(btnGhost, btnCompact)}
+                  onClick={confirmInstagramSignIn}
+                >
+                  <LogIn aria-hidden="true" className="size-3.5" />
+                  Iniciar sesión otra vez
+                </button>
+              ) : (
+                signInButton
+              )}
             </div>
           )}
         </div>
@@ -251,7 +325,9 @@ const SourceViewer = forwardRef(function SourceViewer({ source, startSec, autopl
       <div
         className={cn(
           'relative min-h-0 flex-1',
-          plan.mode === 'instagram' ? 'bg-cream-deep' : 'bg-ink/90'
+          plan.mode === 'instagram' || plan.mode === 'instagram-session'
+            ? 'bg-cream-deep'
+            : 'bg-ink/90'
         )}
       >
         {/* Instagram's embed is laid out for about 540px; wider, it only gets blurrier. */}
@@ -268,7 +344,7 @@ const SourceViewer = forwardRef(function SourceViewer({ source, startSec, autopl
             ref={webviewRef}
             src={src}
             // eslint-disable-next-line react/no-unknown-property -- Electron <webview> attribute
-            partition="sources"
+            partition={plan.partition || 'sources'}
             {...(plan.referrer ? { httpreferrer: plan.referrer } : {})}
             className="absolute inset-0 h-full w-full"
             style={{ display: 'flex' }}
@@ -291,8 +367,10 @@ const SourceViewer = forwardRef(function SourceViewer({ source, startSec, autopl
         <div className={cn(notice, 'rounded-none border-x-0 border-b-0')}>
           <p className="m-0 text-sm">
             Instagram no deja reproducir este reel fuera de su app (suele pasar con música con
-            licencia). Puedes leer la descripción aquí y verlo con <strong>Abrir enlace</strong>.
+            licencia). Puedes leer la descripción aquí y verlo con <strong>Abrir enlace</strong>, o
+            iniciar sesión en Instagram para verlo en la app.
           </p>
+          {signInButton}
         </div>
       ) : null}
       {hasCaptures && plan.mode === 'instagram' ? (

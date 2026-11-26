@@ -8,6 +8,9 @@ import {
   parseHtmlMeta,
   parseYouTubeTime,
   isLoginUrl,
+  instagramSessionMayLoad,
+  instagramSessionViewer,
+  INSTAGRAM_PARTITION,
   sourceKindForUrl,
   sourceViewer,
   splitInstagramTitle,
@@ -333,5 +336,31 @@ describe('Notion wire for links', async () => {
     assert.equal(shape.url, 'https://example.com/x')
     assert.equal(shape.status, 'inbox')
     assert.equal(sourceFromRow({ title: 'x', body: '' }), null)
+  })
+})
+
+describe('opt-in Instagram session', () => {
+  it('shows the real page for posts, reels and stories, only for Instagram links', () => {
+    const reel = instagramSessionViewer({
+      kind: 'instagram',
+      url: 'https://www.instagram.com/reel/DfTDB71oXxu/'
+    })
+    assert.equal(reel.mode, 'instagram-session')
+    assert.equal(reel.src, 'https://www.instagram.com/reel/DfTDB71oXxu/')
+    assert.equal(reel.partition, INSTAGRAM_PARTITION)
+    assert.equal(
+      instagramSessionViewer({ kind: 'instagram', url: 'https://www.instagram.com/stories/a/1/' })
+        .mode,
+      'instagram-session'
+    )
+    assert.equal(instagramSessionViewer({ kind: 'youtube', url: 'https://youtu.be/x' }), null)
+    assert.equal(instagramSessionViewer({ kind: 'instagram', url: 'https://evil.test/p/x/' }), null)
+  })
+
+  it('stays on instagram.com and never shows a login form', () => {
+    assert.equal(instagramSessionMayLoad('https://www.instagram.com/reel/x/'), true)
+    assert.equal(instagramSessionMayLoad('https://www.instagram.com/accounts/login/'), false)
+    assert.equal(instagramSessionMayLoad('https://facebook.com/'), false)
+    assert.equal(instagramSessionMayLoad('http://www.instagram.com/reel/x/'), false)
   })
 })

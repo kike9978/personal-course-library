@@ -2,7 +2,7 @@
 
 **App:** Catálogo de cursos (personal-course-library)  
 **Date:** 2026-11-26  
-**Status:** Phases 1, 2 and 2c built (2026-11-26). Phase 2c checked against a live Notion database. Phases 2b and 3–6 proposed.  
+**Status:** Phases 1, 2, 2b and 2c built (2026-11-26). Phase 2c checked against a live Notion database. Phase 2b checked up to Instagram's login page; a real sign-in is left to the user. Phases 3–6 proposed.  
 **Goal:** Let a YouTube video, an article, or an Instagram post become a place in the knowledge base, the same way a lesson is. Notes taken on a link are ordinary findings. They carry topics, show up in Anotaciones and the graph, sync to Notion, and feed flashcards.
 
 ---
@@ -251,6 +251,20 @@ If a later need appears that only such a service can meet, add it as an explicit
 - **Account checks.** Instagram may ask for a challenge (code by email or SMS) on a new device. The login window must show those pages too.
 - **Terms.** This is ordinary browsing with the user's own account, which the terms allow. Automated access is what they forbid, so this phase must stay manual: no background fetching with the session.
 - **Shared machines.** The cookies stay in the app's data folder until signed out. The settings sentence says so.
+
+**As built (2026-11-26)**
+
+- **Where the controls are.** The sign-in starts from the viewer: **Iniciar sesión en Instagram** sits under the "no deja reproducir este reel" notice and in the story/private-post message. While signed in, **Instagram: cerrar sesión** sits in the Fuentes toolbar. There is no separate settings screen, because the app has none for Fuentes yet.
+- **Cancelled sign-in.** Closing the login window without signing in clears the partition and turns the option back off. Instagram sets tracking cookies even before login, so nothing is kept.
+- **Login forms.** Instagram rendered its login form at `/`, not `/accounts/login`, for a dead session. After every navigation, the signed-in viewer now checks that the page is not the home or login page and that the `sessionid` cookie still exists. If either check fails, the page is stopped and replaced by **Tu sesión de Instagram caducó**.
+- **Checked in the app:**
+  - prompt and confirmation
+  - Instagram's login page in its own `persist:instagram` window
+  - cancel clears everything
+  - no Instagram cookies in the public `sources` session
+  - a fake session shows the expired message, not a login form
+  - sign-out clears cookies and the option
+- **Not checked:** playback after a real sign-in. It needs the user's account.
 
 **Done when**
 

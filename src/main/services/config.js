@@ -95,6 +95,19 @@ export function setNotionConfig(notion) {
   return getNotionConfig()
 }
 
+/** Opt-in Instagram sign-in for the Fuentes viewer (Phase 2b). Off unless the person turns it on. */
+export function getInstagramViewerConfig() {
+  const value = readConfig().instagramViewer
+  return { enabled: Boolean(value && typeof value === 'object' && value.enabled === true) }
+}
+
+export function setInstagramViewerConfig({ enabled }) {
+  const config = readConfig()
+  config.instagramViewer = { enabled: enabled === true }
+  writeConfig(config)
+  return getInstagramViewerConfig()
+}
+
 /**
  * Whether the folder exists. Checked at most every couple of seconds per path: this runs on
  * every catalog read and media request, and a drive coming or going shows up on the next check.

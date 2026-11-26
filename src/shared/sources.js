@@ -287,6 +287,35 @@ export function sourceViewer(source) {
   return { mode: 'none', reason: 'url' }
 }
 
+/** Partition of the opt-in Instagram session (Phase 2b). Kept apart from everything else. */
+export const INSTAGRAM_PARTITION = 'persist:instagram'
+
+/**
+ * The viewer for an Instagram link when the person signed in to Instagram in the app:
+ * the real post, reel, or story page in the Instagram session, or null for other links.
+ */
+export function instagramSessionViewer(source) {
+  if (source?.kind !== 'instagram') return null
+  let url
+  try {
+    url = new URL(String(source.url || ''))
+  } catch {
+    return null
+  }
+  if (!/(^|\.)instagram\.com$/.test(url.hostname)) return null
+  return { mode: 'instagram-session', src: url.href, partition: INSTAGRAM_PARTITION }
+}
+
+/** Inside the Instagram session the viewer may move around instagram.com, never to a login page. */
+export function instagramSessionMayLoad(target) {
+  try {
+    const url = new URL(String(target || ''))
+    return url.protocol === 'https:' && /(^|\.)instagram\.com$/.test(url.hostname) && !isLoginUrl(target)
+  } catch {
+    return false
+  }
+}
+
 /** True when an embedded page may load this url (the viewer's own hosts, or the link's own page). */
 export function viewerMayLoad(target, sourceUrl) {
   let url
