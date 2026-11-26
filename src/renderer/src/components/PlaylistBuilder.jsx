@@ -17,7 +17,6 @@ const dialogForm = cn(dialogBody, '[&_h3]:m-0 [&_h3]:font-display [&_h3]:text-xl
 const dialogLead = sharedDialogLead
 const actions = 'flex justify-end gap-2 pt-[0.35rem]'
 const actionsSpread = 'flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]'
-const actionsBtns = 'flex gap-2'
 const field =
   '[&_label]:mb-[0.3rem] [&_label]:block [&_label]:text-xs [&_label]:font-semibold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:px-3 [&_input]:py-[0.65rem] [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-focus [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:border-ink/10 [&_textarea]:bg-surface [&_textarea]:px-3 [&_textarea]:py-[0.65rem] [&_textarea]:text-ink [&_textarea]:outline-none [&_textarea]:focus:shadow-focus'
 const section =
@@ -25,17 +24,19 @@ const section =
 const filterPill =
   'inline-flex cursor-pointer items-center gap-[0.4rem] rounded-full border border-ink/10 bg-surface px-[0.9rem] py-[0.45rem] text-sm font-semibold text-ink shadow-none aria-pressed:bg-teal aria-pressed:text-white'
 const note = 'text-xs text-ink-soft'
-const brief = '!min-h-[8rem] text-xs leading-[1.45]'
-const paste = '!min-h-[6.5rem] text-xs leading-[1.45]'
+const briefBox = '!min-h-[8rem] text-xs leading-[1.45]'
+const pasteBox = '!min-h-[4.5rem] text-xs leading-[1.45]'
 const segmented =
   'inline-flex max-w-full flex-wrap gap-[0.2rem] rounded-full border border-ink/10 bg-surface p-1 shadow-none [&_button]:max-w-[16rem] [&_button]:cursor-pointer [&_button]:truncate [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-[0.85rem] [&_button]:py-[0.4rem] [&_button]:text-sm [&_button]:font-semibold [&_button]:text-ink-soft [&_button[aria-pressed=true]]:bg-coral [&_button[aria-pressed=true]]:text-white'
 const review =
   'flex max-h-[16rem] flex-col gap-[0.45rem] overflow-auto [&_fieldset]:m-0 [&_fieldset]:rounded-sm [&_fieldset]:border [&_fieldset]:border-ink/10 [&_fieldset]:px-[0.6rem] [&_fieldset]:pt-[0.4rem] [&_fieldset]:pb-2 [&_legend]:px-1 [&_legend]:text-xs [&_legend]:font-semibold [&_label]:my-[0.2rem] [&_label]:flex [&_label]:items-start [&_label]:gap-[0.4rem] [&_label]:text-sm [&_label>span]:flex [&_label>span]:min-w-0 [&_label>span]:flex-col [&_small]:text-xs [&_small]:text-ink-soft'
+import { ClipboardCheck } from 'lucide-react'
 import {
-  buildCourseDescriptionBatchBrief,
   coursesForDescriptionBatch,
   parseCourseDescriptionBatch
 } from '../../../shared/courseDescription.js'
+import { useBriefRoundtrip } from '../utils/briefRoundtrip'
+import { outlineEntries, saveParsedDescriptions } from '../utils/saveDescriptions'
 import {
   buildPlaylistBrief,
   looseCourses,
@@ -62,7 +63,6 @@ function PlaylistBuilder({
   onClose
 }) {
   const dialogRef = useRef(null)
-  const briefRef = useRef(null)
   const alive = useRef(true)
   const skipIntentSave = useRef(true)
   const [goal, setGoal] = useState(intent?.goal || '')
@@ -73,30 +73,45 @@ function PlaylistBuilder({
   const [useSeed, setUseSeed] = useState(Boolean(seedCourse))
   const [neighbors, setNeighbors] = useState(null)
   const [mode, setMode] = useState('create')
-  const [brief, setBrief] = useState('')
-  const [paste, setPaste] = useState('')
   const [error, setError] = useState('')
   const [skips, setSkips] = useState([])
-  const [copyNote, setCopyNote] = useState('')
-  const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [descBrief, setDescBrief] = useState('')
-  const [descPaste, setDescPaste] = useState('')
-  const [descError, setDescError] = useState('')
-  const [descSkips, setDescSkips] = useState([])
-  const [describing, setDescribing] = useState(false)
-  const [savingDesc, setSavingDesc] = useState(false)
-  const [descCopied, setDescCopied] = useState(false)
+  const [preparing, setPreparing] = useState(false)
+  const [askDescriptions, setAskDescriptions] = useState(true)
+  const [keepDescriptions, setKeepDescriptions] = useState(true)
   const [checked, setChecked] = useState(() => new Set())
   const [checkedFor, setCheckedFor] = useState('')
 
   const loose = useMemo(() => looseCourses(courses, playlists), [courses, playlists])
   const undescribed = useMemo(() => coursesForDescriptionBatch(loose), [loose])
   const canPlaceLoose = playlists.length > 0 && loose.length > 0
+
+  const parseReply = (text, forMode = mode) => {
+    const extend = forMode === 'extend' && selectedPlaylist
+    if (forMode === 'update') {
+      return parsePlaylistBrief(text, courses, { goal, mode: 'update', board: playlists })
+    }
+    return parsePlaylistBrief(text, courses, {
+      goal,
+      mode: extend ? 'extend' : 'create',
+      existingPaths: extend ? selectedPlaylist.coursePaths : []
+    })
+  }
+  const roundtrip = useBriefRoundtrip({
+    kind: 'playlists',
+    accepts: (text) => parseReply(text).ok
+  })
+  const { brief, setBrief, copy, copied, copyNote, paste, setPaste, detected, done } = roundtrip
+
   const placement = useMemo(() => {
     if (mode !== 'update' || !paste.trim()) return null
     return parsePlaylistBrief(paste, courses, { goal, mode: 'update', board: playlists })
   }, [mode, paste, courses, goal, playlists])
+  const replyDescriptions = useMemo(() => {
+    if (mode !== 'update' || !paste.trim() || !undescribed.length) return null
+    const parsed = parseCourseDescriptionBatch(paste, undescribed)
+    return parsed.ok ? parsed : null
+  }, [mode, paste, undescribed])
   const groups = placement?.ok ? placementGroups(placement) : []
   const placementKey = groups
     .flatMap((group) => group.courses.map((course) => course.check))
@@ -130,18 +145,6 @@ function PlaylistBuilder({
     })
     return () => cancelAnimationFrame(frame)
   }, [])
-
-  useEffect(() => {
-    if (!copied) return undefined
-    const timer = window.setTimeout(() => setCopied(false), 1600)
-    return () => window.clearTimeout(timer)
-  }, [copied])
-
-  useEffect(() => {
-    if (!descCopied) return undefined
-    const timer = window.setTimeout(() => setDescCopied(false), 1600)
-    return () => window.clearTimeout(timer)
-  }, [descCopied])
 
   useEffect(() => {
     if (skipIntentSave.current) {
@@ -238,92 +241,37 @@ function PlaylistBuilder({
     }
   }
 
-  const handleGenerate = () => {
-    if (!courses.length) return
+  const handleCopyBrief = async () => {
+    if (!courses.length || preparing) return
     if (mode === 'update' && !canPlaceLoose) return
     if (mode === 'extend' && !selectedPlaylist) return
+    if (brief) {
+      await copy(brief)
+      return
+    }
     const extend = mode === 'extend' && selectedPlaylist
-    setBrief(
-      buildPlaylistBrief({
-        courses,
-        goal,
-        interests,
-        mode: mode === 'update' ? 'update' : extend ? 'extend' : 'create',
-        existingPaths: extend ? selectedPlaylist.coursePaths : [],
-        board: mode === 'update' ? playlists : []
-      })
-    )
-    setCopied(false)
-    setCopyNote('')
+    const update = mode === 'update'
+    setPreparing(true)
     setError('')
-  }
-
-  const handleDescribe = async () => {
-    if (!undescribed.length || describing) return
-    setDescribing(true)
-    setDescError('')
-    setDescBrief('')
     try {
-      const entries = await Promise.all(
-        undescribed.map(async (course) => {
-          try {
-            const outline = await window.api.scanCourse(course.path)
-            return { course, outline, outlineUnreadable: false }
-          } catch {
-            return { course, outline: null, outlineUnreadable: true }
-          }
+      const describe =
+        update && askDescriptions && undescribed.length ? await outlineEntries(undescribed) : []
+      if (!alive.current) return
+      await copy(
+        buildPlaylistBrief({
+          courses,
+          goal,
+          interests,
+          mode: update ? 'update' : extend ? 'extend' : 'create',
+          existingPaths: extend ? selectedPlaylist.coursePaths : [],
+          board: update ? playlists : [],
+          describe
         })
       )
-      if (!alive.current) return
-      setDescBrief(buildCourseDescriptionBatchBrief(entries))
     } catch (err) {
-      if (alive.current) setDescError(err?.message || 'No se pudo preparar las descripciones.')
+      if (alive.current) setError(err?.message || 'No se pudo preparar el encargo.')
     } finally {
-      if (alive.current) setDescribing(false)
-    }
-  }
-
-  const handleSaveDescriptions = async () => {
-    if (savingDesc || !descPaste.trim()) return
-    const parsed = parseCourseDescriptionBatch(descPaste, undescribed)
-    if (!parsed.ok) {
-      setDescSkips(parsed.skips || [])
-      setDescError(parsed.error || 'No se guardó nada.')
-      return
-    }
-    if (typeof window.api.saveCourseDescriptionBatch !== 'function') {
-      setDescError('Reinicia la app para guardar descripciones.')
-      return
-    }
-    setSavingDesc(true)
-    setDescError('')
-    try {
-      const result = await window.api.saveCourseDescriptionBatch(
-        parsed.items.map((item) => ({ coursePath: item.path, payload: item.raw }))
-      )
-      if (!alive.current) return
-      const savedCount = result?.savedCount || 0
-      const left = [...(parsed.skips || []), ...(result?.skips || [])]
-      setDescSkips(left)
-      setDescPaste('')
-      if (savedCount && !left.length) {
-        toast.success(
-          savedCount === 1
-            ? 'Se guardó 1 descripción.'
-            : `Se guardaron ${savedCount} descripciones.`
-        )
-        setDescBrief('')
-        return
-      }
-      if (!savedCount) {
-        setDescError('No se guardó ninguna descripción.')
-        return
-      }
-      toast.success(`Se guardaron ${savedCount}. ${left.length} quedaron fuera.`)
-    } catch (err) {
-      if (alive.current) setDescError(err?.message || 'No se pudieron guardar las descripciones.')
-    } finally {
-      if (alive.current) setSavingDesc(false)
+      if (alive.current) setPreparing(false)
     }
   }
 
@@ -333,22 +281,6 @@ function PlaylistBuilder({
     setPaste('')
     setError('')
     setSkips([])
-    if (next !== 'update') {
-      setDescBrief('')
-      setDescPaste('')
-      setDescError('')
-      setDescSkips([])
-    }
-  }
-
-  const handleCopyDescriptions = async () => {
-    if (!descBrief) return
-    try {
-      await navigator.clipboard.writeText(descBrief)
-      setDescCopied(true)
-    } catch {
-      setDescError('No se pudo copiar solo. El encargo sigue en el cuadro para que lo selecciones.')
-    }
   }
 
   const toggleChecked = (key) => {
@@ -360,30 +292,11 @@ function PlaylistBuilder({
     })
   }
 
-  const handleCopy = async () => {
-    if (!brief) return
-    setCopyNote('')
-    try {
-      await navigator.clipboard.writeText(brief)
-      setCopied(true)
-    } catch {
-      briefRef.current?.focus()
-      briefRef.current?.select()
-      setCopyNote('No se pudo copiar solo. El encargo sigue en el cuadro para que lo selecciones.')
-    }
-  }
-
   const handleSave = async () => {
     if (saving) return
     const extend = mode === 'extend' && selectedPlaylist
     const update = mode === 'update'
-    const parsed = update
-      ? placement || parsePlaylistBrief(paste, courses, { goal, mode: 'update', board: playlists })
-      : parsePlaylistBrief(paste, courses, {
-          goal,
-          mode: extend ? 'extend' : 'create',
-          existingPaths: extend ? selectedPlaylist.coursePaths : []
-        })
+    const parsed = update ? placement || parseReply(paste) : parseReply(paste)
     if (!parsed?.ok) {
       setSkips(parsed?.skips || [])
       setError(parsed?.error || 'No se guardó nada.')
@@ -398,14 +311,31 @@ function PlaylistBuilder({
     setError('')
     try {
       if (update) {
+        let describedCount = 0
+        if (replyDescriptions && keepDescriptions) {
+          try {
+            const described = await saveParsedDescriptions(replyDescriptions.items)
+            describedCount = described.savedCount || 0
+          } catch (err) {
+            toast.error(err?.message || 'No se pudieron guardar las descripciones.')
+          }
+        }
         const result = await onPlaceLoose?.(chosen)
         if (!alive.current) return
+        done()
         setSkips(parsed.skips || [])
         const added = result?.added || 0
         const created = result?.created || 0
         const parts = []
         if (added) parts.push(`Se añadieron ${added} cursos`)
         if (created) parts.push(created === 1 ? 'Se creó 1 lista' : `Se crearon ${created} listas`)
+        if (describedCount) {
+          parts.push(
+            describedCount === 1
+              ? 'Se guardó 1 descripción'
+              : `Se guardaron ${describedCount} descripciones`
+          )
+        }
         const summary = parts.join('. ') || 'No se añadió ningún curso'
         if (parsed.skips?.length) {
           toast.success(`${summary}. ${parsed.skips.length} quedaron fuera.`)
@@ -419,6 +349,7 @@ function PlaylistBuilder({
       if (extend) await onExtend?.(parsed.lists[0])
       else await onCreateLists?.(parsed.lists)
       if (!alive.current) return
+      done()
       setSkips(parsed.skips || [])
       const count = extend ? parsed.lists[0].coursePaths.length : parsed.lists.length
       if (parsed.skips?.length) {
@@ -626,125 +557,69 @@ function PlaylistBuilder({
               : `El chat reparte los cursos que encajan en varias listas. El catálogo tiene ${courses.length}.`}
           </p>
           {mode === 'update' && undescribed.length ? (
-            <div className="flex flex-col gap-[0.45rem]">
-              <p className={note}>
-                {`${undescribed.length} ${undescribed.length === 1 ? 'curso suelto no tiene' : 'cursos sueltos no tienen'} descripción. Describirlos ayuda al chat a ubicarlos. Puedes generar el encargo igual.`}
-              </p>
-              <div className={actions}>
-                <button
-                  type="button"
-                  className={btnGhost}
-                  onClick={handleDescribe}
-                  disabled={describing || savingDesc}
-                >
-                  {describing ? 'Preparando…' : 'Describir sueltos'}
-                </button>
-              </div>
-              {descBrief ? (
-                <div className={field}>
-                  <label htmlFor="playlist-desc-brief">Encargo de descripciones</label>
-                  <textarea
-                    id="playlist-desc-brief"
-                    className={brief}
-                    readOnly
-                    spellCheck={false}
-                    value={descBrief}
-                  />
-                </div>
-              ) : null}
-              {descBrief ? (
-                <div className={field}>
-                  <label htmlFor="playlist-desc-paste">Respuesta de descripciones</label>
-                  <textarea
-                    id="playlist-desc-paste"
-                    className={paste}
-                    spellCheck={false}
-                    value={descPaste}
-                    placeholder="Pega aquí el JSON de las descripciones"
-                    onChange={(event) => {
-                      setDescPaste(event.target.value)
-                      if (descError) setDescError('')
-                    }}
-                  />
-                </div>
-              ) : null}
-              {descBrief ? (
-                <div className={actions}>
-                  <button type="button" className={btnGhost} onClick={handleCopyDescriptions}>
-                    {descCopied ? 'Copiado' : 'Copiar'}
-                  </button>
-                  <button
-                    type="button"
-                    className={btnGhost}
-                    onClick={handleSaveDescriptions}
-                    disabled={savingDesc || describing || !descPaste.trim()}
-                  >
-                    {savingDesc ? 'Guardando…' : 'Guardar descripciones'}
-                  </button>
-                </div>
-              ) : null}
-              {descSkips.length ? (
-                <ul className="m-0 flex flex-col gap-[0.2rem] pl-[1.1rem] text-xs leading-[1.35] text-coral-deep">
-                  {descSkips.map((skip) => (
-                    <li key={`${skip.path || skip.title}-${skip.reason}`}>
-                      <strong>{skip.title || skip.path || 'Sin nombre'}</strong>
-                      {': '}
-                      {skip.reason}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {descError ? (
-                <p className="m-0 text-sm leading-[1.4] text-coral-deep" role="alert">
-                  {descError}
-                </p>
-              ) : null}
-            </div>
+            <label className="flex items-start gap-[0.4rem] text-sm">
+              <input
+                type="checkbox"
+                className="mt-[0.2rem] accent-coral"
+                checked={askDescriptions}
+                onChange={(event) => {
+                  setAskDescriptions(event.target.checked)
+                  setBrief('')
+                }}
+              />
+              <span>
+                Pedir también las descripciones que faltan
+                <span className={cn(note, 'block')}>
+                  {undescribed.length === 1
+                    ? '1 curso suelto no tiene descripción. Van en la misma respuesta y ayudan a ubicarlo.'
+                    : `${undescribed.length} cursos sueltos no tienen descripción. Van en la misma respuesta y ayudan a ubicarlos.`}
+                </span>
+              </span>
+            </label>
           ) : null}
-          <div className={field}>
-            <label htmlFor="playlist-brief">Encargo</label>
-            <textarea
-              id="playlist-brief"
-              ref={briefRef}
-              className={brief}
-              readOnly
-              spellCheck={false}
-              value={brief || 'Pulsa Generar encargo.'}
-            />
-          </div>
           <div className={actionsSpread}>
             <span className={note}>{copyNote}</span>
-            <div className={actionsBtns}>
-              <button
-                type="button"
-                className={btnPrimary}
-                onClick={handleGenerate}
-                disabled={
-                  !courses.length ||
-                  (mode === 'extend' && !selectedPlaylist) ||
-                  (mode === 'update' && !canPlaceLoose)
-                }
-              >
-                Generar encargo
-              </button>
-              <button
-                type="button"
-                className={btnGhost}
-                onClick={handleCopy}
-                disabled={!brief}
-              >
-                {copied ? 'Copiado' : 'Copiar'}
-              </button>
-            </div>
+            <button
+              type="button"
+              className={btnPrimary}
+              onClick={handleCopyBrief}
+              disabled={
+                preparing ||
+                !courses.length ||
+                (mode === 'extend' && !selectedPlaylist) ||
+                (mode === 'update' && !canPlaceLoose)
+              }
+            >
+              {preparing ? 'Preparando…' : copied ? 'Copiado' : 'Copiar encargo'}
+            </button>
           </div>
+          {brief ? (
+            <details className={cn(field, 'text-sm text-ink-soft')} open={Boolean(copyNote)}>
+              <summary className="cursor-pointer select-none">Ver encargo</summary>
+              <textarea
+                className={cn(briefBox, 'mt-2')}
+                readOnly
+                spellCheck={false}
+                value={brief}
+                aria-label="Encargo"
+                onFocus={(event) => event.target.select()}
+              />
+            </details>
+          ) : null}
           <div className={field}>
             <label htmlFor="playlist-paste">Respuesta</label>
+            {detected && paste ? (
+              <p className="m-0 mb-[0.3rem] inline-flex items-center gap-1.5 text-sm font-semibold text-teal">
+                <ClipboardCheck className="size-4" aria-hidden="true" />
+                Respuesta detectada en el portapapeles
+              </p>
+            ) : null}
             <textarea
               id="playlist-paste"
-              className={paste}
+              className={pasteBox}
               spellCheck={false}
               value={paste}
-              placeholder="Pega aquí el JSON del chat"
+              placeholder="Se rellena sola al volver del chat. También puedes pegar aquí el JSON."
               onChange={(event) => {
                 setPaste(event.target.value)
                 if (error) setError('')
@@ -752,6 +627,21 @@ function PlaylistBuilder({
               }}
             />
           </div>
+          {replyDescriptions ? (
+            <label className="flex items-start gap-[0.4rem] text-sm">
+              <input
+                type="checkbox"
+                className="mt-[0.2rem] accent-coral"
+                checked={keepDescriptions}
+                onChange={(event) => setKeepDescriptions(event.target.checked)}
+              />
+              <span>
+                {replyDescriptions.items.length === 1
+                  ? 'Guardar también 1 descripción de la respuesta'
+                  : `Guardar también ${replyDescriptions.items.length} descripciones de la respuesta`}
+              </span>
+            </label>
+          ) : null}
           {mode === 'update' && groups.length ? (
             <div className={review}>
               <p className={note}>

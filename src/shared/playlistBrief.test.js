@@ -339,3 +339,46 @@ describe('playlist update', () => {
     assert.equal(chosen.lists.length, 0)
   })
 })
+
+describe('playlist brief with descriptions', () => {
+  it('asks for missing descriptions in the same reply and both parsers read it', async () => {
+    const { parseCourseDescriptionBatch } = await import('./courseDescription.js')
+    const board = [{ id: 'l1', title: 'Storyboard', coursePaths: ['School - Storyboard Action'] }]
+    const loose = courses.filter((course) => course.path !== 'School - Storyboard Action')
+    const brief = buildPlaylistBrief({
+      courses,
+      mode: 'update',
+      board,
+      describe: loose.map((course) => ({ course, outline: null, outlineUnreadable: true }))
+    })
+    assert.match(brief, /"descriptions"/)
+    assert.match(brief, /Also write a description for each of these 2 courses/)
+
+    const text = JSON.stringify({
+      add: [{ id: 'l1', courses: [{ folder: 'School - Drawing People', why: '' }] }],
+      create: [],
+      descriptions: [
+        {
+          folder: 'Studio - Product Lighting',
+          course: 'Product Lighting',
+          summary: 'Light products for clean catalog photos with simple studio setups.',
+          audience: 'Photographers starting product work.',
+          outcomes: ['Set up a two light table', 'Control reflections on glass'],
+          source: { title: '', url: '' },
+          grounded: 'outline'
+        }
+      ]
+    })
+    const placement = parsePlaylistBrief(text, courses, { mode: 'update', board })
+    assert.equal(placement.ok, true)
+    const descriptions = parseCourseDescriptionBatch(text, loose)
+    assert.equal(descriptions.ok, true)
+    assert.equal(descriptions.items[0].path, 'Studio - Product Lighting')
+  })
+
+  it('leaves the brief unchanged without courses to describe', () => {
+    const plain = buildPlaylistBrief({ courses, goal: 'x' })
+    assert.equal(buildPlaylistBrief({ courses, goal: 'x', describe: [] }), plain)
+    assert.doesNotMatch(plain, /"descriptions"/)
+  })
+})

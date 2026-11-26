@@ -1,6 +1,7 @@
 const MAX_TITLE = 200
 const MAX_BODY = 8000
 const MAX_COMMENT = 4000
+export const MAX_CIERRE_IMAGES = 12
 
 function cleanText(value, max) {
   const text = String(value || '')
@@ -34,6 +35,12 @@ export function cierreSubjectKey(subject) {
   const lesson = normalizeLessonPath(subject?.lessonRelativePath)
   if (lesson) return `${coursePath}\0lesson\0${lesson}`
   return null
+}
+
+/** Where an unpublished draft lives: an edit keys on the cierre, a new one on its subject. */
+export function cierreDraftKey(subject) {
+  if (subject?.id) return `edit\0${subject.id}`
+  return cierreSubjectKey(subject)
 }
 
 export function findCierreForSubject(cierres, subject) {
@@ -96,12 +103,10 @@ export function normalizeCierreInput(payload = {}, existing = null) {
     MAX_TITLE
   )
 
-  let coverUrl = null
-  const coverRaw = payload.coverUrl !== undefined ? payload.coverUrl : existing?.coverUrl
-  if (coverRaw) {
-    const url = String(coverRaw).trim()
-    if (url.startsWith('course-media://note/')) coverUrl = url
-  }
+  const { images, coverUrl } = normalizeCierreImages(
+    payload.images !== undefined ? payload.images : existing?.images,
+    payload.coverUrl !== undefined ? payload.coverUrl : existing?.coverUrl
+  )
 
   return {
     coursePath,
@@ -114,8 +119,39 @@ export function normalizeCierreInput(payload = {}, existing = null) {
     title,
     learned,
     differently,
-    coverUrl
+    coverUrl,
+    images
   }
+}
+
+function isAttachmentUrl(value) {
+  return typeof value === 'string' && value.trim().startsWith('course-media://note/')
+}
+
+/**
+ * Every picture in a cierre, in the order the user arranged them, plus the main one.
+ * The main image always belongs to the list; a lone legacy cover becomes a list of one.
+ */
+export function normalizeCierreImages(images, coverUrl) {
+  const list = []
+  const add = (value) => {
+    if (!isAttachmentUrl(value)) return
+    const url = value.trim()
+    if (!list.includes(url) && list.length < MAX_CIERRE_IMAGES) list.push(url)
+  }
+  if (Array.isArray(images)) images.forEach(add)
+  const main = isAttachmentUrl(coverUrl) ? coverUrl.trim() : null
+  if (main && !list.includes(main)) {
+    list.unshift(main)
+    if (list.length > MAX_CIERRE_IMAGES) list.pop()
+  }
+  return { images: list, coverUrl: main && list.includes(main) ? main : list[0] || null }
+}
+
+/** The main image and the rest, for display. Works for cierres saved before galleries. */
+export function cierreGallery(item) {
+  const { images, coverUrl } = normalizeCierreImages(item?.images, item?.coverUrl)
+  return { main: coverUrl, rest: images.filter((url) => url !== coverUrl), all: images }
 }
 
 export function normalizeCommentBody(body) {

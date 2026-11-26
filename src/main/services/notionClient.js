@@ -21,7 +21,7 @@ import {
 } from '../../shared/notionSync.js'
 
 const KIND_OPTIONS = ['course', 'file', 'note', 'playlist', 'progress', 'topic', 'project', 'intent']
-const STATUS_OPTIONS = ['todo', 'in_progress', 'done']
+const STATUS_OPTIONS = ['todo', 'in_progress', 'paused', 'done']
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'])
 

@@ -2202,7 +2202,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                 </select>
               </div>
               <div className={chipSelect}>
-                <label htmlFor="playlist-excitement">Emoción</label>
+                <label htmlFor="playlist-excitement">Ganas</label>
                 <select
                   id="playlist-excitement"
                   value={minExcitement}
@@ -2211,7 +2211,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   <option value={0}>Cualquiera</option>
                   {EXCITEMENT_LEVELS.map((item) => (
                     <option key={item.level} value={item.level}>
-                      {item.label}
+                      {item.filterLabel}
                     </option>
                   ))}
                 </select>
@@ -2468,7 +2468,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
               onToggleInProcess={toggleInProcess}
               onGenerateProps={detailCourse.missingProps ? () => generateProps(detailCourse) : null}
               onSearchCover={() =>
-                setCoverSearch({ courses: [detailCourse], initialStep: 'choose' })
+                setCoverSearch({ courses: [detailCourse] })
               }
             />
           ) : null}
@@ -2499,7 +2499,6 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
         {coverSearch ? (
           <CoverSearchModal
             courses={coverSearch.courses}
-            initialStep={coverSearch.initialStep}
             onClose={() => setCoverSearch(null)}
           />
         ) : null}

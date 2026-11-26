@@ -564,7 +564,7 @@ function rememberCourse(courses, coursePath) {
   return coursePath
 }
 
-function addEdge(edges, seen, source, target, edgeType, label) {
+function addEdge(edges, seen, source, target, edgeType, label, extra = null) {
   if (!source || !target || source === target) return false
   const directed = edgeType === 'topic' || edgeType === 'file' || edgeType === 'course' || edgeType === 'link'
   const [from, to] = directed ? [source, target] : [source, target].sort()
@@ -572,7 +572,7 @@ function addEdge(edges, seen, source, target, edgeType, label) {
   if (seen.has(id)) return false
   if (edges.length >= EDGE_CAP) return false
   seen.add(id)
-  edges.push({ id, source: from, target: to, edgeType, label: label || '' })
+  edges.push({ id, source: from, target: to, edgeType, label: label || '', ...(extra || {}) })
   return true
 }
 
@@ -744,6 +744,9 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
       courseMembers.get(path).push(finding.id)
     }
   }
+  // A note seen in a lesson reaches its course through that lesson. Its direct
+  // course edge is marked implied: drawn only when lesson nodes are hidden.
+  const placedById = new Map(placed.map((finding) => [finding.id, finding]))
   for (const [path, findingIds] of courseMembers) {
     const points = findingIds.map((id) => findingPoint.get(`finding:${id}`)).filter(Boolean)
     const origin = points.reduce((sum, node) => ({ x: sum.x + node.x, y: sum.y + node.y }), { x: 0, y: 0 })
@@ -753,9 +756,26 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
     })
     nodes.push(node)
     for (const findingId of findingIds) {
-      const added = addEdge(edges, seen, `finding:${findingId}`, node.id, 'course', '')
+      const viaFile = filesOf(placedById.get(findingId)).some((file) =>
+        sameCourse(file.coursePath, path)
+      )
+      const added = addEdge(
+        edges,
+        seen,
+        `finding:${findingId}`,
+        node.id,
+        'course',
+        '',
+        viaFile ? { implied: true } : null
+      )
       if (!added && edges.length >= EDGE_CAP) truncated = true
     }
+  }
+  for (const file of files.values()) {
+    const path = file.coursePath && coursePaths.find((item) => sameCourse(item, file.coursePath))
+    if (!path) continue
+    const added = addEdge(edges, seen, `file:${file.id}`, `course:${path}`, 'course', '')
+    if (!added && edges.length >= EDGE_CAP) truncated = true
   }
 
   const placedIds = new Set(placed.map((finding) => finding.id))
@@ -836,6 +856,8 @@ function buildCoursesGraph(findings, topics, courseTitles) {
 /**
  * Library graph. Topics mode is tags, the notes that use them, and notes with no tag.
  * An orphan note has no tag. A shared course or file is not a link to another note.
+ * Structure is a tree: note -> lesson -> course. A note's direct course edge is
+ * `implied` when a lesson already carries it, so views draw it only with lessons hidden.
  * Courses mode is every course that holds a note, linked when one note sits in two courses and carries a topic.
  */
 export function buildGlobalGraph({

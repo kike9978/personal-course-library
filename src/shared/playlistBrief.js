@@ -3,7 +3,7 @@
  * The app writes the brief and stores listas. It does not call a model.
  */
 
-import { extractJsonValue, nameKey } from './courseDescription.js'
+import { buildDescriptionRequest, extractJsonValue, nameKey } from './courseDescription.js'
 
 const NOT_JSON = 'Ese texto no es JSON válido. No se guardó nada.'
 const NO_LISTS = 'Ese texto no tiene listas que guardar. No se guardó nada.'
@@ -167,8 +167,10 @@ export function buildPlaylistBrief({
   interests = [],
   mode = 'create',
   existingPaths = [],
-  board = []
+  board = [],
+  describe = []
 } = {}) {
+  const descriptionRequest = buildDescriptionRequest(describe)
   const list = (Array.isArray(courses) ? courses : []).filter((course) => fact(course?.path))
   const goalText = fact(goal)
   const interestList = (Array.isArray(interests) ? interests : []).map(fact).filter(Boolean)
@@ -268,7 +270,14 @@ export function buildPlaylistBrief({
       'Write each title and why in the language of the goal. If there is no goal, use the language of the course titles.',
       'Leave why as an empty string when you have nothing to add.'
     ].join('\n'),
-    JSON.stringify(example, null, 2)
+    descriptionRequest.text,
+    JSON.stringify(
+      descriptionRequest.example.length
+        ? { ...example, descriptions: descriptionRequest.example }
+        : example,
+      null,
+      2
+    )
   ]
     .filter(Boolean)
     .join('\n\n')

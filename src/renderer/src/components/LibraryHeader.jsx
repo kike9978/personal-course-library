@@ -24,7 +24,7 @@ const SORT_OPTIONS = [
   { value: 'addedOldest', label: 'Añadidos primero' },
   { value: 'newest', label: 'Última modificación' },
   { value: 'rate', label: 'Mejor valorados' },
-  { value: 'excitement', label: 'Más emoción' },
+  { value: 'excitement', label: 'Más ganas' },
   { value: 'progress', label: 'Más progreso' },
   { value: 'inProgress', label: 'En curso primero' }
 ]

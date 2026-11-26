@@ -52,7 +52,15 @@ describe('library course filters', () => {
       learning: { excitement: 4, isRecentlyViewed: false }
     }
     assert.equal(courseMatchesLibraryFilters(rated, { minExcitement: 4 }), true)
+    assert.equal(courseMatchesLibraryFilters(rated, { minExcitement: 2 }), true)
     assert.equal(courseMatchesLibraryFilters(rated, { minExcitement: 5 }), false)
+    assert.equal(
+      courseMatchesLibraryFilters(
+        { ...rated, learning: { isRecentlyViewed: false } },
+        { minExcitement: 1 }
+      ),
+      false
+    )
     assert.equal(
       courseMatchesLibraryFilters({ ...rated, isInProcess: true }, { minExcitement: 4 }),
       false
@@ -131,5 +139,17 @@ describe('library course filters', () => {
     const hot = { ...lighting, title: 'B', learning: { excitement: 5 } }
     assert.equal(compareCourses(calm, hot, 'excitement', 'desc') > 0, true)
     assert.equal(compareCourses(hot, { ...hot, title: 'C' }, 'excitement', 'desc') < 0, true)
+  })
+})
+
+describe('gap filter', () => {
+  it('keeps only courses missing a cover or a description', () => {
+    const bare = { path: 'bare', title: 'Bare', hasCover: false }
+    const full = { path: 'full', title: 'Full', hasCover: true, description: { summary: 'Hola' } }
+    assert.equal(courseMatchesLibraryFilters(bare, { gap: 'cover' }), true)
+    assert.equal(courseMatchesLibraryFilters(full, { gap: 'cover' }), false)
+    assert.equal(courseMatchesLibraryFilters(bare, { gap: 'description' }), true)
+    assert.equal(courseMatchesLibraryFilters(full, { gap: 'description' }), false)
+    assert.equal(libraryFiltersActive({ gap: 'cover' }), true)
   })
 })

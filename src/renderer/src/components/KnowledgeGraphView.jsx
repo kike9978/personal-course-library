@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from 'd3-force'
 import { LABEL_ZOOM, clampLabelZoom, clampLinkDistance } from '../../../shared/knowledgeGraph.js'
 import { cn } from '../ui/cn'
@@ -15,6 +15,22 @@ const FILL = {
   topic: '#3d7a7a',
   course: '#c47b2d',
   file: '#6a4c9c'
+}
+
+/** Edges that restate where a note lives (lesson, course), not what it means. */
+const STRUCTURAL_EDGE = new Set(['file', 'course'])
+
+/** Notes hug their lesson; tags and note links span farther. */
+function linkLengthFactor(edgeType) {
+  if (edgeType === 'file') return 0.5
+  if (edgeType === 'course') return 1.1
+  return 1
+}
+
+function linkStrengthFor(edgeType) {
+  if (edgeType === 'file') return 0.8
+  if (edgeType === 'course') return 0.45
+  return 0.55
 }
 
 function radiusFor(kind, selected, scale = 1) {
@@ -66,7 +82,7 @@ function fitTransform(points, width, height) {
  */
 function KnowledgeGraphView({
   nodes = [],
-  edges = [],
+  edges: allEdges = [],
   viewMode = 'topics',
   linkDistance = 72,
   nodeScale = 1,
@@ -88,6 +104,13 @@ function KnowledgeGraphView({
   onNodeShift,
   onClear
 }) {
+  // With lessons shown, a note reaches its course through the lesson; the
+  // direct (implied) course edge only stands in when lessons are hidden.
+  const filesDrawn = viewMode !== 'topics' || showFiles
+  const edges = useMemo(
+    () => (filesDrawn ? allEdges.filter((edge) => !edge.implied) : allEdges),
+    [allEdges, filesDrawn]
+  )
   const hostRef = useRef(null)
   const svgRef = useRef(null)
   const worldRef = useRef(null)
@@ -260,14 +283,18 @@ function KnowledgeGraphView({
       const point = spawned.get(node.id)
       return { id: node.id, x: point.x, y: point.y, kind: node.data?.kind }
     })
-    const simLinks = edges.map((edge) => ({ source: edge.source, target: edge.target }))
+    const simLinks = edges.map((edge) => ({
+      source: edge.source,
+      target: edge.target,
+      edgeType: edge.edgeType
+    }))
     const simulation = forceSimulation(simNodes)
       .force(
         'link',
         forceLink(simLinks)
           .id((node) => node.id)
-          .distance(distance)
-          .strength(0.55)
+          .distance((link) => distance * linkLengthFactor(link.edgeType))
+          .strength((link) => linkStrengthFor(link.edgeType))
       )
       .force('charge', forceManyBody().strength(-180))
       .force('center', forceCenter(0, 0))
@@ -638,7 +665,9 @@ function KnowledgeGraphView({
                       'stroke-[rgba(23,21,28,0.38)] [stroke-width:1.25px]',
                       edge.edgeType === 'shared-topic' && '[stroke-dasharray:6_3]',
                       hot
-                        ? 'stroke-[rgba(23,21,28,0.72)] [stroke-width:1.6px]'
+                        ? STRUCTURAL_EDGE.has(edge.edgeType)
+                          ? 'stroke-[rgba(23,21,28,0.32)] [stroke-width:1px]'
+                          : 'stroke-[rgba(23,21,28,0.72)] [stroke-width:1.6px]'
                         : 'opacity-[0.18]'
                     )}
                   />

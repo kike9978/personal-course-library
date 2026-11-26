@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, protocol } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, protocol, clipboard } from 'electron'
 import { join, extname, basename } from 'path'
 import fs from 'fs'
 import fsPromises from 'fs/promises'
@@ -670,6 +670,12 @@ function registerIpcHandlers() {
     return { success: true, course: fullData }
   })
 
+  // Chat replies come back through the clipboard. Text only, capped so a huge copy is ignored.
+  ipcMain.handle('read-clipboard-text', () => {
+    const text = clipboard.readText()
+    return text.length > 2_000_000 ? '' : text
+  })
+
   ipcMain.handle('open-google-image-search', async (_event, query) => {
     const q = String(query || '').trim()
     if (!q) throw new Error('Sin búsqueda')
@@ -891,6 +897,30 @@ function registerIpcHandlers() {
     } catch (error) {
       return { canceled: true, error: error.message }
     }
+  })
+
+  ipcMain.handle('pick-note-images', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Añadir imágenes',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        {
+          name: 'Imágenes',
+          extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg']
+        }
+      ]
+    })
+    if (result.canceled || !result.filePaths.length) return { canceled: true, images: [] }
+    const images = []
+    const errors = []
+    for (const filePath of result.filePaths) {
+      try {
+        images.push(saveNoteAttachmentFromPath(filePath))
+      } catch (error) {
+        errors.push(error.message)
+      }
+    }
+    return { canceled: false, images, errors }
   })
 
   ipcMain.handle('capture-window-region', async (event, rect) => {

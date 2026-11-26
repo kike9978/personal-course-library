@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { cn } from '../ui/cn'
-import { btnGhost, btnPrimary } from '../ui/classes'
+import { Archive, ArchiveRestore, Folder, FolderOpen, FolderSearch, Trash2 } from 'lucide-react'
+import { btnCompact, btnGhost, btnPrimary, btnQuiet, segmented, segmentedItem } from '../ui/classes'
+import { askConfirm } from '../utils/askConfirm'
+import AnchorPicker from './AnchorPicker'
 
 const control =
   '[&_:is(input,select,textarea)]:w-full [&_:is(input,select,textarea)]:border [&_:is(input,select,textarea)]:border-ink/10 [&_:is(input,select,textarea)]:rounded-sm [&_:is(input,select,textarea)]:bg-surface [&_:is(input,select,textarea)]:px-3 [&_:is(input,select,textarea)]:py-[0.6rem] [&_:is(input,select,textarea)]:font-medium [&_:is(input,select,textarea)]:tracking-normal [&_:is(input,select,textarea)]:text-ink [&_:is(input,select,textarea)]:shadow-none [&_:is(input,select,textarea)]:outline-none [&_:is(input,select,textarea)]:transition-[box-shadow,border-color] [&_:is(input,select,textarea)]:duration-150 [&_:is(input,select,textarea)]:focus:border-[rgba(232,69,112,0.45)] [&_:is(input,select,textarea)]:focus:shadow-focus [&_textarea]:min-h-[5rem] [&_textarea]:resize-y [&_textarea]:leading-[1.45]'
@@ -15,17 +18,30 @@ function statusTone(status) {
     return 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
   }
   if (status === 'done') return 'border-chip-status-border bg-chip-status text-chip-status-text'
+  if (status === 'paused') return 'border-warn-border bg-warn text-warn-text'
   return 'border-ink/16 bg-cream-deep text-ink-soft'
 }
 
 const STATUS_OPTIONS = [
   { value: 'todo', label: 'Por hacer' },
   { value: 'in_progress', label: 'En curso' },
+  { value: 'paused', label: 'En pausa' },
   { value: 'done', label: 'Hecho' }
 ]
 
 function statusLabel(status) {
   return STATUS_OPTIONS.find((s) => s.value === status)?.label || status || 'Por hacer'
+}
+
+function formatHistoryDate(at) {
+  if (!at) return ''
+  const date = new Date(at)
+  const sameYear = date.getFullYear() === new Date().getFullYear()
+  return date.toLocaleDateString('es', {
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' })
+  })
 }
 
 function folderNameFromPath(folderPath) {
@@ -36,12 +52,6 @@ function folderNameFromPath(folderPath) {
       .split(/[/\\]/)
       .pop() || ''
   )
-}
-
-function fileAnchorLabel(title, kind) {
-  const name = title || 'Archivo'
-  if (!kind || kind === 'video' || kind === 'audio') return name
-  return `${name} · ${kind}`
 }
 
 /**
@@ -55,7 +65,7 @@ function buildAnchorCatalog(sections, courseResources, courseResourceSections = 
   const pushFile = (items, sectionId, relativePath, title, kind) => {
     if (!relativePath || fileSection.has(relativePath)) return
     fileSection.set(relativePath, sectionId || null)
-    items.push({ value: `file:${relativePath}`, label: fileAnchorLabel(title, kind) })
+    items.push({ value: `file:${relativePath}`, label: title || 'Archivo', kind: kind || 'other' })
   }
 
   const visit = (list, prefix) => {
@@ -63,9 +73,7 @@ function buildAnchorCatalog(sections, courseResources, courseResourceSections = 
       const title = section.title || 'Sección'
       const label = prefix ? `${prefix} / ${title}` : title
       const items = []
-      if (section.id && section.id !== '__root__') {
-        items.push({ value: `section:${section.id}`, label: 'Toda la sección' })
-      }
+      const sectionValue = section.id && section.id !== '__root__' ? `section:${section.id}` : null
       for (const lesson of section.lessons || []) {
         pushFile(items, section.id, lesson.relativePath, lesson.title, lesson.kind)
         for (const res of visibleAnchorResources(lesson.resources)) {
@@ -75,8 +83,8 @@ function buildAnchorCatalog(sections, courseResources, courseResourceSections = 
       for (const res of visibleAnchorResources(section.resources)) {
         pushFile(items, section.id, res.relativePath, res.title || res.name, res.kind)
       }
-      if (items.length) {
-        groups.push({ id: section.id || label, label, items })
+      if (items.length || sectionValue) {
+        groups.push({ id: section.id || label, label, sectionValue, items })
       }
       visit(section.sections, label)
     }
@@ -187,21 +195,34 @@ function ProjectPanel({
     courseResourceSections
   )
 
-  useEffect(() => {
-    setTitle(project?.title || '')
-    setNotes(project?.notes || '')
-    setStatus(project?.status || 'todo')
-    setAnchor(anchorFromProject(project))
-    setLinkedFolderPath(project?.linkedFolderPath || '')
-  }, [
-    project?.id,
-    project?.title,
-    project?.notes,
-    project?.status,
-    project?.sectionId,
-    project?.fileRelativePath,
-    project?.linkedFolderPath
-  ])
+  // One effect per field, so saving the status instantly does not wipe unsaved edits elsewhere.
+  useEffect(() => setTitle(project?.title || ''), [project?.id, project?.title])
+  useEffect(() => setNotes(project?.notes || ''), [project?.id, project?.notes])
+  useEffect(() => setStatus(project?.status || 'todo'), [project?.id, project?.status])
+  useEffect(
+    () => setAnchor(anchorFromProject(project)),
+    [project?.id, project?.sectionId, project?.fileRelativePath]
+  )
+  useEffect(
+    () => setLinkedFolderPath(project?.linkedFolderPath || ''),
+    [project?.id, project?.linkedFolderPath]
+  )
+
+  const changeStatus = async (next) => {
+    if (next === status) return
+    const previous = status
+    setStatus(next)
+    if (isNew) return
+    try {
+      const list = await window.api.upsertProject(coursePath, { id: project.id, status: next })
+      const saved = list.find((p) => p.id === project.id)
+      const becameDone = next === 'done' && (project?.status || 'todo') !== 'done'
+      onSaved?.(list, saved, { becameDone })
+    } catch (err) {
+      setStatus(previous)
+      toast.error(err.message || 'No se pudo cambiar el estado')
+    }
+  }
 
   const pickFolder = async () => {
     try {
@@ -253,33 +274,23 @@ function ProjectPanel({
     }
   }
 
-  const unlink = async () => {
-    if (!project?.id) {
-      setLinkedFolderPath('')
-      return
-    }
-    setSaving(true)
-    try {
-      const list = await window.api.upsertProject(coursePath, {
-        id: project.id,
-        linkedFolderPath: null
-      })
-      setLinkedFolderPath('')
-      const saved = list.find((p) => p.id === project.id)
-      toast.success('Vínculo quitado')
-      onSaved?.(list, saved)
-    } catch (err) {
-      toast.error(err.message || 'Error')
-    } finally {
-      setSaving(false)
-    }
+  const savedAnchor = anchorFromProject(project)
+  const savedFolder = project?.linkedFolderPath || ''
+  const dirty =
+    !isNew &&
+    (title.trim() !== (project?.title || '') ||
+      notes.trim() !== (project?.notes || '') ||
+      anchor !== savedAnchor ||
+      linkedFolderPath !== savedFolder)
+
+  const discard = () => {
+    setTitle(project?.title || '')
+    setNotes(project?.notes || '')
+    setAnchor(savedAnchor)
+    setLinkedFolderPath(savedFolder)
   }
 
   const openLink = async () => {
-    if (!project?.id) {
-      toast.error('Guarda el proyecto primero')
-      return
-    }
     try {
       await window.api.openProjectLink(coursePath, project.id)
     } catch (err) {
@@ -288,10 +299,6 @@ function ProjectPanel({
   }
 
   const revealLink = async () => {
-    if (!project?.id) {
-      toast.error('Guarda el proyecto primero')
-      return
-    }
     try {
       await window.api.revealProjectLink(coursePath, project.id)
     } catch (err) {
@@ -300,12 +307,13 @@ function ProjectPanel({
   }
 
   const remove = async () => {
-    if (!project?.id) {
-      onCancelCreate?.()
-      return
-    }
     if (
-      !window.confirm(`¿Borrar el proyecto “${project.title}”? No se borran archivos en disco.`)
+      !(await askConfirm({
+        title: 'Borrar proyecto',
+        message: `¿Borrar «${project.title}»? Los archivos de la carpeta no se tocan.`,
+        confirmLabel: 'Borrar',
+        cancelLabel: 'Cancelar'
+      }))
     ) {
       return
     }
@@ -318,8 +326,36 @@ function ProjectPanel({
     }
   }
 
-  const linkBroken = Boolean(linkedFolderPath) && project?.id && project.linkMissing
-  const hasLink = Boolean(linkedFolderPath)
+  const toggleArchive = async () => {
+    try {
+      const list = await window.api.upsertProject(coursePath, {
+        id: project.id,
+        archived: !project.archivedAt
+      })
+      toast.success(project.archivedAt ? 'Proyecto desarchivado' : 'Proyecto archivado')
+      onSaved?.(
+        list,
+        list.find((p) => p.id === project.id)
+      )
+    } catch (err) {
+      toast.error(err.message || 'No se pudo archivar')
+    }
+  }
+
+  const history = (project?.statusHistory || []).slice(-6)
+
+  const onKeyDown = (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault()
+      if (isNew || dirty) void save()
+    }
+  }
+
+  // The stored link is what open/reveal act on; an unsaved folder change hides them.
+  const canOpen = !isNew && Boolean(savedFolder) && !project.linkMissing
+  const linkBroken =
+    !isNew && Boolean(savedFolder) && project.linkMissing && linkedFolderPath === savedFolder
+  const folderName = folderNameFromPath(linkedFolderPath)
 
   return (
     <div
@@ -329,59 +365,42 @@ function ProjectPanel({
           ? 'bg-surface'
           : 'bg-[radial-gradient(circle_at_8%_0%,rgba(232,69,112,0.04),transparent_42%),radial-gradient(circle_at_92%_6%,rgba(61,122,122,0.04),transparent_40%),var(--color-cream-deep)]'
       )}
+      onKeyDown={onKeyDown}
     >
-      <div className="border-b border-ink/10 bg-surface-muted px-5 py-4 backdrop-blur-[10px]">
-        <div className="flex flex-wrap items-center gap-[0.65rem]">
-          <h2 className="m-0 font-display text-lg font-bold tracking-[-0.02em] text-ink">
-            {isNew ? 'Nuevo proyecto' : project.title}
-          </h2>
-          {!isNew ? (
-            <span
-              className={cn(
-                'inline-flex items-center rounded-full border px-[0.6rem] py-[0.22rem] text-2xs font-semibold tracking-[0.05em] uppercase',
-                statusTone(project.status)
-              )}
-            >
-              {statusLabel(project.status)}
-            </span>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="flex max-w-[40rem] min-h-0 flex-1 flex-col gap-[0.95rem] overflow-auto px-5 pt-[1.15rem] pb-7">
-        {linkBroken ? (
-          <div
-            className="flex flex-wrap items-center gap-[0.65rem] rounded-md border border-[rgba(232,69,112,0.28)] bg-[rgba(232,69,112,0.07)] px-[0.95rem] py-[0.85rem] shadow-card"
-            role="alert"
+      <div className="flex flex-wrap items-center gap-[0.65rem] border-b border-ink/10 bg-surface-muted px-5 py-4 backdrop-blur-[10px]">
+        <h2 className="m-0 min-w-0 truncate font-display text-lg font-bold tracking-[-0.02em] text-ink">
+          {isNew ? 'Nuevo proyecto' : project.title}
+        </h2>
+        {!isNew ? (
+          <span
+            className={cn(
+              'inline-flex items-center rounded-full border px-[0.6rem] py-[0.22rem] text-2xs font-semibold tracking-[0.05em] uppercase',
+              statusTone(project.status)
+            )}
           >
-            <p className="m-0 min-w-[12rem] flex-1 text-base font-medium text-ink">
-              La carpeta vinculada no existe o se movió. Vuelve a vincularla para seguir.
-            </p>
-            <button type="button" className={btnPrimary} onClick={pickFolder}>
-              Volver a vincular
+            {statusLabel(project.status)}
+          </span>
+        ) : null}
+        {canOpen ? (
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              className={btnGhost}
+              onClick={revealLink}
+              title="Mostrar en explorador"
+            >
+              <FolderSearch size={16} aria-hidden="true" />
+              Mostrar
+            </button>
+            <button type="button" className={btnPrimary} onClick={openLink}>
+              <FolderOpen size={16} aria-hidden="true" />
+              Abrir carpeta
             </button>
           </div>
         ) : null}
+      </div>
 
-        <div className={field}>
-          <span>Carpeta vinculada</span>
-          <div className="flex gap-[0.45rem] [&_input]:min-w-0 [&_input]:flex-1">
-            <input
-              type="text"
-              value={linkedFolderPath}
-              onChange={(e) => setLinkedFolderPath(e.target.value)}
-              placeholder="Elige una carpeta fuera del curso…"
-              spellCheck={false}
-            />
-            <button type="button" className={btnGhost} onClick={pickFolder}>
-              Elegir…
-            </button>
-          </div>
-          <p className="m-0 text-xs font-medium text-ink-soft">
-            Puede estar en cualquier disco. No se mueve ni se copia nada del curso.
-          </p>
-        </div>
-
+      <div className="flex min-h-0 max-w-[40rem] flex-1 flex-col gap-[1.1rem] overflow-auto px-5 pt-[1.15rem] pb-7">
         <label className={field}>
           <span>Título</span>
           <input
@@ -389,46 +408,100 @@ function ProjectPanel({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Mi práctica final"
+            autoFocus={isNew}
           />
         </label>
 
-        <label className={field}>
-          <span>Estado</span>
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className={field}>
-          <span>Anclar a</span>
-          <select value={anchor} onChange={(e) => setAnchor(e.target.value)}>
-            <option value="">Proyectos (grupo general)</option>
-            {anchor &&
-            !groups.some((group) => group.items.some((item) => item.value === anchor)) ? (
-              <option value={anchor}>
-                {anchor.startsWith('file:')
-                  ? folderNameFromPath(anchor.slice('file:'.length))
-                  : anchor.slice('section:'.length)}
-              </option>
+        <div className={field} role="group" aria-labelledby="project-status-label">
+          <span id="project-status-label">
+            Estado
+            {!isNew ? (
+              <span className="ml-2 font-medium tracking-normal text-ink-faint">
+                · se guarda al instante
+              </span>
             ) : null}
-            {groups.map((group) => (
-              <optgroup key={group.id} label={group.label}>
-                {group.items.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </optgroup>
+          </span>
+          <div className={cn(segmented, 'self-start')}>
+            {STATUS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={segmentedItem}
+                aria-pressed={status === opt.value}
+                onClick={() => changeStatus(opt.value)}
+              >
+                {opt.label}
+              </button>
             ))}
-          </select>
-          <p className="m-0 text-xs font-medium text-ink-soft">
-            El proyecto puede quedar en una sección o junto a un archivo o video.
-          </p>
-        </label>
+          </div>
+        </div>
+
+        <div className={field}>
+          <span id="project-anchor-label">Dónde aparece en el curso</span>
+          <AnchorPicker
+            value={anchor}
+            groups={groups}
+            onChange={setAnchor}
+            fallbackLabel={
+              anchor.startsWith('file:')
+                ? folderNameFromPath(anchor.slice('file:'.length))
+                : anchor.slice('section:'.length)
+            }
+          />
+        </div>
+
+        <div className={field}>
+          <span>Carpeta del proyecto</span>
+          <div
+            className={cn(
+              'flex items-center gap-3 rounded-sm border px-3 py-2.5',
+              linkBroken
+                ? 'border-[rgba(232,69,112,0.28)] bg-[rgba(232,69,112,0.07)]'
+                : 'border-ink/10 bg-surface'
+            )}
+            role={linkBroken ? 'alert' : undefined}
+          >
+            <Folder
+              className={cn('size-5 shrink-0', linkBroken ? 'text-coral-deep' : 'text-ink-faint')}
+              aria-hidden="true"
+            />
+            <div className="min-w-0 flex-1 tracking-normal">
+              {linkedFolderPath ? (
+                <>
+                  <div className="truncate text-sm font-semibold text-ink">{folderName}</div>
+                  <div
+                    className="truncate font-mono text-2xs font-medium text-ink-soft select-text"
+                    title={linkedFolderPath}
+                  >
+                    {linkBroken ? 'No se encuentra: ' : ''}
+                    {linkedFolderPath}
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm font-medium text-ink-soft">
+                  Sin carpeta. Puede estar en cualquier disco; no se copia nada.
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              className={cn(linkBroken ? btnPrimary : btnGhost, btnCompact)}
+              onClick={pickFolder}
+            >
+              {linkBroken ? 'Volver a vincular' : linkedFolderPath ? 'Cambiar…' : 'Elegir…'}
+            </button>
+            {linkedFolderPath ? (
+              <button
+                type="button"
+                className={cn(btnQuiet, btnCompact)}
+                onClick={() => setLinkedFolderPath('')}
+                title="Quitar vínculo (no borra la carpeta)"
+              >
+                Quitar
+              </button>
+            ) : null}
+          </div>
+        </div>
 
         <label className={field}>
           <span>Notas</span>
@@ -436,39 +509,80 @@ function ProjectPanel({
             rows={5}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Qué estás practicando, deliverables, recordatorios…"
+            placeholder="Qué estás practicando, entregables, recordatorios…"
           />
         </label>
 
-        <div className="mt-[0.15rem] flex flex-wrap gap-2 border-t border-ink/10 pt-2">
-          {hasLink && project?.id && !project.linkMissing ? (
-            <>
-              <button type="button" className={btnPrimary} onClick={openLink}>
-                Abrir carpeta del proyecto
-              </button>
-              <button type="button" className={btnGhost} onClick={revealLink}>
-                Mostrar en explorador
-              </button>
-            </>
-          ) : null}
-          <button type="button" className={btnPrimary} onClick={save} disabled={saving}>
-            {isNew ? 'Crear' : 'Guardar'}
+        {!isNew && history.length ? (
+          <div className={field}>
+            <span>Historial</span>
+            <ol className="m-0 flex list-none flex-wrap items-center gap-x-1.5 gap-y-1 p-0 text-xs font-medium tracking-normal text-ink-soft">
+              {history.map((entry, index) => (
+                <li
+                  key={`${entry.status}-${entry.at}`}
+                  className="inline-flex items-center gap-1.5"
+                >
+                  {index > 0 ? <span aria-hidden="true">→</span> : null}
+                  <span className="font-semibold text-ink">{statusLabel(entry.status)}</span>
+                  <span>{formatHistoryDate(entry.at)}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex max-w-[40rem] flex-wrap items-center gap-2 border-t border-ink/10 px-5 py-3">
+        {isNew ? null : (
+          <button
+            type="button"
+            className={cn(btnQuiet, 'enabled:hover:bg-danger-soft enabled:hover:text-danger')}
+            onClick={remove}
+          >
+            <Trash2 size={15} aria-hidden="true" />
+            Borrar
           </button>
-          {hasLink ? (
-            <button type="button" className={btnGhost} onClick={unlink} disabled={saving}>
-              Quitar vínculo
-            </button>
-          ) : null}
-          {isNew ? (
-            <button type="button" className={btnGhost} onClick={onCancelCreate}>
-              Cancelar
-            </button>
-          ) : (
-            <button type="button" className={btnGhost} onClick={remove}>
-              Borrar proyecto
-            </button>
-          )}
-        </div>
+        )}
+        {!isNew && project.status === 'done' ? (
+          <button
+            type="button"
+            className={btnQuiet}
+            onClick={toggleArchive}
+            title={
+              project.archivedAt
+                ? 'Volver a mostrarlo en la columna Hecho'
+                : 'Sacarlo del tablero; sigue en el curso y en el archivo'
+            }
+          >
+            {project.archivedAt ? (
+              <ArchiveRestore size={15} aria-hidden="true" />
+            ) : (
+              <Archive size={15} aria-hidden="true" />
+            )}
+            {project.archivedAt ? 'Desarchivar' : 'Archivar'}
+          </button>
+        ) : null}
+        <span className="ml-auto text-xs font-medium text-ink-soft" aria-live="polite">
+          {dirty ? 'Cambios sin guardar' : ''}
+        </span>
+        {isNew ? (
+          <button type="button" className={btnGhost} onClick={onCancelCreate}>
+            Cancelar
+          </button>
+        ) : dirty ? (
+          <button type="button" className={btnGhost} onClick={discard}>
+            Descartar
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={btnPrimary}
+          onClick={save}
+          disabled={saving || (!isNew && !dirty)}
+          title="Ctrl+S"
+        >
+          {isNew ? 'Crear proyecto' : dirty ? 'Guardar cambios' : 'Guardado'}
+        </button>
       </div>
     </div>
   )

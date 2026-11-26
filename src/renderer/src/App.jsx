@@ -38,6 +38,7 @@ import {
   useDebouncedValue
 } from './utils/courseFilters'
 import { focusSearchOnShortcut } from './utils/focusSearchBar'
+import { useBriefPending } from './utils/briefRoundtrip'
 import { cn } from './ui/cn'
 import { FileWarning, FileText, FolderOpen, ImageOff, X } from 'lucide-react'
 import {
@@ -60,6 +61,7 @@ const noticeBtn = cn(btnPrimary, btnCompact, 'h-8 px-3')
 const noticeBtnGhost = cn(btnGhost, btnCompact, 'h-8 px-3')
 const noticeIcon = 'size-4 shrink-0 text-warn-text/80'
 const clearBtn = cn(btnQuiet, btnCompact, 'ml-auto h-8 px-3 text-ink')
+const gapChip = cn(btnQuiet, btnCompact, 'h-7 px-2.5 text-coral-deep')
 const setupShell = 'flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center'
 
 const COVER_BANNER_DISMISS_KEY = 'pcl.banner.dismiss.covers'
@@ -209,6 +211,7 @@ function FilterableCoursesGrid({
   const [isNewOnly, setIsNewOnly] = useState(false)
   const [recentlyViewedOnly, setRecentlyViewedOnly] = useState(false)
   const [missingPropsOnly, setMissingPropsOnly] = useState(false)
+  const [gapFilter, setGapFilter] = useState('')
   const [institutionFilter, setInstitutionFilter] = useState('')
   const [programFilter, setProgramFilter] = useState('')
   const [themeFilter, setThemeFilter] = useState('')
@@ -255,6 +258,7 @@ function FilterableCoursesGrid({
   const showDescriptionBanner =
     missingDescriptionCourses.length > 0 &&
     dismissedDescriptionSignature !== missingDescriptionSignature
+  const descriptionReplyPending = useBriefPending('descriptions')
 
   const inProgressCourses = useMemo(
     () => courses.filter((c) => !c.missingProps && c.isInProcess),
@@ -280,6 +284,7 @@ function FilterableCoursesGrid({
       isNewOnly,
       recentlyViewedOnly,
       missingPropsOnly,
+      gap: gapFilter,
       institution: institutionFilter,
       program: programFilter,
       theme: themeFilter,
@@ -336,6 +341,7 @@ function FilterableCoursesGrid({
     isNewOnly,
     recentlyViewedOnly,
     missingPropsOnly,
+    gapFilter,
     institutionFilter,
     programFilter,
     themeFilter,
@@ -452,8 +458,15 @@ function FilterableCoursesGrid({
 
   const handleOpenCoverSearch = useCallback(() => {
     if (missingCoverCourses.length === 0) return
-    setCoverSearch({ courses: missingCoverCourses, initialStep: 'select' })
-  }, [missingCoverCourses])
+    // Follow the grid order when the grid already shows only these courses.
+    const queue =
+      gapFilter === 'cover' && sortedCourses.length ? sortedCourses : missingCoverCourses
+    setCoverSearch({ courses: queue })
+  }, [gapFilter, missingCoverCourses, sortedCourses])
+
+  const toggleGapFilter = useCallback((gap) => {
+    setGapFilter((current) => (current === gap ? '' : gap))
+  }, [])
 
   const handleOpenDescriptionBatch = useCallback(() => {
     if (missingDescriptionCourses.length === 0) return
@@ -680,6 +693,14 @@ function FilterableCoursesGrid({
                         </span>
                       </div>
                       <div className={bannerActions}>
+                        <button
+                          type="button"
+                          className={noticeBtnGhost}
+                          aria-pressed={gapFilter === 'cover'}
+                          onClick={() => toggleGapFilter('cover')}
+                        >
+                          {gapFilter === 'cover' ? 'Ver todos' : 'Verlos'}
+                        </button>
                         <button type="button" className={noticeBtn} onClick={handleOpenCoverSearch}>
                           Buscar portadas
                         </button>
@@ -695,15 +716,29 @@ function FilterableCoursesGrid({
                         <span>
                           <strong>{missingDescriptionCourses.length}</strong> curso
                           {missingDescriptionCourses.length === 1 ? '' : 's'} sin descripción
+                          {descriptionReplyPending ? (
+                            <span className="text-warn-text/75">
+                              {' '}
+                              · encargo copiado, falta pegar la respuesta
+                            </span>
+                          ) : null}
                         </span>
                       </div>
                       <div className={bannerActions}>
                         <button
                           type="button"
+                          className={noticeBtnGhost}
+                          aria-pressed={gapFilter === 'description'}
+                          onClick={() => toggleGapFilter('description')}
+                        >
+                          {gapFilter === 'description' ? 'Ver todos' : 'Verlos'}
+                        </button>
+                        <button
+                          type="button"
                           className={noticeBtn}
                           onClick={handleOpenDescriptionBatch}
                         >
-                          Escribir descripciones
+                          {descriptionReplyPending ? 'Pegar respuesta' : 'Escribir descripciones'}
                         </button>
                         <BannerDismiss onClick={dismissDescriptionBanner} />
                       </div>
@@ -716,6 +751,7 @@ function FilterableCoursesGrid({
                 !isNewOnly &&
                 !recentlyViewedOnly &&
                 !missingPropsOnly &&
+                !gapFilter &&
                 !debouncedFilter &&
                 !institutionFilter &&
                 !programFilter &&
@@ -737,6 +773,11 @@ function FilterableCoursesGrid({
                 <span className={sectionMeta}>
                   {sortedCourses.length} resultado{sortedCourses.length === 1 ? '' : 's'}
                 </span>
+                {gapFilter ? (
+                  <button type="button" className={gapChip} onClick={() => setGapFilter('')}>
+                    {gapFilter === 'cover' ? 'Sin portada' : 'Sin descripción'} · Quitar filtro
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={clearBtn}
@@ -827,7 +868,6 @@ function FilterableCoursesGrid({
               {coverSearch ? (
                 <CoverSearchModal
                   courses={coverSearch.courses}
-                  initialStep={coverSearch.initialStep}
                   onClose={() => setCoverSearch(null)}
                 />
               ) : null}
@@ -853,10 +893,7 @@ function FilterableCoursesGrid({
               selectedCourse.missingProps ? () => handleGenerateOne(selectedCourse) : null
             }
             onSearchCover={() =>
-              setCoverSearch({
-                courses: [selectedCourse],
-                initialStep: 'choose'
-              })
+              setCoverSearch({ courses: [selectedCourse] })
             }
           />
         )}

@@ -20,6 +20,7 @@ const api = {
   saveCourseCover: (payload) => ipcRenderer.invoke('save-course-cover', payload),
   saveCourseCoverFromData: (payload) => ipcRenderer.invoke('save-course-cover-from-data', payload),
   openGoogleImageSearch: (query) => ipcRenderer.invoke('open-google-image-search', query),
+  readClipboardText: () => ipcRenderer.invoke('read-clipboard-text'),
   refreshCourses: () => ipcRenderer.invoke('refresh-courses'),
   scanCourse: (coursePath, force = false) =>
     ipcRenderer.invoke('scan-course', { coursePath, force }),
@@ -96,6 +97,7 @@ const api = {
     ipcRenderer.invoke('delete-cierre-comment', { cierreId, commentId }),
   pickProjectFolder: () => ipcRenderer.invoke('pick-project-folder'),
   pickNoteImage: () => ipcRenderer.invoke('pick-note-image'),
+  pickNoteImages: () => ipcRenderer.invoke('pick-note-images'),
   captureWindowRegion: (rect) => ipcRenderer.invoke('capture-window-region', rect),
   saveNoteImage: (payload) => ipcRenderer.invoke('save-note-image', payload),
   saveNoteDrawing: (payload) => ipcRenderer.invoke('save-note-drawing', payload),

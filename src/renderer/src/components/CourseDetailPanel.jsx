@@ -8,7 +8,15 @@ import ExcitementGauge from './ExcitementGauge'
 import brandMark from '../assets/img/brand-mark.svg'
 import { cn } from '../ui/cn'
 import { X } from 'lucide-react'
-import { badgeAccent, badgeSuccess, badgeTheme, badgeWarn, btnCompact, btnGhost, btnPrimary } from '../ui/classes'
+import {
+  badgeAccent,
+  badgeSuccess,
+  badgeTheme,
+  badgeWarn,
+  btnCompact,
+  btnGhost,
+  btnPrimary
+} from '../ui/classes'
 
 const badgeNew = badgeSuccess
 const badgeDone = badgeSuccess
@@ -95,9 +103,7 @@ function OutlineSections({
                       {lesson.title}
                     </span>
                     {length ? (
-                      <span className="shrink-0 text-xs font-medium text-ink-soft">
-                        {length}
-                      </span>
+                      <span className="shrink-0 text-xs font-medium text-ink-soft">{length}</span>
                     ) : null}
                   </button>
                 </li>
@@ -352,21 +358,19 @@ function CourseDetailPanel({
           ) : null}
         </div>
 
+        <div className="-ml-1 flex">
+          <ExcitementGauge
+            coursePath={course.path}
+            value={course.learning?.excitement || 0}
+            variant="face"
+            showLabel
+          />
+        </div>
+
         <section
           className="flex flex-col gap-2.5 rounded-md border border-ink/8 bg-cream p-3.5"
           aria-label="Continuar"
         >
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-2xs font-semibold tracking-[0.07em] text-ink-soft uppercase">
-              Emoción
-            </span>
-            <ExcitementGauge
-              coursePath={course.path}
-              value={course.learning?.excitement || 0}
-              size="md"
-            />
-          </div>
-
           {hasStatus ? (
             <div className="flex min-h-[1.35rem] flex-wrap items-center gap-[0.35rem]">
               {course.isInProcess ? <span className={ribbon}>En curso</span> : null}

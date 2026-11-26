@@ -1073,11 +1073,25 @@ export function listAllBookmarks() {
   return []
 }
 
-const PROJECT_STATUSES = new Set(['todo', 'in_progress', 'done'])
+const PROJECT_STATUSES = new Set(['todo', 'in_progress', 'paused', 'done'])
+const PROJECT_HISTORY_LIMIT = 50
+
+function appendStatusHistory(history, status, at) {
+  const list = Array.isArray(history) ? history : []
+  if (list.length && list[list.length - 1].status === status) return list
+  return [...list, { status, at }].slice(-PROJECT_HISTORY_LIMIT)
+}
+
+function normalizeSortIndex(value) {
+  if (value === null) return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : undefined
+}
 
 function linkStatus(linkedFolderPath) {
+  // No folder is a valid state: only a linked path that no longer resolves counts as missing.
   if (!linkedFolderPath) {
-    return { linkOk: false, linkMissing: true, linkIsFile: false }
+    return { linkOk: false, linkMissing: false, linkIsFile: false }
   }
   try {
     if (!fs.existsSync(linkedFolderPath)) {
@@ -1158,9 +1172,9 @@ export function listAllProjects() {
     }
   }
   return items.sort((a, b) => {
-    const statusOrder = { in_progress: 0, todo: 1, done: 2 }
-    const aStatus = statusOrder[a.status] ?? 1
-    const bStatus = statusOrder[b.status] ?? 1
+    const statusOrder = { in_progress: 0, paused: 1, todo: 2, done: 3 }
+    const aStatus = statusOrder[a.status] ?? 2
+    const bStatus = statusOrder[b.status] ?? 2
     if (aStatus !== bStatus) return aStatus - bStatus
     const updated = (b.updatedAt || 0) - (a.updatedAt || 0)
     if (updated !== 0) return updated
@@ -1178,7 +1192,7 @@ export function listAllProjects() {
  *   title?: string,
  *   linkedFolderPath?: string|null,
  *   notes?: string,
- *   status?: 'todo'|'in_progress'|'done',
+ *   status?: 'todo'|'in_progress'|'paused'|'done',
  *   sectionId?: string|null,
  *   fileRelativePath?: string|null
  * }} payload
@@ -1208,11 +1222,33 @@ export function upsertProject(coursePath, payload) {
         ? String(payload.linkedFolderPath).trim() || null
         : null
 
+  const sortIndex =
+    payload.sortIndex === undefined ? undefined : normalizeSortIndex(payload.sortIndex)
+
   if (payload.id) {
     const idx = course.projects.findIndex((p) => p.id === payload.id)
     if (idx === -1) throw new Error('Proyecto no encontrado')
+    const current = course.projects[idx]
+    const nextStatus = payload.status !== undefined ? status : current.status || 'todo'
+    const statusChanged = nextStatus !== (current.status || 'todo')
+    let archivedAt = current.archivedAt || null
+    if (payload.archived === true) archivedAt = archivedAt || now
+    if (payload.archived === false) archivedAt = null
+    // Only finished work stays archived; reopening a project brings it back to the board.
+    if (nextStatus !== 'done') archivedAt = null
     course.projects[idx] = {
-      ...course.projects[idx],
+      ...current,
+      statusHistory: statusChanged
+        ? appendStatusHistory(
+            current.statusHistory || [
+              { status: current.status || 'todo', at: current.createdAt || now }
+            ],
+            nextStatus,
+            now
+          )
+        : current.statusHistory,
+      archivedAt,
+      ...(sortIndex !== undefined ? { sortIndex } : {}),
       title:
         payload.title !== undefined
           ? title || course.projects[idx].title
@@ -1248,6 +1284,9 @@ export function upsertProject(coursePath, payload) {
       fileRelativePath: normalizeProjectRelativePath(payload.fileRelativePath),
       createdAt: now,
       updatedAt: now,
+      statusHistory: [{ status, at: now }],
+      archivedAt: null,
+      ...(sortIndex !== undefined ? { sortIndex } : {}),
       ...(payload.notion !== undefined ? { notion: payload.notion } : {})
     })
   }

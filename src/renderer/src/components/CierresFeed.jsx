@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { flattenOutline } from '../../../shared/cierres.js'
+import { cierreGallery, flattenOutline } from '../../../shared/cierres.js'
 import {
   ExternalLink,
   Flag,
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import AppHeader from './AppHeader'
 import CierreComposer from './CierreComposer'
+import CierreImageViewer from './CierreImageViewer'
 import { askConfirm } from '../utils/askConfirm'
 import { cn } from '../ui/cn'
 import {
@@ -70,6 +71,7 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
   const [composer, setComposer] = useState(null)
   const [openThread, setOpenThread] = useState(null)
   const [followup, setFollowup] = useState('')
+  const [viewer, setViewer] = useState(null)
 
   const titleByPath = useMemo(() => {
     const map = {}
@@ -135,6 +137,8 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
         item.learned,
         item.differently,
         item.sectionTitle,
+        item.projectTitle,
+        item.lessonTitle,
         titleByPath[item.coursePath]
       ]
         .filter(Boolean)
@@ -360,17 +364,63 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
               {filtered.map((item) => {
                 const comments = item.comments || []
                 const threadOpen = openThread === item.id
+                const gallery = cierreGallery(item)
+                const ordered = gallery.main ? [gallery.main, ...gallery.rest] : []
+                const shown = gallery.rest.slice(0, 4)
+                const hidden = gallery.rest.length - shown.length
                 return (
                   <article
                     key={item.id}
                     className={cn(cardLg, 'group/post flex flex-col overflow-hidden')}
                   >
-                    {item.coverUrl ? (
-                      <img
-                        src={item.coverUrl}
-                        alt=""
-                        className="max-h-[300px] w-full border-b border-ink/8 object-cover"
-                      />
+                    {gallery.main ? (
+                      <div className="border-b border-ink/8">
+                        <button
+                          type="button"
+                          className="block w-full cursor-zoom-in border-0 bg-ink/5 p-0"
+                          aria-label="Ver imagen principal"
+                          onClick={() => setViewer({ images: ordered, index: 0, title: item.title })}
+                        >
+                          <img
+                            src={gallery.main}
+                            alt=""
+                            className="max-h-[340px] w-full object-cover"
+                          />
+                        </button>
+                        {shown.length ? (
+                          <div className="grid grid-cols-4 gap-0.5 border-t border-ink/8 bg-ink/8">
+                            {shown.map((url, index) => {
+                              const more = index === shown.length - 1 && hidden > 0
+                              return (
+                                <button
+                                  key={url}
+                                  type="button"
+                                  className="relative block aspect-[4/3] cursor-zoom-in overflow-hidden border-0 bg-ink/5 p-0"
+                                  aria-label={
+                                    more
+                                      ? `Ver ${hidden} imágenes más`
+                                      : `Ver imagen ${index + 2} de ${ordered.length}`
+                                  }
+                                  onClick={() =>
+                                    setViewer({ images: ordered, index: index + 1, title: item.title })
+                                  }
+                                >
+                                  <img
+                                    src={url}
+                                    alt=""
+                                    className="size-full object-cover transition-transform duration-200 hover:scale-[1.03]"
+                                  />
+                                  {more ? (
+                                    <span className="absolute inset-0 grid place-items-center bg-[rgba(23,21,28,0.55)] font-display text-xl font-bold text-white">
+                                      +{hidden}
+                                    </span>
+                                  ) : null}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
                     ) : null}
                     <div className="flex flex-col gap-3 px-5 pt-4 pb-4">
                       <header className="flex items-start gap-3">
@@ -536,6 +586,15 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
         onClose={() => setComposer(null)}
         onSaved={() => setComposer(null)}
       />
+      {viewer ? (
+        <CierreImageViewer
+          images={viewer.images}
+          index={viewer.index}
+          title={viewer.title}
+          onIndex={(index) => setViewer((value) => (value ? { ...value, index } : value))}
+          onClose={() => setViewer(null)}
+        />
+      ) : null}
     </div>
   )
 }

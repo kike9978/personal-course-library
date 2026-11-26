@@ -49,7 +49,7 @@ const COLUMNS = [
   { key: 'programs', label: 'Programas', kind: 'text', filter: 'select', filterKey: 'program' },
   { key: 'themes', label: 'Temas', kind: 'text', filter: 'select', filterKey: 'theme' },
   { key: 'rate', label: '★', kind: 'number', filter: 'rate', filterKey: 'minRate' },
-  { key: 'excitement', label: 'Emoción', kind: 'number', filter: 'excitement', filterKey: 'minExcitement' },
+  { key: 'excitement', label: 'Ganas', kind: 'number', filter: 'excitement', filterKey: 'minExcitement' },
   { key: 'progress', label: 'Progreso', kind: 'number', filter: null },
   { key: 'status', label: 'Estado', kind: 'number', filter: 'status', filterKey: 'status' },
   { key: 'added', label: 'Añadido', kind: 'date', filter: 'presence', filterKey: 'added' },
@@ -316,11 +316,11 @@ function ColumnFilter({ column, filters, onColumnFilter, institutions, programs,
   if (column.filter === 'excitement') {
     return (
       <FilterMenu
-        label="Emoción"
+        label="Ganas"
         value={value}
         options={[
           { value: 0, label: 'Todas' },
-          ...EXCITEMENT_LEVELS.map((item) => ({ value: item.level, label: item.label }))
+          ...EXCITEMENT_LEVELS.map((item) => ({ value: item.level, label: item.filterLabel }))
         ]}
         onChange={set}
       />

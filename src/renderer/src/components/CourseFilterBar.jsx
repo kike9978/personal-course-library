@@ -319,7 +319,7 @@ function CourseFilterBar({
             </label>
 
             <label className={popoverLabel} htmlFor={excitementId}>
-              Emoción
+              Ganas
               <select
                 id={excitementId}
                 className={popoverSelect}
@@ -329,7 +329,7 @@ function CourseFilterBar({
                 <option value={0}>Cualquiera</option>
                 {EXCITEMENT_LEVELS.map((item) => (
                   <option key={item.level} value={item.level}>
-                    {item.label}
+                    {item.filterLabel}
                   </option>
                 ))}
               </select>

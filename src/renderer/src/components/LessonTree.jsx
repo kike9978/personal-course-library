@@ -392,7 +392,7 @@ function ProjectsButton({ projects, selectedProjectId, onSelectProject }) {
   const label = single ? list[0].title || 'Proyecto' : 'Proyectos'
   const hint = list
     .map((project) =>
-      project.linkMissing ? `${project.title} (sin carpeta)` : project.title || 'Proyecto'
+      project.linkMissing ? `${project.title} (vínculo roto)` : project.title || 'Proyecto'
     )
     .join(', ')
 
@@ -443,7 +443,11 @@ function ProjectsButton({ projects, selectedProjectId, onSelectProject }) {
                   'w-full cursor-pointer rounded-sm border-0 bg-transparent px-[0.55rem] py-[0.4rem] text-left text-sm font-semibold text-ink hover:bg-coral/12',
                   selectedProjectId === project.id && 'bg-coral/12'
                 )}
-                title={project.linkMissing ? 'Sin carpeta vinculada' : project.linkedFolderPath || project.title}
+                title={
+                  project.linkMissing
+                    ? 'La carpeta vinculada no existe'
+                    : project.linkedFolderPath || project.title
+                }
                 onClick={(event) => {
                   event.stopPropagation()
                   choose(project)
@@ -473,13 +477,17 @@ function ProjectRow({ project, selectedProjectId, onSelectProject }) {
           project.linkMissing && !isActive && 'text-coral-deep'
         )}
         onClick={() => onSelectProject?.(project)}
-        title={project.linkedFolderPath || 'Sin carpeta vinculada'}
+        title={
+          project.linkMissing
+            ? 'La carpeta vinculada no existe'
+            : project.linkedFolderPath || 'Sin carpeta vinculada'
+        }
       >
         <span className={treeBody}>
           <span className={treeLabel}>{project.title}</span>
           <span className={cn(treeMeta, 'text-teal')}>
             <FolderKanban size={13} strokeWidth={2} aria-hidden="true" />
-            <span>{project.linkMissing ? 'Sin carpeta' : statusLabel(project.status)}</span>
+            <span>{project.linkMissing ? 'Vínculo roto' : statusLabel(project.status)}</span>
           </span>
         </span>
       </button>

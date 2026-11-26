@@ -521,7 +521,7 @@ export function topicFromBody(body) {
   }
 }
 
-const PROJECT_STATUSES = new Set(['todo', 'in_progress', 'done'])
+const PROJECT_STATUSES = new Set(['todo', 'in_progress', 'paused', 'done'])
 
 /** Project brief and status. The linked folder path stays on this machine. */
 export function projectWire(project) {

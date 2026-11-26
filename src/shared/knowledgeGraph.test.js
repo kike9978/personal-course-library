@@ -188,11 +188,26 @@ describe('knowledge graph', () => {
     assert.deepEqual(fileEdges.map((edge) => edge.source).sort(), ['finding:a', 'finding:b'])
     const courseEdges = graph.edges.filter((edge) => edge.edgeType === 'course')
     assert.deepEqual(courseEdges.map((edge) => edge.source).sort(), [
+      'file:lesson:course-a:01.mp4',
       'finding:a',
       'finding:b',
       'finding:plain'
     ])
-    assert.equal(courseEdges[0].target, 'course:course-a')
+    assert.ok(courseEdges.every((edge) => edge.target === 'course:course-a'))
+    // Lesson notes reach the course through the lesson; their direct edge is only a stand-in.
+    assert.deepEqual(
+      courseEdges
+        .filter((edge) => edge.implied)
+        .map((edge) => edge.source)
+        .sort(),
+      ['finding:a', 'finding:b']
+    )
+    const drawn = graph.edges.filter((edge) => !edge.implied)
+    assert.equal(
+      drawn.filter((edge) => edge.source === 'finding:a' && edge.edgeType !== 'topic').length,
+      1,
+      'a lesson note draws one structural edge, to its lesson'
+    )
     assert.equal(
       graph.edges.some((edge) => edge.edgeType === 'same-file'),
       false

@@ -550,6 +550,7 @@ function notifyProjects() {
 const PROJECT_STATUS_LABEL = {
   todo: 'Por hacer',
   in_progress: 'En curso',
+  paused: 'En pausa',
   done: 'Hecho'
 }
 

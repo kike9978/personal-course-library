@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
+import { ClipboardCheck } from 'lucide-react'
 import {
   buildCourseDescriptionBatchBrief,
   coursesForDescriptionBatch,
@@ -17,8 +18,13 @@ import {
   dialogLead as sharedDialogLead,
   dialogTitle as sharedDialogTitle
 } from '../ui/classes'
+import { useBriefRoundtrip } from '../utils/briefRoundtrip'
+import { cleanIpcError, outlineEntries, saveParsedDescriptions } from '../utils/saveDescriptions'
 
-const dialogShell = cn(dialogBase, 'max-w-[40rem] open:max-h-[min(90vh,48rem)] open:overflow-auto [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55')
+const dialogShell = cn(
+  dialogBase,
+  'max-w-[42rem] open:max-h-[min(92vh,52rem)] open:overflow-auto [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55'
+)
 const dialogForm = dialogBody
 const dialogTitle = sharedDialogTitle
 const dialogLead = sharedDialogLead
@@ -27,58 +33,18 @@ const searchInput =
 const rowBase =
   'flex cursor-pointer items-start gap-[0.65rem] rounded-md px-[0.65rem] py-[0.55rem] hover:bg-coral/8'
 const briefField = cn(fieldControl, 'min-h-[8rem] resize-y text-xs leading-[1.45]')
-const pasteField = cn(fieldControl, 'min-h-[6.5rem] resize-y text-xs leading-[1.45]')
-
-function cleanIpcError(err) {
-  return String(err?.message || 'No se pudo guardar.')
-    .replace(/^Error invoking remote method '[^']+': Error: /, '')
-    .trim()
-}
-
-async function saveParsedDescriptions(parsed) {
-  if (typeof window.api.saveCourseDescriptionBatch === 'function') {
-    const result = await window.api.saveCourseDescriptionBatch(
-      parsed.items.map((item) => ({ coursePath: item.path, payload: item.raw }))
-    )
-    return {
-      savedCount: result?.savedCount || 0,
-      savedPaths: result?.savedPaths || [],
-      skips: Array.isArray(result?.skips) ? result.skips : []
-    }
-  }
-  if (typeof window.api.updateCourse !== 'function') {
-    throw new Error('Reinicia la app para guardar descripciones.')
-  }
-  const savedPaths = []
-  const skips = []
-  for (const item of parsed.items) {
-    try {
-      await window.api.updateCourse(item.path, {
-        description: { ...item.description, updatedAt: new Date().toISOString() }
-      })
-      savedPaths.push(item.path)
-    } catch (err) {
-      skips.push({
-        path: item.path,
-        title: item.title,
-        reason: err?.message || 'No se pudo escribir courseProps.json.'
-      })
-    }
-  }
-  return { savedCount: savedPaths.length, savedPaths, skips }
-}
+const pasteField = cn(fieldControl, 'min-h-[4.5rem] resize-y text-xs leading-[1.45]')
+const stepTitle = 'm-0 font-display text-sm font-semibold text-ink'
+const MISSING_REASON = 'No vino en la respuesta.'
 
 function CourseDescriptionBatch({ courses, onClose }) {
   const dialogRef = useRef(null)
-  const briefRef = useRef(null)
   const alive = useRef(true)
   const waiting = useMemo(() => coursesForDescriptionBatch(courses), [courses])
   const waitingKey = waiting.map((course) => course.path).join('\n')
   const seenWaiting = useRef(waitingKey)
   const reviewRef = useRef(null)
-  const [picked, setPicked] = useState(
-    () => new Set(coursesForDescriptionBatch(courses).map((course) => course.path))
-  )
+  const [picked, setPicked] = useState(() => new Set(waiting.map((course) => course.path)))
   const [query, setQuery] = useState('')
   const selected = useMemo(
     () => waiting.filter((course) => picked.has(course.path)),
@@ -87,15 +53,42 @@ function CourseDescriptionBatch({ courses, onClose }) {
   const omittedCount = Math.max(0, waiting.length - selected.length)
   const pathKey = selected.map((course) => course.path).join('\n')
   const generateToken = useRef(0)
-  const [brief, setBrief] = useState('')
   const [generating, setGenerating] = useState(false)
-  const [paste, setPaste] = useState('')
   const [error, setError] = useState('')
-  const [copyNote, setCopyNote] = useState('')
-  const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
   const [skipByPath, setSkipByPath] = useState(() => new Map())
   const [strays, setStrays] = useState([])
+  const [edits, setEdits] = useState(() => new Map())
+  const [excluded, setExcluded] = useState(() => new Set())
+
+  const roundtrip = useBriefRoundtrip({
+    kind: 'descriptions',
+    accepts: (text) => parseCourseDescriptionBatch(text, waiting).ok
+  })
+  const { brief, setBrief, copy, copied, copyNote, paste, setPaste, detected, done } = roundtrip
+
+  // Parse against every course still waiting, so a reply copied earlier still lands
+  // even if the marks changed since.
+  const parsed = useMemo(
+    () => (paste.trim() ? parseCourseDescriptionBatch(paste, waiting) : null),
+    [paste, waiting]
+  )
+  const reviewItems = parsed?.ok ? parsed.items : []
+  const keptItems = reviewItems.filter((item) => !excluded.has(item.path))
+  const selectedPaths = useMemo(() => new Set(selected.map((course) => course.path)), [selected])
+  const missingFromReply = parsed?.ok
+    ? (parsed.skips || []).filter(
+        (skip) => skip.path && skip.reason === MISSING_REASON && selectedPaths.has(skip.path)
+      )
+    : []
+  const rowProblems = parsed?.ok
+    ? (parsed.skips || []).filter((skip) => skip.reason !== MISSING_REASON)
+    : []
+
+  useEffect(() => {
+    setEdits(new Map())
+    setExcluded(new Set())
+  }, [paste])
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -116,12 +109,6 @@ function CourseDescriptionBatch({ courses, onClose }) {
       alive.current = false
     }
   }, [])
-
-  useEffect(() => {
-    if (!copied) return undefined
-    const timer = window.setTimeout(() => setCopied(false), 1600)
-    return () => window.clearTimeout(timer)
-  }, [copied])
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -148,31 +135,23 @@ function CourseDescriptionBatch({ courses, onClose }) {
     generateToken.current += 1
     setGenerating(false)
     setBrief('')
-    setCopied(false)
-  }, [pathKey])
+  }, [pathKey, setBrief])
 
-  const handleGenerate = async () => {
+  const handleCopyBrief = async () => {
     if (!selected.length || generating) return
+    if (brief) {
+      await copy(brief)
+      return
+    }
     const token = ++generateToken.current
     const list = selected
-    const omitted = omittedCount
     setGenerating(true)
-    setBrief('')
-    setCopied(false)
-    setCopyNote('')
+    setError('')
     try {
-      const entries = await Promise.all(
-        list.map(async (course) => {
-          try {
-            const outline = await window.api.scanCourse(course.path)
-            return { course, outline, outlineUnreadable: false }
-          } catch {
-            return { course, outline: null, outlineUnreadable: true }
-          }
-        })
-      )
+      const entries = await outlineEntries(list)
       if (!alive.current || token !== generateToken.current) return
-      setBrief(buildCourseDescriptionBatchBrief(entries, { omittedCount: omitted }))
+      const text = buildCourseDescriptionBatchBrief(entries, { omittedCount })
+      await copy(text)
     } catch (err) {
       if (alive.current && token === generateToken.current) {
         setError(err?.message || 'No se pudo generar el encargo.')
@@ -191,24 +170,18 @@ function CourseDescriptionBatch({ courses, onClose }) {
     })
   }
 
+  const toggleExcluded = (path) => {
+    setExcluded((prev) => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
+
   const handleClose = () => {
     dialogRef.current?.close()
     onClose()
-  }
-
-  const canCopy = Boolean(brief) && !generating
-
-  const handleCopy = async () => {
-    if (!canCopy) return
-    setCopyNote('')
-    try {
-      await navigator.clipboard.writeText(brief)
-      setCopied(true)
-    } catch {
-      briefRef.current?.focus()
-      briefRef.current?.select()
-      setCopyNote('No se pudo copiar solo. El encargo sigue en el cuadro para que lo selecciones.')
-    }
   }
 
   const showSkips = (courseSkips, strayRows) => {
@@ -228,34 +201,41 @@ function CourseDescriptionBatch({ courses, onClose }) {
 
   const handleSave = async () => {
     if (saving) return
-    const parsed = parseCourseDescriptionBatch(paste, selected)
-    const strayRows = (parsed.skips || []).filter((skip) => !skip.path)
-    const courseSkips = (parsed.skips || []).filter((skip) => skip.path)
-    if (!parsed.ok) {
-      showSkips(courseSkips, strayRows)
-      setError(courseSkips.length || strayRows.length ? '' : parsed.error || 'No se guardó nada.')
+    if (!parsed) {
+      setError('Pega la respuesta del chat.')
       return
     }
+    if (!parsed.ok) {
+      setError(parsed.error || 'No se guardó nada.')
+      return
+    }
+    if (!keptItems.length) {
+      setError('Marca al menos una descripción.')
+      return
+    }
+    const items = keptItems.map((item) => {
+      const summary = edits.get(item.path)
+      if (summary == null) return item
+      return {
+        ...item,
+        description: { ...item.description, summary },
+        raw: { ...item.raw, summary }
+      }
+    })
+    const strayRows = rowProblems.filter((skip) => !skip.path)
     setSaving(true)
     setError('')
     try {
-      const result = await saveParsedDescriptions(parsed)
+      const result = await saveParsedDescriptions(items)
       if (!alive.current) return
       const saved = new Set(result.savedPaths || [])
-      const reasons = new Map(courseSkips.map((skip) => [skip.path, skip]))
-      for (const skip of result.skips || []) {
+      const reasons = new Map()
+      for (const skip of [...rowProblems, ...missingFromReply, ...(result.skips || [])]) {
         if (skip?.path && !saved.has(skip.path)) reasons.set(skip.path, skip)
       }
-      for (const course of selected) {
-        if (saved.has(course.path) || reasons.has(course.path)) continue
-        reasons.set(course.path, {
-          path: course.path,
-          title: course.title || course.path,
-          reason: 'No vino en la respuesta.'
-        })
-      }
-      const left = [...reasons.values()].filter((skip) => !saved.has(skip.path))
+      const left = [...reasons.values()]
       const savedCount = result.savedCount || 0
+      if (savedCount) done()
       if (!left.length && !strayRows.length) {
         if (savedCount === 1) toast.success('Se guardó 1 descripción.')
         else toast.success(`Se guardaron ${savedCount} descripciones.`)
@@ -270,22 +250,14 @@ function CourseDescriptionBatch({ courses, onClose }) {
         )
       }
     } catch (err) {
-      if (!alive.current) return
-      const known = new Set(courseSkips.map((skip) => skip.path))
-      const failedSave = (parsed.items || [])
-        .filter((item) => !known.has(item.path))
-        .map((item) => ({
-          path: item.path,
-          title: item.title,
-          reason: 'No se pudo guardar esta descripción.'
-        }))
-      showSkips([...courseSkips, ...failedSave], strayRows)
-      const shown = courseSkips.length + failedSave.length + strayRows.length
-      setError(shown ? '' : cleanIpcError(err))
+      if (alive.current) setError(cleanIpcError(err))
     } finally {
       if (alive.current) setSaving(false)
     }
   }
+
+  const copyLabel = generating ? 'Preparando…' : copied ? 'Copiado' : 'Copiar encargo'
+  const parseError = parsed && !parsed.ok ? parsed.error : ''
 
   return (
     <dialog
@@ -311,147 +283,238 @@ function CourseDescriptionBatch({ courses, onClose }) {
           Descripciones
         </h3>
         <p className={dialogLead}>
-          {skipByPath.size
-            ? 'Estos cursos no se guardaron. El motivo está debajo del nombre. Genera otro encargo para ellos.'
-            : 'Marca los cursos que entran en este encargo. El guardado usa solo esos.'}
+          {reviewItems.length
+            ? 'Revisa cada descripción. Puedes corregir el texto o desmarcar las que no quieras guardar.'
+            : skipByPath.size
+              ? 'Estos cursos no se guardaron. El motivo está debajo del nombre. Copia otro encargo para ellos.'
+              : 'Copia el encargo, pégalo en tu chat y copia su respuesta. Al volver aquí, la respuesta se detecta sola.'}
         </p>
 
-        <div className="flex flex-col gap-[0.55rem]">
-          <input
-            type="search"
-            data-search-field=""
-            className={searchInput}
-            placeholder="Filtrar cursos…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') event.preventDefault()
-            }}
-            aria-label="Filtrar cursos"
-          />
-          <div className="flex flex-wrap gap-[0.35rem]">
-            <span className="text-sm font-semibold text-ink-soft">
-              {selected.length} de {waiting.length} marcados
-            </span>
-            <button
-              type="button"
-              className={cn(btnGhost, btnCompact)}
-              onClick={() => {
-                reviewRef.current = null
-                setPicked(new Set(waiting.map((course) => course.path)))
-              }}
-              disabled={picked.size === waiting.length}
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              className={cn(btnGhost, btnCompact)}
-              onClick={() => setPicked(new Set())}
-              disabled={picked.size === 0}
-            >
-              Ninguno
-            </button>
-          </div>
-        </div>
+        {!reviewItems.length ? (
+          <>
+            <div className="flex flex-col gap-[0.55rem]">
+              <input
+                type="search"
+                data-search-field=""
+                className={searchInput}
+                placeholder="Filtrar cursos…"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') event.preventDefault()
+                }}
+                aria-label="Filtrar cursos"
+              />
+              <div className="flex flex-wrap items-center gap-[0.35rem]">
+                <span className="text-sm font-semibold text-ink-soft">
+                  {selected.length} de {waiting.length} marcados
+                </span>
+                <button
+                  type="button"
+                  className={cn(btnGhost, btnCompact)}
+                  onClick={() => {
+                    reviewRef.current = null
+                    setPicked(new Set(waiting.map((course) => course.path)))
+                  }}
+                  disabled={picked.size === waiting.length}
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  className={cn(btnGhost, btnCompact)}
+                  onClick={() => setPicked(new Set())}
+                  disabled={picked.size === 0}
+                >
+                  Ninguno
+                </button>
+              </div>
+            </div>
 
-        {strays.length ? (
-          <ul className="m-0 flex list-disc flex-col gap-[0.2rem] pl-[1.1rem] text-xs leading-[1.35] text-coral-deep">
-            {strays.map((skip) => (
-              <li key={`${skip.title}-${skip.reason}`}>
-                <strong>{skip.title || 'Sin nombre'}</strong>
-                {': '}
-                {skip.reason}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        <div
-          className="flex max-h-[min(42vh,360px)] flex-col gap-[0.35rem] overflow-auto rounded-md border border-ink/10 bg-surface p-[0.15rem]"
-          aria-label="Cursos del encargo"
-        >
-          {filtered.length === 0 ? (
-            <p className="m-0 p-4 text-center text-base text-ink-soft">
-              No hay cursos que coincidan.
-            </p>
-          ) : (
-            filtered.map((course) => {
-              const checked = picked.has(course.path)
-              const reason = skipByPath.get(course.path)
-              return (
-                <label key={course.path} className={cn(rowBase, checked && 'bg-coral/12')}>
-                  <input
-                    className="mt-[0.2rem] shrink-0 accent-coral"
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleCourse(course.path)}
+            {strays.length ? (
+              <ul className="m-0 flex list-disc flex-col gap-[0.2rem] pl-[1.1rem] text-xs leading-[1.35] text-coral-deep">
+                {strays.map((skip) => (
+                  <li key={`${skip.title}-${skip.reason}`}>
+                    <strong>{skip.title || 'Sin nombre'}</strong>
+                    {': '}
+                    {skip.reason}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div
+              className="flex max-h-[min(32vh,280px)] flex-col gap-[0.35rem] overflow-auto rounded-md border border-ink/10 bg-surface p-[0.15rem]"
+              aria-label="Cursos del encargo"
+            >
+              {filtered.length === 0 ? (
+                <p className="m-0 p-4 text-center text-base text-ink-soft">
+                  No hay cursos que coincidan.
+                </p>
+              ) : (
+                filtered.map((course) => {
+                  const checked = picked.has(course.path)
+                  const reason = skipByPath.get(course.path)
+                  return (
+                    <label key={course.path} className={cn(rowBase, checked && 'bg-coral/12')}>
+                      <input
+                        className="mt-[0.2rem] shrink-0 accent-coral"
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleCourse(course.path)}
+                      />
+                      <span className="flex min-w-0 flex-col gap-[0.15rem]">
+                        <span className="font-display leading-[1.25] font-semibold text-ink">
+                          {course.title || course.path}
+                        </span>
+                        {reason ? (
+                          <span className="text-sm leading-[1.4] text-coral-deep">{reason}</span>
+                        ) : course.institution ? (
+                          <span className="text-xs text-ink-soft">{course.institution}</span>
+                        ) : null}
+                      </span>
+                    </label>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="flex flex-col gap-[0.45rem]">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className={stepTitle}>1 · Encargo para el chat</p>
+                <button
+                  type="button"
+                  className={btnPrimary}
+                  onClick={handleCopyBrief}
+                  disabled={!selected.length || generating}
+                >
+                  {copyLabel}
+                </button>
+              </div>
+              {copyNote ? <p className="m-0 text-xs text-coral-deep">{copyNote}</p> : null}
+              {brief ? (
+                <details className="text-sm text-ink-soft" open={Boolean(copyNote)}>
+                  <summary className="cursor-pointer select-none">Ver encargo</summary>
+                  <textarea
+                    className={cn(briefField, 'mt-2')}
+                    readOnly
+                    spellCheck={false}
+                    value={brief}
+                    aria-label="Encargo"
+                    onFocus={(event) => event.target.select()}
                   />
-                  <span className="flex min-w-0 flex-col gap-[0.15rem]">
-                    <span className="font-display leading-[1.25] font-semibold text-ink">
-                      {course.title || course.path}
-                    </span>
-                    <span className="text-xs break-all text-ink-soft">{course.path}</span>
-                    {reason ? (
-                      <span className="text-sm leading-[1.4] text-coral-deep">{reason}</span>
-                    ) : course.institution ? (
-                      <span className="text-xs text-ink-soft">{course.institution}</span>
-                    ) : null}
-                  </span>
-                </label>
-              )
-            })
+                </details>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+
+        <div className="flex flex-col gap-[0.45rem]">
+          <p className={stepTitle}>
+            {reviewItems.length ? 'Revisa antes de guardar' : '2 · Respuesta'}
+          </p>
+          {detected && reviewItems.length ? (
+            <p className="m-0 inline-flex items-center gap-1.5 text-sm font-semibold text-teal">
+              <ClipboardCheck className="size-4" aria-hidden="true" />
+              Respuesta detectada en el portapapeles
+            </p>
+          ) : null}
+          {reviewItems.length ? (
+            <div
+              className="flex max-h-[min(50vh,420px)] flex-col gap-[0.5rem] overflow-auto rounded-md border border-ink/10 bg-surface p-[0.35rem]"
+              aria-label="Descripciones de la respuesta"
+            >
+              {reviewItems.map((item) => {
+                const kept = !excluded.has(item.path)
+                const summary = edits.get(item.path) ?? item.description.summary
+                return (
+                  <div
+                    key={item.path}
+                    className={cn(
+                      'flex items-start gap-[0.65rem] rounded-md px-[0.55rem] py-[0.5rem]',
+                      kept ? 'bg-teal/6' : 'opacity-55'
+                    )}
+                  >
+                    <input
+                      className="mt-[0.25rem] shrink-0 accent-coral"
+                      type="checkbox"
+                      checked={kept}
+                      onChange={() => toggleExcluded(item.path)}
+                      aria-label={`Guardar ${item.title}`}
+                    />
+                    <div className="flex min-w-0 flex-1 flex-col gap-[0.3rem]">
+                      <span className="font-display leading-[1.25] font-semibold text-ink">
+                        {item.title}
+                      </span>
+                      <textarea
+                        className={cn(
+                          fieldControl,
+                          'min-h-[4.2rem] resize-y text-sm leading-[1.45]'
+                        )}
+                        value={summary}
+                        disabled={!kept}
+                        aria-label={`Descripción de ${item.title}`}
+                        onChange={(event) =>
+                          setEdits((prev) => new Map(prev).set(item.path, event.target.value))
+                        }
+                      />
+                      <span className="text-xs text-ink-soft">
+                        {item.description.outcomes?.length || 0} resultados
+                        {item.description.audience ? ` · ${item.description.audience}` : ''}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : null}
+          {missingFromReply.length ? (
+            <p className="m-0 text-xs text-ink-soft">
+              {missingFromReply.length === 1
+                ? '1 curso marcado no vino en la respuesta.'
+                : `${missingFromReply.length} cursos marcados no vinieron en la respuesta.`}
+            </p>
+          ) : null}
+          {rowProblems.length ? (
+            <ul className="m-0 flex list-disc flex-col gap-[0.2rem] pl-[1.1rem] text-xs leading-[1.35] text-coral-deep">
+              {rowProblems.map((skip) => (
+                <li key={`${skip.path || skip.title}-${skip.reason}`}>
+                  <strong>{skip.title || 'Sin nombre'}</strong>
+                  {': '}
+                  {skip.reason}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {reviewItems.length ? (
+            <button
+              type="button"
+              className={cn(btnGhost, btnCompact, 'self-start')}
+              onClick={() => setPaste('')}
+              disabled={saving}
+            >
+              Descartar respuesta
+            </button>
+          ) : (
+            <>
+              <label className={cn(fieldLabel, 'sr-only')} htmlFor="course-description-batch-paste">
+                Respuesta
+              </label>
+              <textarea
+                id="course-description-batch-paste"
+                className={pasteField}
+                spellCheck={false}
+                value={paste}
+                placeholder="Se rellena sola al volver del chat. También puedes pegar aquí el JSON."
+                onChange={(event) => {
+                  setPaste(event.target.value)
+                  if (error) setError('')
+                }}
+              />
+              {parseError ? <p className="m-0 text-xs text-coral-deep">{parseError}</p> : null}
+            </>
           )}
         </div>
-        <div>
-          <label className={fieldLabel} htmlFor="course-description-batch-brief">
-            Encargo
-          </label>
-          <textarea
-            id="course-description-batch-brief"
-            ref={briefRef}
-            className={briefField}
-            readOnly
-            spellCheck={false}
-            value={
-              generating
-                ? 'Leyendo los temarios…'
-                : brief || (selected.length ? 'Pulsa Generar encargo.' : 'Marca al menos un curso.')
-            }
-          />
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]">
-          <span className="text-xs text-ink-soft">{copyNote}</span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className={btnPrimary}
-              onClick={handleGenerate}
-              disabled={!selected.length || generating}
-            >
-              {generating ? 'Generando…' : 'Generar encargo'}
-            </button>
-            <button type="button" className={btnGhost} onClick={handleCopy} disabled={!canCopy}>
-              {copied ? 'Copiado' : 'Copiar'}
-            </button>
-          </div>
-        </div>
 
-        <div>
-          <label className={fieldLabel} htmlFor="course-description-batch-paste">
-            Respuesta
-          </label>
-          <textarea
-            id="course-description-batch-paste"
-            className={pasteField}
-            spellCheck={false}
-            value={paste}
-            placeholder="Pega aquí el JSON del chat"
-            onChange={(event) => {
-              setPaste(event.target.value)
-              if (error) setError('')
-            }}
-          />
-        </div>
         {error ? (
           <p className="m-0 text-sm leading-[1.4] text-coral-deep" role="alert">
             {error}
@@ -462,8 +525,8 @@ function CourseDescriptionBatch({ courses, onClose }) {
           <button type="button" className={btnGhost} onClick={handleClose} disabled={saving}>
             Cerrar
           </button>
-          <button type="submit" className={btnPrimary} disabled={saving || !selected.length}>
-            {saving ? 'Guardando…' : 'Guardar'}
+          <button type="submit" className={btnPrimary} disabled={saving || !keptItems.length}>
+            {saving ? 'Guardando…' : keptItems.length ? `Guardar ${keptItems.length}` : 'Guardar'}
           </button>
         </div>
       </form>

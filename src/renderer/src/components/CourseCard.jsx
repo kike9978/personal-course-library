@@ -4,8 +4,10 @@ import { InstitutionMark } from './InstitutionMark'
 import CoursePickBox from './CoursePickBox'
 import ExcitementGauge from './ExcitementGauge'
 import brandMark from '../assets/img/brand-mark.svg'
-import { FolderOpen, Pencil, Play } from 'lucide-react'
+import { FolderOpen, ImagePlus, Pencil, Play } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import { cn } from '../ui/cn'
+import { coverErrorText, saveCoverFromTransfer, transferMayHoldImage } from '../utils/coverDrop'
 import { badgeAccent, badgeSuccess, badgeTheme, badgeWarn } from '../ui/classes'
 
 const ribbon =
@@ -102,6 +104,39 @@ function CourseCard({
   const [isInProcess, setIsInProcess] = useState(Boolean(initialInProcess))
   const isRecentlyViewed = Boolean(course.learning?.isRecentlyViewed)
   const { ref, coverSrc, onCoverError } = useCoverImage(coursePath, hasCover, course.coverStamp)
+  const [coverDrop, setCoverDrop] = useState('')
+
+  const coverDropHandlers = {
+    onDragEnter: (e) => {
+      if (coverDrop === 'saving' || !transferMayHoldImage(e.dataTransfer)) return
+      e.preventDefault()
+      setCoverDrop('over')
+    },
+    onDragOver: (e) => {
+      if (coverDrop === 'saving' || !transferMayHoldImage(e.dataTransfer)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      if (coverDrop !== 'over') setCoverDrop('over')
+    },
+    onDragLeave: (e) => {
+      if (e.currentTarget.contains(e.relatedTarget)) return
+      if (coverDrop === 'over') setCoverDrop('')
+    },
+    onDrop: async (e) => {
+      if (coverDrop === 'saving' || !transferMayHoldImage(e.dataTransfer)) return
+      e.preventDefault()
+      e.stopPropagation()
+      setCoverDrop('saving')
+      try {
+        await saveCoverFromTransfer(coursePath, e.dataTransfer)
+        toast.success(hasCover ? 'Portada reemplazada' : 'Portada guardada')
+      } catch (err) {
+        toast.error(coverErrorText(err, 'No se pudo usar esa imagen'))
+      } finally {
+        setCoverDrop('')
+      }
+    }
+  }
 
   useEffect(() => {
     setIsInProcess(Boolean(course.isInProcess))
@@ -185,23 +220,38 @@ function CourseCard({
       tabIndex={tabIndex ?? 0}
       data-course-path={coursePath}
     >
-      <div className="relative aspect-[16/10] overflow-hidden bg-cream-deep">
+      <div className="relative aspect-[16/10] overflow-hidden bg-cream-deep" {...coverDropHandlers}>
+        {coverDrop ? (
+          <div className="pointer-events-none absolute inset-0 z-[4] grid place-items-center border-2 border-dashed border-coral bg-cream/95 text-center text-sm font-semibold text-coral-deep backdrop-blur-[2px]">
+            {coverDrop === 'saving'
+              ? 'Guardando…'
+              : hasCover
+                ? 'Suelta para reemplazar la portada'
+                : 'Suelta para usarla de portada'}
+          </div>
+        ) : null}
         {hasCover ? (
           <img
             className="block h-full w-full object-cover transition-transform duration-500 ease-pop group-hover:scale-[1.03]"
             src={coverSrc}
             alt=""
+            draggable={false}
             onError={onCoverError}
           />
         ) : (
           <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle_at_30%_30%,rgba(232,69,112,0.08),transparent_50%),radial-gradient(circle_at_70%_70%,rgba(61,122,122,0.08),transparent_45%),var(--color-cream-deep)] text-ink-soft">
             <img
-              className="!h-7 !w-7 max-h-7 max-w-7 object-contain opacity-55"
+              className="!h-7 !w-7 max-h-7 max-w-7 object-contain opacity-55 transition-opacity group-hover:opacity-0"
               src={brandMark}
               alt=""
               width={28}
               height={28}
+              draggable={false}
             />
+            <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-xs font-semibold opacity-0 transition-opacity group-hover:opacity-100">
+              <ImagePlus className="size-5" aria-hidden="true" />
+              Arrastra una portada aquí
+            </span>
           </div>
         )}
 

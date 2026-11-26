@@ -36,6 +36,9 @@ export function courseMatchesLibraryFilters(course, filters = {}) {
   if (filters.isNewOnly && !course?.isNew) return false
   if (filters.recentlyViewedOnly && !course?.learning?.isRecentlyViewed) return false
   if (filters.missingPropsOnly && !course?.missingProps) return false
+  if (filters.gap === 'cover' && course?.hasCover) return false
+  if (filters.gap === 'description' && String(course?.description?.summary || '').trim())
+    return false
   if (filters.institution && course?.institution !== filters.institution) return false
   if (filters.program && !(course?.programs || []).includes(filters.program)) return false
   if (filters.theme && !(course?.theme || []).includes(filters.theme)) return false
@@ -44,11 +47,11 @@ export function courseMatchesLibraryFilters(course, filters = {}) {
   return true
 }
 
-/** Exact emotion. En curso and Reciente stay out unless that filter is on too. */
+/** Ganas at least `minExcitement`. En curso and Reciente stay out unless that filter is on too. */
 export function matchesExcitement(course, filters = {}) {
   const wanted = Number(filters.minExcitement) || 0
   if (!wanted) return true
-  if ((Number(course?.learning?.excitement) || 0) !== wanted) return false
+  if ((Number(course?.learning?.excitement) || 0) < wanted) return false
   if (!filters.isInProcessOnly && course?.isInProcess) return false
   if (!filters.recentlyViewedOnly && course?.learning?.isRecentlyViewed) return false
   return true
@@ -61,6 +64,7 @@ export function libraryFiltersActive(filters = {}) {
     filters.isNewOnly ||
     filters.recentlyViewedOnly ||
     filters.missingPropsOnly ||
+    filters.gap ||
     filters.institution ||
     filters.program ||
     filters.theme ||

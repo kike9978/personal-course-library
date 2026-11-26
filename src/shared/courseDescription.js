@@ -422,6 +422,43 @@ export function buildCourseDescriptionBatchBrief(entries, options = {}) {
     .join('\n\n')
 }
 
+/**
+ * Extra section for another encargo (listas) that also asks for missing descriptions.
+ * The reply carries them under `descriptions`, the same rows parseCourseDescriptionBatch reads.
+ */
+export function buildDescriptionRequest(entries) {
+  const list = (Array.isArray(entries) ? entries : []).filter((entry) => fact(entry?.course?.path))
+  if (!list.length) return { text: '', example: [] }
+  const blocks = list.map((entry, index) => {
+    const { lines } = factLines(entry.course)
+    const packed = outlineBlock(entry.outline, {
+      outlineUnreadable: entry.outlineUnreadable,
+      limits: BATCH_OUTLINE_LIMITS
+    })
+    return [`Course ${index + 1}`, ...lines, 'Outline', packed.text, packed.truncation]
+      .filter(Boolean)
+      .join('\n')
+  })
+  const first = list[0].course
+  const example = [
+    {
+      folder: fact(first.path),
+      course: fact(first.title) || 'Untitled course',
+      summary: EXAMPLE_SUMMARY,
+      audience: EXAMPLE_AUDIENCE,
+      outcomes: ['A result this outline covers.', 'Another result this outline covers.'],
+      source: { title: '', url: '' },
+      grounded: 'outline'
+    }
+  ]
+  const text = [
+    `Also write a description for each of these ${list.length} courses, in the same JSON under "descriptions". Only these courses. Copy folder and course exactly.`,
+    blocks.join('\n\n'),
+    'Ground each description in that course outline and, when you can open one, a real page about it. Outcomes must name things the outline covers. If you cannot find a real page, leave source.url empty and set grounded to "outline". Write each summary, audience, and outcomes in the language of that course title.'
+  ].join('\n\n')
+  return { text, example }
+}
+
 function descriptionRows(value) {
   if (Array.isArray(value)) return value
   if (!value || typeof value !== 'object') return null
