@@ -99,8 +99,11 @@ import {
   listSourceNotes,
   listSources,
   readSource,
+  setSourceCaptures,
+  setSourcePosition,
   upsertSource
 } from './services/learningStore.js'
+import { installSourceViewerGuards } from './services/sourceViewer.js'
 import {
   enqueueNotionDelete,
   enqueueNotionPlaylistDelete,
@@ -130,6 +133,8 @@ import { canonicalSourceUrl } from '../shared/sources.js'
 import {
   cacheSourceThumbnail,
   removeSourceThumbnail,
+  saveSourceCapture,
+  sourceCapturePath,
   resolveSourceMeta,
   sourceThumbPath
 } from './services/sourceMeta.js'
@@ -212,7 +217,9 @@ function createWindow() {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Fuentes shows remote pages in a <webview>; sourceViewer.js locks each one down.
+      webviewTag: true
     }
   })
 
@@ -411,8 +418,11 @@ function registerCourseMediaProtocol() {
       const url = new URL(request.url)
       const courseDir = url.searchParams.get('course')
 
-      if (url.hostname === 'source-thumb') {
-        const thumbPath = sourceThumbPath(url.searchParams.get('file'))
+      if (url.hostname === 'source-thumb' || url.hostname === 'source-capture') {
+        const thumbPath =
+          url.hostname === 'source-thumb'
+            ? sourceThumbPath(url.searchParams.get('file'))
+            : sourceCapturePath(url.searchParams.get('file'))
         if (!thumbPath || !fs.existsSync(thumbPath)) return new Response('Not Found', { status: 404 })
         const data = await fsPromises.readFile(thumbPath)
         const mime = COVER_MIME[extname(thumbPath).toLowerCase()] || 'image/avif'
@@ -873,9 +883,40 @@ function registerIpcHandlers() {
   ipcMain.handle('delete-source', async (_event, id) => {
     const result = deleteSource(id)
     if (result.removed?.thumbnailFile) await removeSourceThumbnail(result.removed.thumbnailFile)
+    for (const capture of result.removed?.captures || []) {
+      const target = sourceCapturePath(capture.file)
+      if (target) await fsPromises.rm(target, { force: true }).catch(() => {})
+    }
     broadcastToWindows('sources-changed', { id })
     if (result.noteCount) broadcastToWindows('notes-changed', {})
     return { noteCount: result.noteCount, removed: Boolean(result.removed) }
+  })
+  ipcMain.handle('set-source-position', (_event, { id, positionSec, durationSec } = {}) =>
+    setSourcePosition(id, { positionSec, durationSec })
+  )
+  ipcMain.handle('add-source-capture', async (_event, id) => {
+    if (!readSource(id)) throw new Error('Fuente no encontrada')
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Adjuntar captura',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }]
+    })
+    if (result.canceled || !result.filePaths.length) return { canceled: true }
+    const files = []
+    for (const filePath of result.filePaths.slice(0, 20)) {
+      const file = await saveSourceCapture(id, filePath)
+      if (file) files.push({ file, addedAt: Date.now() })
+    }
+    const source = setSourceCaptures(id, (list) => [...list, ...files])
+    broadcastToWindows('sources-changed', { id })
+    return { canceled: false, added: files.length, source }
+  })
+  ipcMain.handle('remove-source-capture', async (_event, { id, file } = {}) => {
+    const source = setSourceCaptures(id, (list) => list.filter((item) => item.file !== file))
+    const target = sourceCapturePath(file)
+    if (target) await fsPromises.rm(target, { force: true }).catch(() => {})
+    broadcastToWindows('sources-changed', { id })
+    return source
   })
   ipcMain.handle('open-source-url', async (_event, id) => {
     const source = readSource(id)
@@ -1227,6 +1268,7 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.personal.courselibrary')
 
   registerCourseMediaProtocol()
+  installSourceViewerGuards()
   registerIpcHandlers()
   startNotionSync({
     notifyNotes: () => broadcastToWindows('notes-changed', {}),

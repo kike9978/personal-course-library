@@ -2,7 +2,7 @@
 
 **App:** Catálogo de cursos (personal-course-library)  
 **Date:** 2026-11-26  
-**Status:** Proposed  
+**Status:** Phases 1–2 built (2026-11-26). Phases 3–6 proposed.  
 **Goal:** Let a YouTube video, an article, or an Instagram post become a place in the knowledge base, the same way a lesson is. Notes taken on a link are ordinary findings. They carry topics, show up in Anotaciones and the graph, sync to Notion, and feed flashcards.
 
 ---
@@ -18,7 +18,7 @@ Rules:
 - Sources live in the learning store (app data), next to `findings` and `topics`. Nothing is written to the course library folder. `courseProps.json` stays for real courses only.
 - A source is worth keeping once it has at least one finding. Adding a link should take seconds. Processing it into the knowledge base is a separate step.
 - No API keys are required for the core flow. Metadata fetching fails softly and the user can always type a title.
-- **No sign-in.** The app never asks for a YouTube, Instagram, or any other account, and never stores one. Content is shown through public embeds, a saved copy, or a capture made from the browser where the user is already signed in.
+- **No sign-in by default.** Out of the box the app never asks for a YouTube, Instagram, or any other account, and never stores one. Content is shown through public embeds, a saved copy, or a capture made from the browser where the user is already signed in. The one exception is an opt-in Instagram sign-in for the viewer (Phase 2b), which the user turns on and can remove at any time.
 - **Sources and courses stay apart.** Sources are grouped in their own collections inside the Fuentes view. They never appear in Listas, the course board, or the library grid, and courses never appear in a collection. Shared code is fine. Shared screens and shared records are not.
 
 Leave out of this plan: downloading videos, multi-user sharing, and automatic summaries by a language model.
@@ -179,7 +179,11 @@ Thumbnails are cached to disk so the grid works offline and does not hit remote 
 - Public posts and reels from public accounts render through the embed page without an account. That page is what Instagram serves to websites that embed a post, so it is the supported no-login path.
 - Private accounts, age-restricted posts, and stories cannot be shown without a session. For those, the viewer shows the captured copy if there is one. Otherwise it says **Esta publicación necesita iniciar sesión en Instagram. Guárdala desde el navegador con la extensión para verla aquí.** and offers **Adjuntar captura**.
 - Carousels: the embed handles paging. Captured carousels show as a strip in the app's viewer (reuse `CierreImageViewer`).
-- **Spike first:** before building the UI, confirm in Electron that the embed page loads in a fresh session with no Instagram cookies, for a post, a reel, and a carousel. Record the result here.
+- **Spike result (2026-11-26, Electron 33):**
+  - A public reel (`/reel/C08-b3uM0U9/embed/captioned/`) loads in a fresh in-memory session with no Instagram cookies: video, account, caption, and likes. A removed or invented code shows Instagram's "link may be broken" page. A carousel was not tested.
+  - The first load sometimes fails with `ERR_FAILED`. A second load works, so the viewer has **Reintentar**.
+  - YouTube's embed shows **Error 153** with no referrer. With `httpreferrer="https://www.youtube-nocookie.com/"` on the webview it plays, with no cookies set.
+  - Instagram's `og:title` is localized ("… en Instagram: …"), so the title parser accepts any language.
 
 **Isolation for anything remote**
 
@@ -207,6 +211,54 @@ If a later need appears that only such a service can meet, add it as an explicit
 - A public Instagram post and reel play in the panel with no Instagram cookies in the app's sessions.
 - A story or private post shows its captured copy, or the sign-in message and **Adjuntar captura**, never a login form.
 - A link inside any embed opens in the system browser, not inside the app.
+
+### Phase 2b — Optional Instagram sign-in for the viewer
+
+**Value:** Reels with licensed music, stories, and posts from private accounts the user follows play inside the app, the same way they do on instagram.com.
+
+**Why it is needed.** Instagram's public embed leaves the video out of reels with licensed music. It sends only the cover and **Watch on Instagram**. Checked on 2026-11-26: `reel/DfCoEVFg4dN` (original audio) embeds with its video, and `reel/DfTDB71oXxu` (audio "Mbrr · Pupa Chow") embeds with no `<video>` at all. Stories and private posts have no embed. Only a signed-in session gets the video. Third-party apps that play these reels use their own accounts on their servers, Instagram's undocumented endpoints, or the user's login. Of those, only the user's own login keeps links private and doesn't depend on endpoints Instagram can change at any time.
+
+**Rules**
+
+- **Off by default.** Turned on only from the viewer's message or from the app settings, with a sentence saying what is stored and where.
+- **The user's own account, entered on Instagram's own login page.** The app never sees or stores the password: Instagram's page sets its cookies in the session, like any browser. No API keys, no app registered with Meta.
+- **A separate, persistent session used only for Instagram:** `partition="persist:instagram"`. The YouTube and article viewers stay on the in-memory `sources` session and never see these cookies. The main app window never sees them either.
+- **Same isolation as Phase 2.** No Node, no preload, sandboxed, permissions denied except fullscreen, downloads blocked, links to other sites open in the system browser.
+- **Nothing beyond what a browser does.** The app shows Instagram's pages. It does not call Instagram's private API, download video files, or read the feed. Metadata fetching (section 4) stays anonymous and does not use this session.
+- **Easy to undo.** **Cerrar sesión de Instagram** clears the partition (`session.clearStorageData()`) and switches the viewer back to public embeds.
+
+**Flow**
+
+1. A reel shows the Phase 2 message "Instagram no deja reproducir este reel fuera de su app…". Below it, a second button **Iniciar sesión en Instagram** appears next to **Abrir enlace**.
+2. A confirmation dialog explains: the session is kept in this app's data folder, it is used only to view Instagram links in Fuentes, and it can be closed from settings. Accept → a small window opens `https://www.instagram.com/accounts/login/` in the `persist:instagram` partition. Login pages are allowed in that window only.
+3. When the window lands back on instagram.com logged in (a `sessionid` cookie exists in the partition), it closes and the viewer reloads.
+4. Signed in, Instagram links load the full page (`instagram.com/reel/<code>/`, `/p/<code>/`, `/stories/<user>/<id>/`) instead of the embed. The page is trimmed with injected CSS that hides navigation and suggestions, so the post fills the viewer. If the trim breaks after an Instagram change, the full page still works.
+5. If the session expires and Instagram redirects to login, the viewer shows **Tu sesión de Instagram caducó** with **Iniciar sesión otra vez**, never a login form inside the viewer itself.
+
+**Settings**
+
+- A **Fuentes** section in the app settings: **Instagram: sesión iniciada / sin sesión**, **Cerrar sesión de Instagram**, and one line on what it means.
+- The viewer footer's "Sin iniciar sesión · nada se guarda" becomes **Sesión de Instagram activa** while signed in, so the state is never hidden.
+
+**Main process changes**
+
+- `sourceViewer.js`: accept `persist:instagram` in `will-attach-webview` only for Instagram URLs, and only when the setting is on. Configure that session's permission and download handlers like `sources`.
+- `isLoginUrl` stays as is for the viewer. The login window is the only place that allows `accounts/login` and `challenge` pages.
+- New IPC: `instagram-session-status`, `instagram-sign-in` (opens the login window), `instagram-sign-out` (clears the partition).
+
+**Risks**
+
+- **Account checks.** Instagram may ask for a challenge (code by email or SMS) on a new device. The login window must show those pages too.
+- **Terms.** This is ordinary browsing with the user's own account, which the terms allow. Automated access is what they forbid, so this phase must stay manual: no background fetching with the session.
+- **Shared machines.** The cookies stay in the app's data folder until signed out. The settings sentence says so.
+
+**Done when**
+
+- With the setting off, nothing changes from Phase 2, and the `persist:instagram` partition has no cookies.
+- After signing in, `reel/DfTDB71oXxu` plays in the viewer, and a story link from a followed account shows the story.
+- The YouTube and article viewers still run in the in-memory session and have no Instagram cookies.
+- **Cerrar sesión de Instagram** removes the cookies, and the same reel goes back to the cover and the message.
+- An expired session shows the message and the sign-in button, never a login form in the viewer.
 
 ### Phase 3 — Keep a copy, reach the rest of the app
 
@@ -337,7 +389,7 @@ For sources:
 
 ## 6. Risks and open questions
 
-- **Instagram** is the least reliable. Public embeds cover public posts. Captures from the extension cover stories and private posts. The plan accepts a URL-only source as a normal outcome rather than building a workaround that breaks next month, which is why anonymous viewer services are not used (Phase 2).
+- **Instagram** is the least reliable. Public embeds cover public posts with original audio. The optional sign-in (Phase 2b) covers licensed-music reels, stories and private posts for users who turn it on. Captures from the extension cover the rest. The plan accepts a URL-only source as a normal outcome rather than building a workaround that breaks next month, which is why anonymous viewer services are not used (Phase 2).
 - **Embed changes.** If Instagram starts requiring a login for the embed page, the viewer falls back to captures and metadata. The Phase 2 spike result should be re-checked when an Electron upgrade lands.
 - **SQLite move.** The connected-study plan moves the learning store to SQLite in Phase 4. `sources` and `sourceCollections` (with an items join table) become their own tables, separate from playlists, and source anchors fit the anchor table it introduces. If that migration lands first, add them to it rather than to the JSON shape.
 - **Quick capture outside the app.** Phase 6 covers Chrome. A global shortcut that reads the clipboard would also help for links that arrive in chat apps. Leave that until Phase 6 shows how much capture still happens outside the browser.
@@ -352,6 +404,7 @@ For sources:
 |-------|------|------------|
 | 1 | Store + view | Source anchor in `normalizeAnchor` and Notion places |
 | 2 | In-app viewer | Phase 1 source panel. Instagram embed spike first. CSP and webview isolation. Captured copies need Phase 3 or 6 |
+| 2b | Optional Instagram sign-in | Phase 2 viewer and its isolation rules. Independent of Phases 3–6 |
 | 3 | Copies + flashcards | Phase 2 for transcripts |
 | 4 | Collections | Phase 1 only. Can start right after Phase 1 if grouping matters more than the player |
 | 5 | Smart builder | Phase 4 records. Refactor of `playlistSemantic.js` with its tests kept green |

@@ -107,7 +107,8 @@ function AnnotationsPopoutView({ coursePath = null, courses = [] }) {
     async (item) => {
       try {
         await window.api.annotationsJump({
-          coursePath: item.coursePath || coursePath,
+          sourceId: item.sourceId || null,
+          coursePath: item.sourceId ? null : item.coursePath || coursePath,
           lessonRelativePath: item.lessonRelativePath || null,
           timeSec: item.timeSec ?? null,
           projectId: item.projectId || null

@@ -1580,6 +1580,7 @@ function AnnotationsWorkspace({
   const jumpTarget = (node) =>
     node?.data?.kind === 'file'
       ? {
+          sourceId: node.data.sourceId || null,
           coursePath: node.data.coursePath,
           lessonRelativePath: node.data.lessonRelativePath,
           projectId: node.data.projectId
@@ -2158,7 +2159,7 @@ function AnnotationsWorkspace({
                       Guardar
                     </button>
                   ) : null}
-                  {onJump && selected.coursePath && typeof selected.timeSec !== 'number' ? (
+                  {onJump && (selected.coursePath || selected.sourceId) && typeof selected.timeSec !== 'number' ? (
                     <button
                       type="button"
                       className={headerIcon}
@@ -2286,7 +2287,7 @@ function AnnotationsWorkspace({
                       </span>
                     ) : null}
                     {typeof selected.timeSec === 'number' ? (
-                      onJump && selected.coursePath ? (
+                      onJump && (selected.coursePath || selected.sourceId) ? (
                         <button
                           type="button"
                           className="inline-flex cursor-pointer items-center gap-1 rounded-full border-0 bg-coral-soft px-2 py-0.5 text-xs font-medium text-coral-deep tabular-nums hover:bg-coral/15 [&_svg]:!text-coral-deep"
@@ -2359,7 +2360,7 @@ function AnnotationsWorkspace({
                       </span>
                       <span className="flex min-w-0 flex-wrap items-center gap-[0.45rem]">
                         <span>{formatTime(selected.timeSec)}</span>
-                        {onJump && selected.coursePath ? (
+                        {onJump && (selected.coursePath || selected.sourceId) ? (
                           <button
                             type="button"
                             className={cn(btnGhost, btnCompact, 'h-6 px-2')}

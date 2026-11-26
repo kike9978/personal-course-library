@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import {
+  ArrowLeft,
   Archive,
   Camera,
+  Eye,
+  Play,
   ExternalLink,
   FileText,
   Globe,
@@ -17,6 +20,7 @@ import {
   X
 } from 'lucide-react'
 import AppHeader from './AppHeader'
+import SourceViewer from './SourceViewer'
 import NoteEditor, { NoteBody } from './NoteEditor'
 import ChipAutocomplete from './ChipAutocomplete'
 import { askConfirm } from '../utils/askConfirm'
@@ -191,9 +195,16 @@ function EditableText({ value, placeholder, onSave, className, inputClassName, l
   )
 }
 
-function SourceNotes({ source }) {
+/**
+ * `player` is set while a YouTube video is open in the viewer: `{ time, seek }`.
+ * `onOpenAt(sec)` opens the viewer at a second when it is closed.
+ */
+function SourceNotes({ source, player, onOpenAt }) {
   const [notes, setNotes] = useState([])
   const [draft, setDraft] = useState('')
+  // The second the note is about: taken when typing starts, so playback can keep going.
+  const pinnedTime = useRef(null)
+  const timed = source.kind === 'youtube'
   const [editorKey, setEditorKey] = useState(0)
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState('')
@@ -221,10 +232,18 @@ function SourceNotes({ source }) {
     setSaving(true)
     const wasInbox = source.status === 'inbox'
     try {
+      const timeSec = timed && player ? (pinnedTime.current ?? player.time) : null
       await window.api.upsertNote(null, {
         body,
-        anchors: [{ sourceId: source.id, sourceTitle: source.title }]
+        anchors: [
+          {
+            sourceId: source.id,
+            sourceTitle: source.title,
+            ...(typeof timeSec === 'number' ? { timeSec: Math.floor(timeSec) } : {})
+          }
+        ]
       })
+      pinnedTime.current = null
       setDraft('')
       setEditorKey((key) => key + 1)
       await load()
@@ -289,9 +308,21 @@ function SourceNotes({ source }) {
           key={`source-${source.id}-${editorKey}`}
           editorKey={`source-${source.id}-${editorKey}`}
           bodyText=""
-          placeholder="¿Qué vale la pena recordar de esto?"
+          placeholder={
+            timed && player
+              ? `Escribe una nota en ${formatNoteTimestamp(pinnedTime.current ?? player.time)}`
+              : '¿Qué vale la pena recordar de esto?'
+          }
           compactToolbar
-          onChange={({ markdown }) => setDraft(markdown)}
+          enableTimestamp={Boolean(timed && player)}
+          currentTimeSec={player?.time || 0}
+          onSeekTimestamp={player ? (sec) => player.seek(sec) : null}
+          onChange={({ markdown }) => {
+            const empty = !markdown.trim()
+            if (empty) pinnedTime.current = null
+            else if (pinnedTime.current == null && player) pinnedTime.current = player.time
+            setDraft(markdown)
+          }}
         />
         <div className="flex justify-start">
           <button
@@ -300,7 +331,9 @@ function SourceNotes({ source }) {
             disabled={!draft.trim() || saving}
             onClick={saveNew}
           >
-            Guardar nota
+            {timed && player && draft.trim()
+              ? `Guardar nota en ${formatNoteTimestamp(pinnedTime.current ?? player.time)}`
+              : 'Guardar nota'}
           </button>
         </div>
       </div>
@@ -334,7 +367,21 @@ function SourceNotes({ source }) {
               <li key={note.id} className={cn(card, 'group/note px-3 pt-2.5 pb-1.5')}>
                 <div className="mb-1 flex items-center gap-2 text-xs text-ink-soft">
                   {typeof note.timeSec === 'number' ? (
-                    <span className={badgeNeutral}>{formatNoteTimestamp(note.timeSec)}</span>
+                    timed ? (
+                      <button
+                        type="button"
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-full border-0 bg-coral-soft px-2 py-0.5 text-xs font-medium text-coral-deep tabular-nums hover:bg-coral/15"
+                        title="Ir a este momento del video"
+                        onClick={() =>
+                          player ? player.seek(note.timeSec) : onOpenAt?.(note.timeSec)
+                        }
+                      >
+                        <Play aria-hidden="true" className="size-3 fill-current" />
+                        Ir a {formatNoteTimestamp(note.timeSec)}
+                      </button>
+                    ) : (
+                      <span className={badgeNeutral}>{formatNoteTimestamp(note.timeSec)}</span>
+                    )
                   ) : null}
                   <span>{new Date(note.createdAt || Date.now()).toLocaleDateString('es')}</span>
                   <span className="ml-auto flex gap-1 opacity-0 group-hover/note:opacity-100 group-focus-within/note:opacity-100">
@@ -384,7 +431,7 @@ function SourceNotes({ source }) {
   )
 }
 
-function SourcePanel({ source, topics, onClose, onDeleted }) {
+function SourcePanel({ source, topics, viewing, player, onView, onOpenAt, onClose, onDeleted }) {
   const [refreshing, setRefreshing] = useState(false)
 
   const update = async (patch) => {
@@ -461,7 +508,22 @@ function SourcePanel({ source, topics, onClose, onDeleted }) {
         </button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto px-4 py-4">
-        <Thumb source={source} className="aspect-video w-full rounded-md border border-ink/8" />
+        {viewing ? null : (
+          <button
+            type="button"
+            className="group/thumb relative block cursor-pointer overflow-hidden rounded-md border border-ink/8 bg-transparent p-0"
+            onClick={onView}
+            title="Ver aquí"
+          >
+            <Thumb source={source} className="aspect-video w-full" />
+            <span className="absolute inset-0 grid place-items-center bg-ink/0 text-white opacity-0 transition-opacity group-hover/thumb:bg-ink/35 group-hover/thumb:opacity-100">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-ink/70 px-3 py-1.5 text-sm font-semibold">
+                <Eye aria-hidden="true" className="size-4" />
+                Ver aquí
+              </span>
+            </span>
+          </button>
+        )}
         <div className="flex flex-col gap-1">
           <EditableText
             label="Título"
@@ -482,6 +544,12 @@ function SourcePanel({ source, topics, onClose, onDeleted }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {viewing ? null : (
+            <button type="button" className={cn(btnPrimary, btnCompact)} onClick={onView}>
+              <Eye aria-hidden="true" className="size-3.5" />
+              Ver aquí
+            </button>
+          )}
           <button
             type="button"
             className={cn(btnGhost, btnCompact)}
@@ -526,7 +594,7 @@ function SourcePanel({ source, topics, onClose, onDeleted }) {
           onChange={setTopics}
           placeholder="Añade un tema…"
         />
-        <SourceNotes source={source} />
+        <SourceNotes source={source} player={player} onOpenAt={onOpenAt} />
         <div className="border-t border-ink/8 pt-4">
           <button type="button" className={cn(btnDanger, btnCompact)} onClick={remove}>
             <Trash2 aria-hidden="true" className="size-3.5" />
@@ -538,7 +606,7 @@ function SourcePanel({ source, topics, onClose, onDeleted }) {
   )
 }
 
-function SourcesView({ onNavigate }) {
+function SourcesView({ onNavigate, openTarget }) {
   const [sources, setSources] = useState([])
   const [topics, setTopics] = useState([])
   const [loading, setLoading] = useState(true)
@@ -550,6 +618,10 @@ function SourcesView({ onNavigate }) {
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState(null)
   const [highlightId, setHighlightId] = useState(null)
+  // The viewer replaces the grid while a link is open in it.
+  const [viewing, setViewing] = useState(null) // { id, startSec, nonce }
+  const [playerTime, setPlayerTime] = useState(0)
+  const viewerRef = useRef(null)
   const linkInputRef = useRef(null)
 
   const load = useCallback(async () => {
@@ -654,6 +726,52 @@ function SourcesView({ onNavigate }) {
   }, [sources, topics])
 
   const selected = sources.find((source) => source.id === selectedId) || null
+  const viewingSource = viewing && selected && viewing.id === selected.id ? selected : null
+
+  const openViewer = useCallback((source, sec = null) => {
+    if (!source) return
+    const startSec =
+      typeof sec === 'number'
+        ? sec
+        : typeof source.lastPositionSec === 'number'
+          ? source.lastPositionSec
+          : source.startSec || 0
+    setSelectedId(source.id)
+    setPlayerTime(startSec || 0)
+    // A jump to a chosen second starts playing; reopening where you left off does not.
+    setViewing({ id: source.id, startSec, autoplay: typeof sec === 'number', nonce: Date.now() })
+  }, [])
+
+  const openAt = useCallback(
+    (sec) => {
+      if (viewingSource && viewerRef.current) viewerRef.current.seek(sec)
+      else openViewer(selected, sec)
+    },
+    [viewingSource, selected, openViewer]
+  )
+
+  // Opened from Anotaciones or the graph: show that link, at that second when there is one.
+  const handledTarget = useRef(null)
+  useEffect(() => {
+    if (!openTarget?.id || loading || handledTarget.current === openTarget.at) return
+    const source = sources.find((item) => item.id === openTarget.id)
+    handledTarget.current = openTarget.at
+    if (!source) {
+      toast.error('Esa fuente ya no está guardada')
+      return
+    }
+    setStatus(source.status || 'inbox')
+    if (viewing?.id === source.id && viewerRef.current && typeof openTarget.timeSec === 'number') {
+      viewerRef.current.seek(openTarget.timeSec)
+      return
+    }
+    openViewer(source, typeof openTarget.timeSec === 'number' ? openTarget.timeSec : null)
+  }, [openTarget, loading, sources, viewing, openViewer])
+
+  const player =
+    viewingSource?.kind === 'youtube'
+      ? { time: playerTime, seek: (sec) => viewerRef.current?.seek(sec) }
+      : null
 
   const emptyText = sources.length
     ? status === 'inbox' && !kind && !topicId && !query
@@ -750,42 +868,78 @@ function SourcesView({ onNavigate }) {
         </div>
       </AppHeader>
       <div className="flex min-h-0 flex-1 max-[900px]:flex-col">
-        <main className="min-h-0 min-w-0 flex-1 overflow-auto px-6 py-6">
-          {loading ? (
-            <p className="mt-12 text-center text-ink-soft">Cargando…</p>
-          ) : visible.length ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
-              {visible.map((source) => (
-                <SourceCard
-                  key={source.id}
-                  source={source}
-                  selected={source.id === selectedId}
-                  highlighted={source.id === highlightId}
-                  onSelect={setSelectedId}
-                />
-              ))}
+        {viewingSource ? (
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex items-center gap-2 border-b border-ink/8 bg-surface px-3 py-1.5">
+              <button
+                type="button"
+                className={cn(btnQuiet, 'h-8 px-2')}
+                onClick={() => setViewing(null)}
+              >
+                <ArrowLeft aria-hidden="true" className="size-4" />
+                Fuentes
+              </button>
+              <span className="truncate text-sm text-ink-soft">{viewingSource.title}</span>
             </div>
-          ) : (
-            <div className="mx-auto mt-16 flex max-w-[26rem] flex-col items-center gap-3 text-center">
-              <span className="grid size-12 place-items-center rounded-full bg-coral-soft text-coral">
-                <Link2 className="size-5" aria-hidden="true" />
-              </span>
-              <p className="m-0 font-display text-lg font-semibold">{emptyText}</p>
-              {!sources.length ? (
-                <p className="m-0 text-sm text-ink-soft">
-                  Pega el enlace arriba o en cualquier parte de esta vista.
-                </p>
-              ) : null}
+            <div className="min-h-0 flex-1">
+              <SourceViewer
+                key={`${viewingSource.id}-${viewing.nonce}`}
+                ref={viewerRef}
+                source={viewingSource}
+                startSec={viewing.startSec}
+                autoplay={viewing.autoplay}
+                onTime={setPlayerTime}
+              />
             </div>
-          )}
-        </main>
+          </main>
+        ) : (
+          <main className="min-h-0 min-w-0 flex-1 overflow-auto px-6 py-6">
+            {loading ? (
+              <p className="mt-12 text-center text-ink-soft">Cargando…</p>
+            ) : visible.length ? (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
+                {visible.map((source) => (
+                  <SourceCard
+                    key={source.id}
+                    source={source}
+                    selected={source.id === selectedId}
+                    highlighted={source.id === highlightId}
+                    onSelect={setSelectedId}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="mx-auto mt-16 flex max-w-[26rem] flex-col items-center gap-3 text-center">
+                <span className="grid size-12 place-items-center rounded-full bg-coral-soft text-coral">
+                  <Link2 className="size-5" aria-hidden="true" />
+                </span>
+                <p className="m-0 font-display text-lg font-semibold">{emptyText}</p>
+                {!sources.length ? (
+                  <p className="m-0 text-sm text-ink-soft">
+                    Pega el enlace arriba o en cualquier parte de esta vista.
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </main>
+        )}
         {selected ? (
           <SourcePanel
             key={selected.id}
             source={selected}
             topics={topics}
-            onClose={() => setSelectedId(null)}
-            onDeleted={() => setSelectedId(null)}
+            viewing={Boolean(viewingSource)}
+            player={player}
+            onView={() => openViewer(selected)}
+            onOpenAt={openAt}
+            onClose={() => {
+              setViewing(null)
+              setSelectedId(null)
+            }}
+            onDeleted={() => {
+              setViewing(null)
+              setSelectedId(null)
+            }}
           />
         ) : null}
       </div>

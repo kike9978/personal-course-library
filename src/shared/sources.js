@@ -181,6 +181,16 @@ export function normalizeSource(input = {}, existing = null) {
     topicIds: Array.isArray(pick('topicIds')) ? [...new Set(pick('topicIds').filter(Boolean))] : [],
     status,
     snapshot: pick('snapshot') ?? null,
+    lastPositionSec:
+      typeof pick('lastPositionSec') === 'number' && pick('lastPositionSec') >= 0
+        ? pick('lastPositionSec')
+        : null,
+    lastOpenedAt: Number(pick('lastOpenedAt')) || null,
+    captures: Array.isArray(pick('captures'))
+      ? pick('captures')
+          .filter((item) => item && typeof item.file === 'string')
+          .map((item) => ({ file: item.file, addedAt: Number(item.addedAt) || now }))
+      : [],
     addedAt: Number(base.addedAt || input.addedAt) || now,
     updatedAt: now
   }
@@ -244,4 +254,85 @@ export function parseHtmlMeta(html, baseUrl = '') {
     publishedAt: first('article:published_time', 'datepublished', 'date', 'pubdate'),
     description: first('og:description', 'description', 'twitter:description')
   }
+}
+
+const EMBED_HOSTS = new Set(['www.youtube-nocookie.com', 'www.instagram.com'])
+
+/**
+ * What the in-app viewer shows for a link, without any account.
+ * `mode` is 'youtube' (embedded player), 'instagram' (public embed page),
+ * 'page' (the live page), or 'none' (nothing can be shown without signing in).
+ */
+export function sourceViewer(source) {
+  const url = String(source?.url || '')
+  if (source?.kind === 'youtube') {
+    const id = youTubeVideoId(url)
+    if (id) {
+      return {
+        mode: 'youtube',
+        src: `https://www.youtube-nocookie.com/embed/${id}?rel=0&playsinline=1`,
+        referrer: 'https://www.youtube-nocookie.com/'
+      }
+    }
+  }
+  if (source?.kind === 'instagram') {
+    const code = instagramShortcode(url)
+    if (!code) return { mode: 'none', reason: 'story' }
+    const type = /\/(reel|reels|tv)\//.test(url) ? 'reel' : 'p'
+    return { mode: 'instagram', src: `https://www.instagram.com/${type}/${code}/embed/captioned/` }
+  }
+  if (/^https?:\/\//i.test(url)) return { mode: 'page', src: url }
+  return { mode: 'none', reason: 'url' }
+}
+
+/** True when an embedded page may load this url (the viewer's own hosts, or the link's own page). */
+export function viewerMayLoad(target, sourceUrl) {
+  let url
+  try {
+    url = new URL(String(target || ''))
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return false
+  // On Instagram only the public embed pages work without an account; the rest is a login wall.
+  if (/(^|\.)instagram\.com$/.test(url.hostname)) return /\/embed(\/|$)/.test(url.pathname)
+  if (EMBED_HOSTS.has(url.hostname)) return true
+  try {
+    return Boolean(sourceUrl) && new URL(sourceUrl).hostname === url.hostname
+  } catch {
+    return false
+  }
+}
+
+/** A page that asks the visitor to sign in (Instagram, YouTube, Google). */
+export function isLoginUrl(target) {
+  try {
+    const url = new URL(String(target || ''))
+    return (
+      (/(^|\.)instagram\.com$/.test(url.hostname) &&
+        /^\/(accounts\/login|challenge)/.test(url.pathname)) ||
+      url.hostname === 'accounts.google.com'
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Instagram's og:title reads `Name on Instagram: "caption"`, in the page's language
+ * ("en Instagram", "auf Instagram"…). Split it into the account and a short title
+ * taken from the caption before its hashtags.
+ */
+export function splitInstagramTitle(title) {
+  const text = String(title || '').trim()
+  const match = text.match(/^(.+?)\s+\S+\s+Instagram\s*:\s*["“]?([\s\S]*?)["”]?\s*$/i)
+  if (!match) return { title: text || null }
+  const author = match[1].trim()
+  const caption = match[2]
+    .replace(/(^|\s)#[\p{L}\p{N}_]+/gu, '$1')
+    .replace(/\s+/g, ' ')
+    .replace(/[\s.·•]+$/, '')
+    .trim()
+  const short = caption.length > 120 ? `${caption.slice(0, 119)}…` : caption
+  return { author, title: short || `Publicación de ${author}` }
 }

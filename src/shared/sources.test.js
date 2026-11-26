@@ -7,10 +7,19 @@ import {
   normalizeSource,
   parseHtmlMeta,
   parseYouTubeTime,
+  isLoginUrl,
   sourceKindForUrl,
+  sourceViewer,
+  splitInstagramTitle,
+  viewerMayLoad,
   youTubeVideoId
 } from './sources.js'
-import { findingsForSource, normalizeAnchor, projectFinding } from './knowledgeGraph.js'
+import {
+  buildGlobalGraph,
+  findingsForSource,
+  normalizeAnchor,
+  projectFinding
+} from './knowledgeGraph.js'
 import { anchorFromNotion, filePageMarker, noteAnchorsWire, notionPlace } from './notionSync.js'
 
 describe('canonicalSourceUrl', () => {
@@ -177,5 +186,90 @@ describe('source anchors', () => {
     assert.equal(anchor.sourceTitle, 'Video')
     assert.equal(anchor.coursePath, null)
     assert.equal(anchor.timeSec, 12)
+  })
+})
+
+describe('sourceViewer', () => {
+  it('uses the no-cookie YouTube player with a referrer', () => {
+    const plan = sourceViewer({
+      kind: 'youtube',
+      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    })
+    assert.equal(plan.mode, 'youtube')
+    assert.equal(plan.src.startsWith('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'), true)
+    assert.equal(plan.referrer, 'https://www.youtube-nocookie.com/')
+  })
+
+  it('uses the public embed for posts and reels, and nothing for stories', () => {
+    assert.equal(
+      sourceViewer({ kind: 'instagram', url: 'https://www.instagram.com/reel/C08-b3uM0U9/' }).src,
+      'https://www.instagram.com/reel/C08-b3uM0U9/embed/captioned/'
+    )
+    assert.equal(
+      sourceViewer({ kind: 'instagram', url: 'https://www.instagram.com/stories/someone/123/' })
+        .mode,
+      'none'
+    )
+    assert.equal(sourceViewer({ kind: 'article', url: 'https://example.com/a' }).mode, 'page')
+  })
+
+  it('keeps embedded pages on their own site and spots login pages', () => {
+    assert.equal(viewerMayLoad('https://www.instagram.com/p/x/embed/', ''), true)
+    // "Watch on Instagram" leaves the embed for the full page, which needs a login.
+    assert.equal(
+      viewerMayLoad('https://www.instagram.com/reel/x/', 'https://www.instagram.com/reel/x/'),
+      false
+    )
+    assert.equal(viewerMayLoad('https://example.com/b', 'https://example.com/a'), true)
+    assert.equal(viewerMayLoad('https://evil.test/', 'https://example.com/a'), false)
+    assert.equal(viewerMayLoad('file:///etc/passwd', 'https://example.com/a'), false)
+    assert.equal(isLoginUrl('https://www.instagram.com/accounts/login/?next=/p/x/'), true)
+    assert.equal(isLoginUrl('https://accounts.google.com/ServiceLogin'), true)
+    assert.equal(isLoginUrl('https://www.instagram.com/p/x/'), false)
+  })
+})
+
+describe('graph', () => {
+  it('draws a saved link as the place of its notes', () => {
+    const graph = buildGlobalGraph({
+      findings: [
+        {
+          id: 'n1',
+          body: 'x',
+          topicIds: [],
+          anchors: [normalizeAnchor({ sourceId: 's1', sourceTitle: 'Video', timeSec: 3 })]
+        }
+      ]
+    })
+    const node = graph.nodes.find((item) => item.data.sourceId === 's1')
+    assert.equal(node.data.kind, 'file')
+    assert.equal(node.data.label, 'Video')
+    assert.equal(
+      graph.edges.some((edge) => edge.source === 'finding:n1' && edge.target === node.id),
+      true
+    )
+    assert.equal(
+      graph.nodes.some((item) => item.data.kind === 'course'),
+      false
+    )
+  })
+})
+
+describe('splitInstagramTitle', () => {
+  it('reads the account and caption in any language', () => {
+    assert.deepEqual(
+      splitInstagramTitle(
+        'Travel | Venezia | Venice en Instagram: "Top 5 most viewed videos in 2023 ♥ Follow @improntavenezia . . #venezia #venice"'
+      ),
+      {
+        author: 'Travel | Venezia | Venice',
+        title: 'Top 5 most viewed videos in 2023 ♥ Follow @improntavenezia'
+      }
+    )
+    assert.deepEqual(splitInstagramTitle('NASA on Instagram: "#space"'), {
+      author: 'NASA',
+      title: 'Publicación de NASA'
+    })
+    assert.deepEqual(splitInstagramTitle('Just a title'), { title: 'Just a title' })
   })
 })

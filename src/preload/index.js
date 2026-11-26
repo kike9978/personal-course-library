@@ -57,6 +57,14 @@ const api = {
   refreshSource: (id) => ipcRenderer.invoke('refresh-source', id),
   deleteSource: (id) => ipcRenderer.invoke('delete-source', id),
   openSourceUrl: (id) => ipcRenderer.invoke('open-source-url', id),
+  setSourcePosition: (payload) => ipcRenderer.invoke('set-source-position', payload || {}),
+  addSourceCapture: (id) => ipcRenderer.invoke('add-source-capture', id),
+  removeSourceCapture: (id, file) => ipcRenderer.invoke('remove-source-capture', { id, file }),
+  onSourceViewerLogin: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('source-viewer-login', listener)
+    return () => ipcRenderer.removeListener('source-viewer-login', listener)
+  },
   revealLearningStore: () => ipcRenderer.invoke('reveal-learning-store'),
   generateCourseProps: (coursePath, overwrite = false) =>
     ipcRenderer.invoke('generate-course-props', { coursePath, overwrite }),

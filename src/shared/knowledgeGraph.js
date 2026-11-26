@@ -512,7 +512,17 @@ function filesOf(finding) {
     files.push(file)
   }
   for (const anchor of finding?.anchors || []) {
-    if (anchor.projectId) {
+    if (anchor.sourceId) {
+      // A saved link is drawn like a lesson: the place the note was taken.
+      add({
+        id: `source:${anchor.sourceId}`,
+        label: anchor.sourceTitle || 'Enlace',
+        coursePath: null,
+        lessonRelativePath: null,
+        projectId: null,
+        sourceId: anchor.sourceId
+      })
+    } else if (anchor.projectId) {
       add({
         id: `project:${anchor.coursePath || ''}:${anchor.projectId}`,
         label: anchor.projectTitle || 'Proyecto',
@@ -767,6 +777,7 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
     node.data.coursePath = file.coursePath
     node.data.lessonRelativePath = file.lessonRelativePath
     node.data.projectId = file.projectId
+    if (file.sourceId) node.data.sourceId = file.sourceId
     nodes.push(node)
     for (const findingId of file.findingIds) {
       const added = addEdge(edges, seen, `finding:${findingId}`, node.id, 'file', '')

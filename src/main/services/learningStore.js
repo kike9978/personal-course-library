@@ -2203,3 +2203,32 @@ export function listSourceNotes(sourceId) {
       return (a.createdAt || 0) - (b.createdAt || 0)
     })
 }
+
+/**
+ * Where playback of a link stopped. Written often while a video plays, so the disk write
+ * is batched and nothing is broadcast.
+ */
+export function setSourcePosition(id, { positionSec, durationSec } = {}) {
+  const store = readStore()
+  const source = sourceList(store).find((item) => item.id === id)
+  if (!source) return null
+  if (typeof positionSec === 'number' && Number.isFinite(positionSec) && positionSec >= 0) {
+    source.lastPositionSec = Math.round(positionSec * 10) / 10
+  }
+  const duration = Number(durationSec)
+  if (Number.isFinite(duration) && duration > 0) source.durationSec = Math.round(duration)
+  source.lastOpenedAt = Date.now()
+  writeStore(store, { debounce: true })
+  return { lastPositionSec: source.lastPositionSec ?? null, durationSec: source.durationSec ?? null }
+}
+
+/** Add or remove a screenshot kept with a link (Instagram stories, private posts). */
+export function setSourceCaptures(id, mutate) {
+  const store = readStore()
+  const source = sourceList(store).find((item) => item.id === id)
+  if (!source) throw new Error('Fuente no encontrada')
+  source.captures = mutate(Array.isArray(source.captures) ? [...source.captures] : [])
+  source.updatedAt = Date.now()
+  writeStore(store)
+  return structuredClone(source)
+}

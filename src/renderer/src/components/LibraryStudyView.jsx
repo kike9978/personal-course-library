@@ -15,6 +15,7 @@ function LibraryStudyView({
   courses,
   onNavigate,
   onOpenCourse,
+  onOpenSource,
   onBack = null,
   initialCoursePath = '',
   initialSelectedId = null
@@ -167,6 +168,10 @@ function LibraryStudyView({
   }
 
   const handleJump = (item) => {
+    if (item?.sourceId) {
+      onOpenSource?.({ id: item.sourceId, timeSec: item.timeSec ?? null })
+      return
+    }
     const course = courses.find((c) => c.path === item.coursePath)
     if (!course) {
       toast.error('Curso no encontrado en la biblioteca')

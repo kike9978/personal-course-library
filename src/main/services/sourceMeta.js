@@ -3,6 +3,7 @@ import path from 'path'
 import { app, net } from 'electron'
 import {
   canonicalSourceUrl,
+  splitInstagramTitle,
   fallbackSourceTitle,
   parseHtmlMeta,
   youTubeVideoId
@@ -98,14 +99,7 @@ function tidyInstagram(meta) {
   if (!title || /^instagram$/i.test(title)) {
     throw new Error('Instagram pide iniciar sesión para leer esta publicación')
   }
-  const match = title.match(/^(.+?) on Instagram:\s*["“]?([\s\S]*?)["”]?$/i)
-  if (!match) return { ...meta, siteName: 'Instagram' }
-  return {
-    ...meta,
-    author: meta.author || match[1].trim(),
-    title: match[2].trim() || null,
-    siteName: 'Instagram'
-  }
+  return { ...meta, ...splitInstagramTitle(title), siteName: 'Instagram' }
 }
 
 /**
@@ -184,4 +178,31 @@ export async function cacheSourceThumbnail(sourceId, imageUrl) {
 export async function removeSourceThumbnail(file) {
   const target = sourceThumbPath(file)
   if (target) await fs.promises.rm(target, { force: true }).catch(() => {})
+}
+
+const CAPTURE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif'])
+const CAPTURE_LIMIT = 15 * 1024 * 1024
+
+function sourceCaptureDir() {
+  return path.join(app.getPath('userData'), 'source-captures')
+}
+
+/** Absolute path of a stored capture, or null when the name is not one we wrote. */
+export function sourceCapturePath(file) {
+  const name = String(file || '')
+  if (!/^[\w-]+\.(png|jpe?g|webp|gif)$/.test(name)) return null
+  return path.join(sourceCaptureDir(), name)
+}
+
+/** Copy an image the user picked into app data. Returns the stored file name, or null. */
+export async function saveSourceCapture(sourceId, filePath) {
+  const ext = path.extname(String(filePath || '')).toLowerCase()
+  if (!CAPTURE_EXT.has(ext)) return null
+  const stat = await fs.promises.stat(filePath).catch(() => null)
+  if (!stat?.isFile() || stat.size > CAPTURE_LIMIT) return null
+  const safeId = String(sourceId).replace(/[^\w-]/g, '')
+  const name = `${safeId}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}${ext === '.jpeg' ? '.jpg' : ext}`
+  await fs.promises.mkdir(sourceCaptureDir(), { recursive: true })
+  await fs.promises.copyFile(filePath, path.join(sourceCaptureDir(), name))
+  return name
 }

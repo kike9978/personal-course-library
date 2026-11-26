@@ -917,6 +917,8 @@ function App() {
   const [annotationsCoursePath, setAnnotationsCoursePath] = useState('')
   const libraryStudyModeRef = useRef(null)
   const [returnStudy, setReturnStudy] = useState(null)
+  // A saved link to open in Fuentes, optionally at a second of its video.
+  const [sourceTarget, setSourceTarget] = useState(null)
   libraryStudyModeRef.current = libraryStudyMode
   const zipExport = useCourseZipExport()
   const loadingRef = useRef(false)
@@ -1124,6 +1126,13 @@ function App() {
     const unsubscribeJump = annotationsWindowMode
       ? null
       : window.api.onAnnotationsJump?.((payload) => {
+          if (payload?.sourceId) {
+            setReturnStudy(null)
+            setActiveCoursePath(null)
+            setSourceTarget({ id: payload.sourceId, timeSec: payload.timeSec ?? null, at: Date.now() })
+            setLibraryStudyMode('sources')
+            return
+          }
           if (!payload?.coursePath) return
           if (!coursesRef.current.some((course) => course.path === payload.coursePath)) return
           setReturnStudy(null)
@@ -1267,10 +1276,14 @@ function App() {
           initialSelectedId={returnStudy?.mode === 'annotations' ? returnStudy.note || null : null}
           onNavigate={navigateApp}
           onOpenCourse={openCourse}
+          onOpenSource={(target) => {
+            setSourceTarget({ ...target, at: Date.now() })
+            setLibraryStudyMode('sources')
+          }}
           onBack={annotationsCoursePath ? backFromAnnotations : null}
         />
       ) : libraryStudyMode === 'sources' ? (
-        <SourcesView onNavigate={navigateApp} />
+        <SourcesView onNavigate={navigateApp} openTarget={sourceTarget} />
       ) : libraryStudyMode === 'projects' ? (
         <ProjectsKanban courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'cierres' ? (
