@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '../ui/cn'
-import { iconBtn, iconBtnGhost } from '../ui/classes'
+import { iconBtn, iconBtnGhost, menuItem as sharedMenuItem } from '../ui/classes'
 
-const popoverItem =
-  'flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-[8px] border-0 bg-transparent px-2.5 py-2 text-left text-sm font-bold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus enabled:hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50 aria-checked:bg-teal/10 [&_small]:text-xs [&_small]:font-medium [&_small]:text-ink-soft'
+const popoverItem = sharedMenuItem
 
 /**
  * Options menu on a lesson or file: attach a project to this file or to its section.
@@ -46,7 +45,7 @@ function LinkProjectMenu({
         type="button"
         className={
           tone === 'media'
-            ? 'inline-flex min-h-0 cursor-pointer items-center justify-center gap-[0.4rem] rounded-full border border-white/18 bg-white/6 px-[0.75rem] py-[0.32rem] text-[0.78rem] font-bold text-[#f5f2ee] shadow-none transition-[background-color,box-shadow] duration-[120ms] ease-pop enabled:hover:bg-white/14 enabled:hover:shadow-none'
+            ? 'inline-flex min-h-0 cursor-pointer items-center justify-center gap-[0.4rem] rounded-full border border-white/18 bg-white/6 px-[0.75rem] py-[0.32rem] text-xs font-semibold text-[#f5f2ee] shadow-none transition-[background-color,box-shadow] duration-150 ease-pop enabled:hover:bg-white/14 enabled:hover:shadow-none'
             : cn(iconBtn, iconBtnGhost)
         }
         aria-haspopup="menu"
@@ -62,7 +61,7 @@ function LinkProjectMenu({
           role="menu"
           aria-label="Vincular proyecto"
         >
-          <p className="mt-3 mb-2 flex flex-col gap-1 text-[0.72rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+          <p className="mt-3 mb-2 flex flex-col gap-1 text-xs font-semibold tracking-[0.04em] text-ink-soft uppercase">
             {sectionTitle ? `Vincular · ${sectionTitle}` : 'Vincular proyecto'}
           </p>
           {projects.map((project) => {
@@ -70,11 +69,11 @@ function LinkProjectMenu({
             const onSection = isOnSection(project, sectionId)
             return (
               <div key={project.id} className="flex flex-col gap-[0.35rem] px-2.5 py-2">
-                <span className="text-sm font-bold text-ink">{project.title}</span>
+                <span className="text-sm font-semibold text-ink">{project.title}</span>
                 <div className="flex flex-wrap gap-[0.35rem]">
                   <button
                     type="button"
-                    className="cursor-pointer rounded-sm border border-ink/10 bg-surface px-2 py-[0.22rem] text-xs font-bold text-ink-soft aria-pressed:border-teal aria-pressed:bg-teal/12 aria-pressed:text-ink"
+                    className="cursor-pointer rounded-sm border border-ink/10 bg-surface px-2 py-[0.22rem] text-xs font-semibold text-ink-soft aria-pressed:border-teal aria-pressed:bg-teal/12 aria-pressed:text-ink"
                     aria-pressed={onFile}
                     onClick={() => onToggleFile?.(project)}
                   >
@@ -83,7 +82,7 @@ function LinkProjectMenu({
                   {sectionId ? (
                     <button
                       type="button"
-                      className="cursor-pointer rounded-sm border border-ink/10 bg-surface px-2 py-[0.22rem] text-xs font-bold text-ink-soft aria-pressed:border-teal aria-pressed:bg-teal/12 aria-pressed:text-ink"
+                      className="cursor-pointer rounded-sm border border-ink/10 bg-surface px-2 py-[0.22rem] text-xs font-semibold text-ink-soft aria-pressed:border-teal aria-pressed:bg-teal/12 aria-pressed:text-ink"
                       aria-pressed={onSection}
                       title={sectionTitle || 'Sección'}
                       onClick={() => onToggleSection?.(project)}

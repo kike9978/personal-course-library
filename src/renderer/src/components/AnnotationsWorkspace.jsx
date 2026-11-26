@@ -13,6 +13,7 @@ import {
   Settings,
   Tags
 } from 'lucide-react'
+import AppHeader from './AppHeader'
 import FlashcardBuilder from './FlashcardBuilder'
 import NoteEditor from './NoteEditor'
 import { NotionSyncConflict, NotionSyncNoteButton } from './NotionSyncControl'
@@ -21,7 +22,13 @@ import KnowledgeGraphView from './KnowledgeGraphView'
 import { formatTime } from './StudySidePanel'
 import { askConfirm } from '../utils/askConfirm'
 import { cn } from '../ui/cn'
-import { btnGhost, btnPrimary, iconBtn, iconBtnGhost } from '../ui/classes'
+import {
+  btnGhost,
+  btnPrimary,
+  iconOnly,
+  menuItem,
+  popover
+} from '../ui/classes'
 
 const page = 'flex h-full min-h-0 flex-1 flex-col bg-white text-ink'
 const pageBody =
@@ -30,43 +37,38 @@ const pageBodyOpen =
   'grid-cols-[var(--annotations-list-w,268px)_minmax(280px,1fr)_minmax(280px,min(var(--annotations-graph-w,34%),70%))]'
 const pageBodyCollapsed =
   'grid-cols-[3rem_minmax(280px,1fr)_minmax(280px,min(var(--annotations-graph-w,34%),70%))]'
-const headerIcon =
-  'inline-flex size-9 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent text-ink hover:bg-[rgba(42,36,56,0.06)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral disabled:cursor-not-allowed disabled:opacity-45 [&_svg]:size-5'
+const headerIcon = iconOnly
 const menu = 'relative z-[8] shrink-0'
 const docStack = 'mx-auto max-w-[46rem] px-7 pt-5 pb-12'
-const docTitle = 'm-0 font-display text-[1.6rem] text-ink'
+const docTitle = 'm-0 font-display text-2xl text-ink'
 const docList = 'm-0 flex list-none flex-col gap-[0.45rem] p-0'
 const docLink =
-  'flex w-full cursor-pointer flex-col items-start gap-[0.15rem] rounded-md border border-ink/10 bg-surface px-[0.85rem] py-[0.7rem] text-left font-[inherit] text-ink shadow-card hover:-translate-y-px hover:shadow-lift [&_strong]:font-display [&_strong]:text-[0.95rem] [&_span]:text-[0.78rem] [&_span]:text-ink-soft'
+  'flex w-full cursor-pointer flex-col items-start gap-[0.15rem] rounded-md border border-ink/10 bg-surface px-[0.85rem] py-[0.7rem] text-left font-[inherit] text-ink shadow-card hover:-translate-y-px hover:shadow-lift [&_strong]:font-display [&_strong]:text-md [&_span]:text-xs [&_span]:text-ink-soft'
 const relatedLink =
-  'flex w-full cursor-pointer flex-col items-start gap-[0.1rem] rounded-sm border border-chip-status-border bg-chip-status px-[0.55rem] py-[0.15rem] text-left font-[inherit] text-[0.78rem] text-chip-status-text [&_span]:text-[0.75rem] [&_span]:text-ink-soft'
+  'flex w-full cursor-pointer flex-col items-start gap-[0.1rem] rounded-sm border border-chip-status-border bg-chip-status px-[0.55rem] py-[0.15rem] text-left font-[inherit] text-xs text-chip-status-text [&_span]:text-xs [&_span]:text-ink-soft'
 const graphOption =
-  'flex w-full cursor-pointer flex-col items-start gap-[0.05rem] rounded-sm border-0 bg-transparent px-2 py-[0.35rem] text-left font-[inherit] text-ink hover:bg-cream-deep [&.is-active]:bg-cream-deep [&_span]:max-w-full [&_span]:truncate [&_small]:text-[0.68rem] [&_small]:text-ink-soft'
-const popover =
-  'absolute top-[calc(100%+6px)] right-0 z-[5] min-w-[17rem] rounded-md border border-ink/10 bg-surface p-1.5 shadow-panel'
+  'flex w-full cursor-pointer flex-col items-start gap-[0.05rem] rounded-sm border-0 bg-transparent px-2 py-[0.35rem] text-left font-[inherit] text-ink hover:bg-cream-deep [&.is-active]:bg-cream-deep [&_span]:max-w-full [&_span]:truncate [&_small]:text-2xs [&_small]:text-ink-soft'
 const popoverScroll = cn(popover, 'max-h-[min(60vh,22rem)] overflow-auto')
-const menuItem =
-  'flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left text-[0.875rem] font-bold text-ink hover:bg-[rgba(42,36,56,0.05)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral disabled:cursor-not-allowed disabled:opacity-50 aria-checked:bg-teal/10'
 const iconSquare =
-  'inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border border-ink/10 bg-white p-0 font-bold text-ink-soft'
+  'inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border border-ink/10 bg-white p-0 font-semibold text-ink-soft'
 const iconCreate =
-  'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-coral-deep bg-coral p-0 font-bold text-white hover:bg-coral-deep'
+  'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-coral-deep bg-coral p-0 font-semibold text-white hover:bg-coral-deep'
 const iconOn = 'border-coral bg-[rgba(232,69,112,0.12)] text-coral-deep'
 const toolBtn =
-  'inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent p-0 font-bold text-ink-soft hover:border-transparent hover:bg-transparent aria-pressed:text-coral-deep'
+  'inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent p-0 font-semibold text-ink-soft hover:border-transparent hover:bg-transparent aria-pressed:text-coral-deep'
 const listItem =
-  'mt-[0.02rem] mb-[0.02rem] ml-[var(--ann-indent)] box-border flex w-[calc(100%-var(--ann-indent))] min-w-0 cursor-pointer flex-row items-baseline justify-between gap-[0.55rem] rounded-md border-0 bg-transparent px-[var(--ann-pad-x)] py-[0.2rem] text-left font-[inherit] text-ink hover:bg-[rgba(42,36,56,0.045)] [&.is-active]:bg-[rgba(42,36,56,0.08)] [&.is-active]:shadow-none [&.is-active:hover]:bg-[rgba(42,36,56,0.08)] [&_small]:text-[0.68rem] [&_small]:text-coral-deep [&.is-active_span_span]:font-[650]'
+  'mt-[0.02rem] mb-[0.02rem] ml-[var(--ann-indent)] box-border flex w-[calc(100%-var(--ann-indent))] min-w-0 cursor-pointer flex-row items-baseline justify-between gap-[0.55rem] rounded-md border-0 bg-transparent px-[var(--ann-pad-x)] py-[0.2rem] text-left font-[inherit] text-ink hover:bg-[rgba(23,21,28,0.045)] [&.is-active]:bg-[rgba(23,21,28,0.08)] [&.is-active]:shadow-none [&.is-active:hover]:bg-[rgba(23,21,28,0.08)] [&_small]:text-2xs [&_small]:text-coral-deep [&.is-active_span_span]:font-semibold'
 const savePill =
-  'inline-flex appearance-none items-center gap-[0.3rem] rounded-full border border-ink/16 bg-cream px-[0.55rem] py-[0.18rem] font-body text-[0.7rem] leading-[1.2] font-bold text-ink-soft shadow-none'
+  'inline-flex appearance-none items-center gap-[0.3rem] rounded-full border border-ink/16 bg-cream px-[0.55rem] py-[0.18rem] font-body text-2xs leading-[1.2] font-semibold text-ink-soft shadow-none'
 const saveWarm = 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
 const saveCool = 'border-chip-status-border bg-chip-status text-chip-status-text'
-const propLabel = 'text-[0.8rem] font-[650] text-ink-soft'
+const propLabel = 'text-sm font-semibold text-ink-soft'
 const topicChip =
-  'cursor-pointer rounded-full border border-chip-status-border bg-chip-status px-[0.55rem] py-[0.15rem] font-[inherit] text-[0.78rem] text-chip-status-text'
+  'cursor-pointer rounded-full border border-chip-status-border bg-chip-status px-[0.55rem] py-[0.15rem] font-[inherit] text-xs text-chip-status-text'
 const searchInList =
-  'relative w-full min-w-0 max-w-none flex-none [&_input]:h-8 [&_input]:w-full [&_input]:rounded-full [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:py-0 [&_input]:pr-[0.85rem] [&_input]:pl-[2.15rem] [&_input]:text-[0.82rem] [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-find [&_svg]:pointer-events-none [&_svg]:absolute [&_svg]:top-1/2 [&_svg]:left-[0.7rem] [&_svg]:size-[0.9rem] [&_svg]:-translate-y-1/2 [&_svg]:opacity-55'
+  'relative w-full min-w-0 max-w-none flex-none [&_input]:h-8 [&_input]:w-full [&_input]:rounded-full [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:py-0 [&_input]:pr-[0.85rem] [&_input]:pl-[2.15rem] [&_input]:text-sm [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-find [&_svg]:pointer-events-none [&_svg]:absolute [&_svg]:top-1/2 [&_svg]:left-[0.7rem] [&_svg]:size-[0.9rem] [&_svg]:-translate-y-1/2 [&_svg]:opacity-55'
 const graphPanel =
-  'absolute top-[3.15rem] right-[0.65rem] z-[6] flex max-h-[calc(100%-4rem)] w-[min(16.5rem,calc(100%-1.3rem))] flex-col gap-[0.65rem] overflow-auto rounded-md border border-ink/10 bg-surface px-[0.85rem] py-3 text-[0.75rem] font-medium text-ink-soft shadow-lift'
+  'absolute top-[3.15rem] right-[0.65rem] z-[6] flex max-h-[calc(100%-4rem)] w-[min(16.5rem,calc(100%-1.3rem))] flex-col gap-[0.65rem] overflow-auto rounded-md border border-ink/10 bg-surface px-[0.85rem] py-3 text-xs font-medium text-ink-soft shadow-lift'
 const rangeLabel =
   'grid grid-cols-[5.6rem_minmax(0,1fr)_auto] items-center gap-[0.45rem] [&_input]:w-full [&_input]:min-w-0 [&_input]:accent-coral [&>span:last-child]:min-w-[1.6rem] [&>span:last-child]:text-right [&>span:last-child]:text-ink [&>span:last-child]:tabular-nums'
 const checkLabel =
@@ -227,13 +229,13 @@ function AnnotationBranch({
               onClick={() => onOpen(item)}
             >
               <span className="flex min-w-0 flex-1 flex-col items-stretch gap-[0.05rem] overflow-hidden">
-                <span className="block max-w-full min-w-0 truncate text-[0.8rem] leading-[1.3] font-medium">
+                <span className="block max-w-full min-w-0 truncate text-sm leading-[1.3] font-medium">
                   {parts.name}
                 </span>
                 {item.notion?.conflict ? <small>Conflicto con Notion</small> : null}
               </span>
               {parts.time ? (
-                <span className="shrink-0 text-[0.68rem] font-bold text-ink-soft tabular-nums">
+                <span className="shrink-0 text-2xs font-semibold text-ink-soft tabular-nums">
                   {parts.time}
                 </span>
               ) : null}
@@ -437,7 +439,7 @@ function AnnotationTitleField({ value, onChange, placeholder }) {
     <div className="relative mb-4">
       <div
         className={cn(
-          'm-0 line-clamp-3 font-display text-[clamp(1.6rem,2.4vw,2.1rem)] leading-[1.15] font-extrabold tracking-[-0.03em] whitespace-pre-wrap wrap-anywhere text-ink pointer-events-none',
+          'm-0 line-clamp-3 font-display text-[clamp(1.6rem,2.4vw,2.1rem)] leading-[1.15] font-semibold tracking-[-0.03em] whitespace-pre-wrap wrap-anywhere text-ink pointer-events-none',
           !shown && 'text-ink-soft opacity-55'
         )}
         aria-hidden="true"
@@ -445,7 +447,7 @@ function AnnotationTitleField({ value, onChange, placeholder }) {
         {shown || hint}
       </div>
       <textarea
-        className="absolute inset-0 m-0 box-border block h-full w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-display text-[clamp(1.6rem,2.4vw,2.1rem)] leading-[1.15] font-extrabold tracking-[-0.03em] whitespace-pre-wrap wrap-anywhere text-transparent caret-coral-deep outline-none selection:bg-[rgba(232,69,112,0.28)] [-webkit-text-fill-color:transparent]"
+        className="absolute inset-0 m-0 box-border block h-full w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-display text-[clamp(1.6rem,2.4vw,2.1rem)] leading-[1.15] font-semibold tracking-[-0.03em] whitespace-pre-wrap wrap-anywhere text-transparent caret-coral-deep outline-none selection:bg-[rgba(232,69,112,0.28)] [-webkit-text-fill-color:transparent]"
         value={shown}
         rows={1}
         autoFocus
@@ -462,7 +464,8 @@ function AnnotationTitleField({ value, onChange, placeholder }) {
 function AnnotationsWorkspace({
   title = 'Anotaciones',
   subtitle,
-  nav = null,
+  navActive = null,
+  onNavigate,
   annotations = [],
   selectedId,
   onSelect,
@@ -1600,20 +1603,15 @@ function AnnotationsWorkspace({
           onOpenDecks={() => onOpenDecks?.()}
         />
       ) : null}
-      <header className="relative z-[6] flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-ink/10 px-5 py-[0.7rem]">
-        <div className="flex min-w-0 flex-wrap items-center gap-[0.85rem]">
-          {onBack ? (
-            <button type="button" className={cn(iconBtn, iconBtnGhost)} onClick={onBack}>
-              ← Volver
-            </button>
-          ) : null}
-          <div className="flex min-w-0 flex-col items-start justify-center gap-[0.05rem] [&_h1]:m-0 [&_h1]:font-display [&_h1]:text-[1.35rem] [&_h1]:font-extrabold [&_h1]:tracking-[-0.02em] [&_h1]:whitespace-nowrap [&_span]:block [&_span]:max-w-full [&_span]:min-w-0 [&_span]:truncate [&_span]:text-[0.78rem] [&_span]:leading-[1.2] [&_span]:text-ink-soft">
-            <h1>{title}</h1>
-            {subtitle ? <span>{subtitle}</span> : null}
-          </div>
-          {nav ? <div className="flex min-w-0 items-center">{nav}</div> : null}
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-[0.15rem]">
+      <AppHeader
+        active={navActive}
+        onNavigate={onNavigate}
+        title={title}
+        subtitle={subtitle}
+        onBack={navActive ? undefined : onBack}
+        className="z-[6] bg-surface"
+        actions={
+          <>
           {onOpenPopOut ? (
             <button
               type="button"
@@ -1645,8 +1643,9 @@ function AnnotationsWorkspace({
               </button>
             )}
           </MoreMenu>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <div
         className={cn(pageBody, listCollapsed ? pageBodyCollapsed : pageBodyOpen)}
@@ -1691,7 +1690,7 @@ function AnnotationsWorkspace({
             </button>
             {!listCollapsed ? (
               <>
-                <span className="ml-auto text-[0.72rem] font-bold text-ink-soft">
+                <span className="ml-auto text-xs font-semibold text-ink-soft">
                   {filtered.length}
                 </span>
                 {onCreate ? (
@@ -1883,9 +1882,9 @@ function AnnotationsWorkspace({
                 ref={listItemsRef}
               >
                 {loading ? (
-                  <p className="mx-2 my-[0.8rem] text-[0.82rem] text-ink-soft">Cargando…</p>
+                  <p className="mx-2 my-[0.8rem] text-sm text-ink-soft">Cargando…</p>
                 ) : filtered.length === 0 ? (
-                  <p className="mx-2 my-[0.8rem] text-[0.82rem] text-ink-soft">
+                  <p className="mx-2 my-[0.8rem] text-sm text-ink-soft">
                     {annotations.length === 0 ? 'Aún no hay anotaciones.' : 'Ningún resultado.'}
                   </p>
                 ) : (
@@ -1908,19 +1907,19 @@ function AnnotationsWorkspace({
               </div>
               {pickingCards ? (
                 <div className="flex flex-wrap items-center gap-2 border-t border-ink/10 px-[0.6rem] py-[0.45rem]">
-                  <span className="text-[0.75rem] font-bold text-ink-soft">
+                  <span className="text-xs font-semibold text-ink-soft">
                     {cardPick.size === 1 ? '1 nota' : `${cardPick.size} notas`}
                   </span>
                   <button
                     type="button"
-                    className={cn(btnGhost, 'px-2 py-1 text-[0.75rem] shadow-none')}
+                    className={cn(btnGhost, 'px-2 py-1 text-xs shadow-none')}
                     onClick={selectVisibleCards}
                   >
                     Visibles
                   </button>
                   <button
                     type="button"
-                    className={cn(btnPrimary, 'px-2 py-1 text-[0.75rem] shadow-none')}
+                    className={cn(btnPrimary, 'px-2 py-1 text-xs shadow-none')}
                     disabled={!cardPick.size}
                     onClick={() => setCardBuilderOpen(true)}
                   >
@@ -1935,7 +1934,7 @@ function AnnotationsWorkspace({
         <main className="relative min-h-0 overflow-auto bg-white" data-annotations-doc="">
           {tagViewId ? (
             <div className={docStack}>
-              <div className="mb-[0.85rem] flex items-center justify-between gap-3 text-[0.78rem] font-bold text-ink-soft">
+              <div className="mb-[0.85rem] flex items-center justify-between gap-3 text-xs font-semibold text-ink-soft">
                 <button type="button" className={btnGhost} onClick={() => setTagViewId(null)}>
                   Volver
                 </button>
@@ -1953,7 +1952,7 @@ function AnnotationsWorkspace({
                 </span>
               </div>
               <h2 className={docTitle}>{tagViewTitle}</h2>
-              <p className="mt-1 mb-4 text-[0.82rem] text-ink-soft">Notas con este tag</p>
+              <p className="mt-1 mb-4 text-sm text-ink-soft">Notas con este tag</p>
               {tagViewNotes.length ? (
                 <ul className={docList}>
                   {tagViewNotes.map((item) => {
@@ -1982,13 +1981,13 @@ function AnnotationsWorkspace({
             </div>
           ) : tagsManageOpen ? (
             <div className={docStack}>
-              <div className="mb-[0.85rem] flex items-center justify-between gap-3 text-[0.78rem] font-bold text-ink-soft">
+              <div className="mb-[0.85rem] flex items-center justify-between gap-3 text-xs font-semibold text-ink-soft">
                 <button type="button" className={btnGhost} onClick={() => setTagsManageOpen(false)}>
                   Volver
                 </button>
               </div>
               <h2 className={docTitle}>Tags</h2>
-              <p className="mt-1 mb-4 text-[0.82rem] text-ink-soft">
+              <p className="mt-1 mb-4 text-sm text-ink-soft">
                 Quitar un tag lo saca de todas las notas y de su texto.
               </p>
               {topics.length ? (
@@ -2165,12 +2164,12 @@ function AnnotationsWorkspace({
                 />
 
                 <div className="mb-[1.35rem] flex flex-col gap-[0.45rem] border-b border-ink/10 pb-4">
-                  <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-[0.88rem] max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
+                  <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
                     <span className={propLabel}>Fecha de creación</span>
                     <span>{formatDateTime(selected.createdAt)}</span>
                   </div>
                   {courseColumn ? (
-                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-[0.88rem] max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
+                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
                       <span className={propLabel}>Curso</span>
                       <span>
                         {selected.coursePath
@@ -2180,13 +2179,13 @@ function AnnotationsWorkspace({
                     </div>
                   ) : null}
                   {selected.coursePath || selected.lessonRelativePath || selected.projectId ? (
-                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-[0.88rem] max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
+                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
                       <span className={propLabel}>{targetPropLabel(selected)}</span>
                       <span>{targetPropValue(selected)}</span>
                     </div>
                   ) : null}
                   {typeof selected.timeSec === 'number' ? (
-                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-[0.88rem] max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
+                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
                       <span className={propLabel}>Tiempo</span>
                       <span className="flex min-w-0 flex-wrap items-center gap-[0.45rem]">
                         <span>{formatTime(selected.timeSec)}</span>
@@ -2195,7 +2194,7 @@ function AnnotationsWorkspace({
                             type="button"
                             className={cn(
                               btnGhost,
-                              'px-2 py-[0.12rem] text-[0.75rem] leading-[1.2]'
+                              'px-2 py-[0.12rem] text-xs leading-[1.2]'
                             )}
                             onClick={() => onJump(selected)}
                           >
@@ -2206,13 +2205,13 @@ function AnnotationsWorkspace({
                     </div>
                   ) : null}
                   {selected.updatedAt && selected.updatedAt !== selected.createdAt ? (
-                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-[0.88rem] max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
+                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
                       <span className={propLabel}>Actualizado</span>
                       <span>{formatDateTime(selected.updatedAt)}</span>
                     </div>
                   ) : null}
                   {(selected.anchors || []).length > 1 ? (
-                    <div className="col-span-full grid grid-cols-[9.5rem_1fr] items-center gap-3 text-[0.88rem] max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
+                    <div className="col-span-full grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
                       <span className={propLabel}>También anclada en</span>
                       <span>
                         {selected.anchors
@@ -2267,7 +2266,7 @@ function AnnotationsWorkspace({
                     />
                   </div>
                   {topicQuery.trim() && topicSuggestions.length ? (
-                    <div className="mt-[0.35rem] flex flex-wrap gap-[0.35rem] [&_button]:cursor-pointer [&_button]:rounded-full [&_button]:border [&_button]:border-chip-status-border [&_button]:bg-chip-status [&_button]:px-[0.55rem] [&_button]:py-[0.15rem] [&_button]:font-[inherit] [&_button]:text-[0.78rem] [&_button]:text-chip-status-text">
+                    <div className="mt-[0.35rem] flex flex-wrap gap-[0.35rem] [&_button]:cursor-pointer [&_button]:rounded-full [&_button]:border [&_button]:border-chip-status-border [&_button]:bg-chip-status [&_button]:px-[0.55rem] [&_button]:py-[0.15rem] [&_button]:font-[inherit] [&_button]:text-xs [&_button]:text-chip-status-text">
                       {topicSuggestions.map((title) => (
                         <button key={title} type="button" onClick={() => addTopicTitle(title)}>
                           {title}
@@ -2350,7 +2349,7 @@ function AnnotationsWorkspace({
             onKeyDown={onGraphResizeKey}
             onDoubleClick={resetGraphWidth}
           />
-          <div className="flex items-center justify-between gap-2 px-3 py-[0.55rem] font-display text-[0.92rem] font-extrabold text-ink">
+          <div className="flex items-center justify-between gap-2 px-3 py-[0.55rem] font-display text-base font-semibold text-ink">
             <span>Gráfica</span>
             <div className="static ml-auto flex items-center gap-[0.15rem]" ref={graphSettingsRef}>
               <button
@@ -2488,7 +2487,7 @@ function AnnotationsWorkspace({
                   {graphSelection ? (
                     <button
                       type="button"
-                      className={cn(btnGhost, 'self-start px-[0.55rem] py-[0.2rem] text-[0.75rem]')}
+                      className={cn(btnGhost, 'self-start px-[0.55rem] py-[0.2rem] text-xs')}
                       onClick={() => {
                         setGraphSelection(null)
                         setGraphReset((value) => value + 1)
@@ -2573,13 +2572,13 @@ function AnnotationsWorkspace({
                     )
                   })
                 ) : (
-                  <li className="px-2 py-[0.4rem] text-[0.78rem] text-ink-soft">Ningún nodo.</li>
+                  <li className="px-2 py-[0.4rem] text-xs text-ink-soft">Ningún nodo.</li>
                 )}
               </ul>
             ) : null}
           </div>
           {graph.nodes.length ? (
-            <ul className="m-0 flex list-none flex-wrap gap-[0.7rem] px-3 pt-[0.45rem] text-[0.72rem] text-ink-soft [&_li]:inline-flex [&_li]:items-center [&_li]:gap-[0.3rem] [&_i]:size-2 [&_i]:rounded-full [&_i]:bg-[#6b6578] [&_i[data-kind=finding]]:bg-[#e84570] [&_i[data-kind=topic]]:bg-[#3d7a7a] [&_i[data-kind=course]]:bg-[#c47b2d] [&_i[data-kind=file]]:bg-[#6a4c9c]">
+            <ul className="m-0 flex list-none flex-wrap gap-[0.7rem] px-3 pt-[0.45rem] text-xs text-ink-soft [&_li]:inline-flex [&_li]:items-center [&_li]:gap-[0.3rem] [&_i]:size-2 [&_i]:rounded-full [&_i]:bg-[#6b6578] [&_i[data-kind=finding]]:bg-[#e84570] [&_i[data-kind=topic]]:bg-[#3d7a7a] [&_i[data-kind=course]]:bg-[#c47b2d] [&_i[data-kind=file]]:bg-[#6a4c9c]">
               <li>
                 <i data-kind="finding" /> Nota
               </li>

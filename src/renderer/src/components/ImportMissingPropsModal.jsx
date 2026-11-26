@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { cn } from '../ui/cn'
-import { btnCompact, btnGhost, btnPrimary } from '../ui/classes'
+import {
+  btnCompact,
+  btnGhost,
+  btnPrimary,
+  dialogShell as dialogBase,
+  dialogBody,
+  dialogLead as sharedDialogLead
+} from '../ui/classes'
 
-const dialogShell =
-  'w-[calc(100%-2rem)] max-w-[560px] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel open:flex open:flex-col backdrop:bg-[rgba(26,20,35,0.45)]'
-const dialogForm = 'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem]'
-const dialogLead =
-  'mt-[0.35rem] mb-0 text-[0.85rem] leading-[1.4] text-ink-soft [&_code]:text-[0.8em]'
+const dialogShell = cn(dialogBase, 'max-w-[560px]')
+const dialogForm = dialogBody
+const dialogLead = sharedDialogLead
 const searchInput =
   'w-full rounded-md border border-ink/10 bg-surface px-3 py-[0.55rem] text-ink outline-none focus:shadow-focus motion-reduce:animate-none'
 const rowBase =
-  'flex cursor-pointer items-start gap-[0.65rem] rounded-[10px] px-[0.65rem] py-[0.55rem] hover:bg-coral/8'
+  'flex cursor-pointer items-start gap-[0.65rem] rounded-md px-[0.65rem] py-[0.55rem] hover:bg-coral/8'
 
 function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
   const dialogRef = useRef(null)
@@ -161,7 +166,7 @@ function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
           aria-multiselectable="true"
         >
           {filtered.length === 0 ? (
-            <p className="m-0 p-4 text-center text-[0.9rem] text-ink-soft">
+            <p className="m-0 p-4 text-center text-base text-ink-soft">
               No hay carpetas que coincidan.
             </p>
           ) : (
@@ -180,10 +185,10 @@ function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
                     onChange={() => toggleOne(course.path)}
                   />
                   <span className="flex min-w-0 flex-col gap-[0.15rem]">
-                    <span className="font-display leading-[1.25] font-extrabold text-ink">
+                    <span className="font-display leading-[1.25] font-semibold text-ink">
                       {course.title || course.path}
                     </span>
-                    <span className="text-[0.78rem] break-all text-ink-soft">{course.path}</span>
+                    <span className="text-xs break-all text-ink-soft">{course.path}</span>
                     <span className="text-xs text-ink-soft">
                       {[course.institution, programs].filter(Boolean).join(' · ') ||
                         'Sin academia / programas detectados'}
@@ -196,7 +201,7 @@ function ImportMissingPropsModal({ courses = [], onImported, onClose }) {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]">
-          <span className="text-[0.85rem] font-bold text-ink-soft">
+          <span className="text-sm font-semibold text-ink-soft">
             {selectedCount} de {courses.length} seleccionada{selectedCount === 1 ? '' : 's'}
           </span>
           <div className="flex gap-2">

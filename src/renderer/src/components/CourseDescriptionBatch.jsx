@@ -6,19 +6,28 @@ import {
   parseCourseDescriptionBatch
 } from '../../../shared/courseDescription.js'
 import { cn } from '../ui/cn'
-import { btnCompact, btnGhost, btnPrimary, fieldControl, fieldLabel } from '../ui/classes'
+import {
+  btnCompact,
+  btnGhost,
+  btnPrimary,
+  fieldControl,
+  fieldLabel,
+  dialogShell as dialogBase,
+  dialogBody,
+  dialogLead as sharedDialogLead,
+  dialogTitle as sharedDialogTitle
+} from '../ui/classes'
 
-const dialogShell =
-  'w-[calc(100%-2rem)] max-w-[40rem] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel open:flex open:max-h-[min(90vh,48rem)] open:flex-col open:overflow-auto backdrop:bg-[rgba(26,20,35,0.45)] [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55'
-const dialogForm = 'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem]'
-const dialogTitle = 'm-0 font-display text-[1.2rem] font-black'
-const dialogLead = 'mt-[0.35rem] mb-0 text-[0.85rem] leading-[1.4] text-ink-soft'
+const dialogShell = cn(dialogBase, 'max-w-[40rem] open:max-h-[min(90vh,48rem)] open:overflow-auto [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55')
+const dialogForm = dialogBody
+const dialogTitle = sharedDialogTitle
+const dialogLead = sharedDialogLead
 const searchInput =
   'w-full rounded-md border border-ink/10 bg-surface px-3 py-[0.55rem] text-ink outline-none focus:shadow-focus motion-reduce:animate-none'
 const rowBase =
-  'flex cursor-pointer items-start gap-[0.65rem] rounded-[10px] px-[0.65rem] py-[0.55rem] hover:bg-coral/8'
-const briefField = cn(fieldControl, 'min-h-[8rem] resize-y text-[0.78rem] leading-[1.45]')
-const pasteField = cn(fieldControl, 'min-h-[6.5rem] resize-y text-[0.78rem] leading-[1.45]')
+  'flex cursor-pointer items-start gap-[0.65rem] rounded-md px-[0.65rem] py-[0.55rem] hover:bg-coral/8'
+const briefField = cn(fieldControl, 'min-h-[8rem] resize-y text-xs leading-[1.45]')
+const pasteField = cn(fieldControl, 'min-h-[6.5rem] resize-y text-xs leading-[1.45]')
 
 function cleanIpcError(err) {
   return String(err?.message || 'No se pudo guardar.')
@@ -321,7 +330,7 @@ function CourseDescriptionBatch({ courses, onClose }) {
             aria-label="Filtrar cursos"
           />
           <div className="flex flex-wrap gap-[0.35rem]">
-            <span className="text-[0.85rem] font-bold text-ink-soft">
+            <span className="text-sm font-semibold text-ink-soft">
               {selected.length} de {waiting.length} marcados
             </span>
             <button
@@ -347,7 +356,7 @@ function CourseDescriptionBatch({ courses, onClose }) {
         </div>
 
         {strays.length ? (
-          <ul className="m-0 flex list-disc flex-col gap-[0.2rem] pl-[1.1rem] text-[0.78rem] leading-[1.35] text-coral-deep">
+          <ul className="m-0 flex list-disc flex-col gap-[0.2rem] pl-[1.1rem] text-xs leading-[1.35] text-coral-deep">
             {strays.map((skip) => (
               <li key={`${skip.title}-${skip.reason}`}>
                 <strong>{skip.title || 'Sin nombre'}</strong>
@@ -362,7 +371,7 @@ function CourseDescriptionBatch({ courses, onClose }) {
           aria-label="Cursos del encargo"
         >
           {filtered.length === 0 ? (
-            <p className="m-0 p-4 text-center text-[0.9rem] text-ink-soft">
+            <p className="m-0 p-4 text-center text-base text-ink-soft">
               No hay cursos que coincidan.
             </p>
           ) : (
@@ -378,12 +387,12 @@ function CourseDescriptionBatch({ courses, onClose }) {
                     onChange={() => toggleCourse(course.path)}
                   />
                   <span className="flex min-w-0 flex-col gap-[0.15rem]">
-                    <span className="font-display leading-[1.25] font-extrabold text-ink">
+                    <span className="font-display leading-[1.25] font-semibold text-ink">
                       {course.title || course.path}
                     </span>
-                    <span className="text-[0.78rem] break-all text-ink-soft">{course.path}</span>
+                    <span className="text-xs break-all text-ink-soft">{course.path}</span>
                     {reason ? (
-                      <span className="text-[0.82rem] leading-[1.4] text-coral-deep">{reason}</span>
+                      <span className="text-sm leading-[1.4] text-coral-deep">{reason}</span>
                     ) : course.institution ? (
                       <span className="text-xs text-ink-soft">{course.institution}</span>
                     ) : null}
@@ -444,7 +453,7 @@ function CourseDescriptionBatch({ courses, onClose }) {
           />
         </div>
         {error ? (
-          <p className="m-0 text-[0.82rem] leading-[1.4] text-coral-deep" role="alert">
+          <p className="m-0 text-sm leading-[1.4] text-coral-deep" role="alert">
             {error}
           </p>
         ) : null}

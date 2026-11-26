@@ -69,11 +69,11 @@ function ResourceGroupView({
   return (
     <div className="min-h-0 flex-1 overflow-auto bg-surface px-[2.75rem] pt-[2.25rem] pb-12 text-ink">
       <header>
-        <h2 className="m-0 font-display text-[1.7rem] font-extrabold">{title}</h2>
+        <h2 className="m-0 font-display text-2xl font-semibold">{title}</h2>
         <p className="mt-[1.1rem] text-ink-soft">{hint}</p>
       </header>
       <section className="mt-[2.25rem]">
-        <h3 className="mt-0 mb-[0.85rem] text-[1.05rem] font-bold">Recursos</h3>
+        <h3 className="mt-0 mb-[0.85rem] text-md font-semibold">Recursos</h3>
         <ul className="m-0 flex list-none flex-col gap-[0.15rem] p-0">
           {resources.map((res) => {
             const done = Boolean(progressByLesson?.[res.relativePath]?.completed)
@@ -96,7 +96,7 @@ function ResourceGroupView({
                   </button>
                   <button
                     type="button"
-                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-[0.55rem] rounded-[8px] border-0 bg-transparent px-[0.35rem] py-[0.4rem] text-left text-ink hover:bg-ink/5"
+                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-[0.55rem] rounded-sm border-0 bg-transparent px-[0.35rem] py-[0.4rem] text-left text-ink hover:bg-ink/5"
                     onClick={() => onOpenResource?.(res)}
                     title={res.relativePath}
                   >
@@ -104,7 +104,7 @@ function ResourceGroupView({
                     <span className={cn('min-w-0 overflow-hidden text-ellipsis whitespace-nowrap', done && 'opacity-65')}>
                       {res.title || res.name}
                     </span>
-                    <span className="ml-auto text-[0.75rem] whitespace-nowrap text-ink-soft">
+                    <span className="ml-auto text-xs whitespace-nowrap text-ink-soft">
                       {kindLabel(res.kind)}
                     </span>
                   </button>
@@ -214,7 +214,7 @@ function ResourceViewer({
         {onBack ? (
           <button
             type="button"
-            className="inline-flex cursor-pointer items-center gap-[0.1rem] border-0 bg-transparent py-[0.2rem] pr-[0.2rem] pl-0 text-[0.85rem] font-bold text-coral-deep"
+            className="inline-flex cursor-pointer items-center gap-[0.1rem] border-0 bg-transparent py-[0.2rem] pr-[0.2rem] pl-0 text-sm font-semibold text-coral-deep"
             onClick={onBack}
           >
             <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
@@ -223,12 +223,12 @@ function ResourceViewer({
         ) : null}
         <div className="min-w-0 flex-1">
           <h2
-            className="m-0 overflow-hidden font-display text-base font-extrabold text-ellipsis whitespace-nowrap"
+            className="m-0 overflow-hidden font-display text-base font-semibold text-ellipsis whitespace-nowrap"
             title={resource.relativePath}
           >
             {resource.title || resource.name}
           </h2>
-          <span className="text-[0.72rem] font-bold tracking-[0.03em] text-ink-soft uppercase">
+          <span className="text-xs font-semibold tracking-[0.03em] text-ink-soft uppercase">
             {kindLabel(resource.kind)}
           </span>
         </div>
@@ -255,12 +255,12 @@ function ResourceViewer({
 
       <div className="relative flex min-h-0 flex-1 items-stretch justify-center overflow-auto p-[0.85rem]">
         {loading ? (
-          <p className="absolute top-4 left-1/2 z-[2] m-0 -translate-x-1/2 text-[0.85rem] text-ink-soft">
+          <p className="absolute top-4 left-1/2 z-[2] m-0 -translate-x-1/2 text-sm text-ink-soft">
             Cargando…
           </p>
         ) : null}
         {error ? (
-          <p className="absolute top-4 left-1/2 z-[2] m-0 -translate-x-1/2 text-[0.85rem] text-coral-deep">
+          <p className="absolute top-4 left-1/2 z-[2] m-0 -translate-x-1/2 text-sm text-coral-deep">
             {error}
           </p>
         ) : null}
@@ -307,7 +307,7 @@ function ResourceViewer({
         ) : null}
 
         {canPreview && isText && textBody != null ? (
-          <pre className="m-0 w-full overflow-auto rounded-md border border-ink/10 bg-surface px-[1.1rem] py-4 text-[0.85rem] leading-[1.45] whitespace-pre-wrap">
+          <pre className="m-0 w-full overflow-auto rounded-md border border-ink/10 bg-surface px-[1.1rem] py-4 text-sm leading-[1.45] whitespace-pre-wrap">
             {textBody}
           </pre>
         ) : null}

@@ -14,23 +14,26 @@ import {
   checkCardFields
 } from '../../../shared/flashcardCards.js'
 import { askConfirm } from '../utils/askConfirm'
-import { btnGhost, btnPrimary } from '../ui/classes'
+import {
+  btnGhost,
+  btnPrimary,
+  dialogShell as dialogBase
+} from '../ui/classes'
 import { cn } from '../ui/cn'
 import CardReview from './flashcards/CardReview'
 import ScopePicker from './flashcards/ScopePicker'
 import { loadScopeSources, notesSources } from './flashcards/scopeSources'
 
-const dialogShell =
-  'w-[calc(100%-2rem)] max-h-[min(92vh,60rem)] max-w-[52rem] overflow-auto rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel [&:modal]:flex [&:modal]:flex-col [&::backdrop]:bg-[rgba(26,20,35,0.45)] [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55'
+const dialogShell = cn(dialogBase, 'max-h-[min(92vh,60rem)] max-w-[52rem] overflow-auto [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55')
 const sectionBox = 'flex flex-col gap-3 rounded-lg border border-ink/10 bg-surface-muted p-4'
-const sectionTitle = 'm-0 font-display text-[1rem] font-black'
-const label = 'text-[0.72rem] font-extrabold uppercase tracking-[0.04em] text-ink-soft'
+const sectionTitle = 'm-0 font-display text-md font-bold'
+const label = 'text-xs font-semibold uppercase tracking-[0.04em] text-ink-soft'
 const input =
-  'w-full rounded-md border border-ink/10 bg-surface px-3 py-[0.55rem] text-[0.88rem] text-ink outline-none focus:shadow-focus disabled:opacity-60'
+  'w-full rounded-md border border-ink/10 bg-surface px-3 py-[0.55rem] text-base text-ink outline-none focus:shadow-focus disabled:opacity-60'
 const textArea =
-  'w-full resize-y rounded-md border border-ink/10 bg-surface px-3 py-[0.55rem] text-[0.78rem] leading-[1.45] text-ink outline-none focus:shadow-focus'
-const note = 'm-0 text-[0.78rem] leading-[1.45] text-ink-soft'
-const small = 'px-3 py-[0.35rem] text-[0.8rem]'
+  'w-full resize-y rounded-md border border-ink/10 bg-surface px-3 py-[0.55rem] text-xs leading-[1.45] text-ink outline-none focus:shadow-focus'
+const note = 'm-0 text-xs leading-[1.45] text-ink-soft'
+const small = 'px-3 py-[0.35rem] text-sm'
 
 const DEFAULT_TYPES = ['basic', 'reverse', 'cloze']
 const PER_SOURCE = [
@@ -425,7 +428,7 @@ function FlashcardBuilder({
       <div className="flex flex-col gap-4 px-5 pt-4 pb-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 id="flashcard-builder-title" className="m-0 font-display text-[1.25rem] font-black">
+            <h3 id="flashcard-builder-title" className="m-0 font-display text-xl font-bold">
               {targetDeck ? `Añadir tarjetas a «${targetDeck.title}»` : 'Crear tarjetas'}
             </h3>
             <p className={cn(note, 'mt-1')}>
@@ -546,8 +549,8 @@ function FlashcardBuilder({
                     type="button"
                     className={cn(
                       btnGhost,
-                      'px-3 py-[0.3rem] text-[0.78rem] shadow-none',
-                      perSource === item.value && 'border-coral text-coral-deep'
+                      'px-3 py-[0.3rem] text-xs shadow-none',
+                      perSource === item.value && 'border-coral/35 bg-coral-soft text-coral-deep'
                     )}
                     aria-pressed={perSource === item.value}
                     disabled={locked}
@@ -561,7 +564,7 @@ function FlashcardBuilder({
           </div>
           <div className="flex flex-col gap-1">
             <span className={label}>Tipos de tarjeta</span>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[0.84rem]">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
               {CARD_TYPES.map((type) => (
                 <label key={type} className="flex items-center gap-2">
                   <input
@@ -585,7 +588,7 @@ function FlashcardBuilder({
           </div>
           <div className="flex flex-col gap-1">
             <span className={label}>Cómo</span>
-            <div className="flex flex-col gap-1 text-[0.84rem]">
+            <div className="flex flex-col gap-1 text-sm">
               <label className="flex items-start gap-2">
                 <input
                   type="radio"
@@ -608,7 +611,7 @@ function FlashcardBuilder({
                 />
                 <span>
                   Conceptos primero
-                  <span className="block text-[0.76rem] text-ink-soft">
+                  <span className="block text-xs text-ink-soft">
                     El chat lista los conceptos clave, eliges cuáles, y luego escribe tarjetas solo
                     para esos. Mejor para cursos enteros.
                   </span>
@@ -653,8 +656,8 @@ function FlashcardBuilder({
                     type="button"
                     className={cn(
                       btnGhost,
-                      'min-w-[2.4rem] px-2 py-[0.25rem] text-[0.78rem] shadow-none',
-                      index === partIndex && 'border-coral text-coral-deep',
+                      'min-w-[2.4rem] px-2 py-[0.25rem] text-xs shadow-none',
+                      index === partIndex && 'border-coral/35 bg-coral-soft text-coral-deep',
                       answered.has(index) && 'bg-teal/10'
                     )}
                     aria-pressed={index === partIndex}
@@ -711,11 +714,11 @@ function FlashcardBuilder({
                 {conceptPhase ? 'Añadir conceptos' : 'Añadir tarjetas'}
               </button>
               {error ? (
-                <span className="text-[0.82rem] font-bold text-coral-deep">{error}</span>
+                <span className="text-sm font-semibold text-coral-deep">{error}</span>
               ) : null}
             </div>
             {skips.length ? (
-              <details className="text-[0.78rem] text-ink-soft">
+              <details className="text-xs text-ink-soft">
                 <summary className="cursor-pointer">
                   {plural(skips.length, 'fila quedó fuera', 'filas quedaron fuera')}
                 </summary>
@@ -755,7 +758,7 @@ function FlashcardBuilder({
             <ul className="m-0 flex max-h-[20rem] list-none flex-col gap-1 overflow-auto p-0">
               {concepts.map((concept, index) => (
                 <li key={`${concept.name}-${index}`}>
-                  <label className="flex items-start gap-2 text-[0.84rem]">
+                  <label className="flex items-start gap-2 text-sm">
                     <input
                       type="checkbox"
                       className="mt-[0.2rem] accent-coral"
@@ -772,7 +775,7 @@ function FlashcardBuilder({
                       <strong>{concept.name}</strong>
                       <span className="text-ink-soft"> · {concept.sources.join(', ')}</span>
                       {concept.why ? (
-                        <span className="block text-[0.76rem] text-ink-soft">{concept.why}</span>
+                        <span className="block text-xs text-ink-soft">{concept.why}</span>
                       ) : null}
                     </span>
                   </label>
@@ -790,7 +793,7 @@ function FlashcardBuilder({
               </h4>
               {saved ? (
                 <span className="flex items-center gap-2">
-                  <span className="text-[0.82rem] font-bold text-teal">
+                  <span className="text-sm font-semibold text-teal">
                     Guardado en «{saved.title}»
                   </span>
                   {onOpenDecks ? (

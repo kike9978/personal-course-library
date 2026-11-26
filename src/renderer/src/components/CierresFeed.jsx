@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { flattenOutline } from '../../../shared/cierres.js'
-import AppNav from './AppNav'
+import { Plus, Search, Star } from 'lucide-react'
+import AppHeader from './AppHeader'
 import CierreComposer from './CierreComposer'
 import { askConfirm } from '../utils/askConfirm'
 import { cn } from '../ui/cn'
-import { btnGhost, btnPrimary } from '../ui/classes'
+import { btnGhost, btnOn, btnPrimary, pageShell, searchIcon, searchInput } from '../ui/classes'
 
-const pageWash =
-  'h-screen flex flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(232,69,112,0.05),transparent_40%),radial-gradient(circle_at_88%_8%,rgba(61,122,122,0.05),transparent_38%),var(--color-cream-deep)]'
 
 function formatWhen(ts) {
   if (!ts) return ''
@@ -209,44 +208,51 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
   }
 
   return (
-    <div className={pageWash}>
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-ink/10 bg-surface-muted px-5 py-4 backdrop-blur-[10px]">
-        <div className="flex min-w-0 flex-col gap-[0.2rem]">
-          <h1 className="m-0 font-display text-[1.35rem] font-black tracking-[-0.02em] text-ink">
-            Cierres
-          </h1>
-          <AppNav active="cierres" onSelect={onNavigate} />
-        </div>
-        <div className="ml-auto flex flex-wrap items-center gap-[0.65rem] max-[900px]:ml-0 max-[900px]:w-full">
-          <button
-            type="button"
-            className={cn(
-              btnGhost,
-              'px-3 py-[0.4rem] text-[0.8rem] shadow-none',
-              favoritesOnly && 'border-coral text-coral-deep'
-            )}
-            aria-pressed={favoritesOnly}
-            onClick={() => setFavoritesOnly((value) => !value)}
-          >
-            Favoritos
-          </button>
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar cierre…"
-            aria-label="Buscar cierres"
-            className="w-[min(100%,280px)] rounded-full border border-ink/10 bg-surface py-[0.55rem] pr-4 pl-4 text-ink shadow-none outline-none"
-          />
-          <button
-            type="button"
-            className={btnPrimary}
-            onClick={() => setComposer({ picker: true })}
-          >
-            Publicar
-          </button>
-        </div>
-      </header>
+    <div className={pageShell}>
+      <AppHeader
+        active="cierres"
+        onNavigate={onNavigate}
+        center={
+          <div className="relative w-full max-w-[22rem]">
+            <Search className={searchIcon} aria-hidden="true" />
+            <input
+              type="search"
+              data-search-field=""
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar cierre…"
+              aria-label="Buscar cierres"
+              title="Buscar (Ctrl+F)"
+              className={searchInput}
+            />
+          </div>
+        }
+        actions={
+          <>
+            <button
+              type="button"
+              className={cn(btnGhost, favoritesOnly && btnOn)}
+              aria-pressed={favoritesOnly}
+              onClick={() => setFavoritesOnly((value) => !value)}
+            >
+              <Star
+                size={15}
+                aria-hidden="true"
+                className={favoritesOnly ? 'fill-current' : undefined}
+              />
+              Favoritos
+            </button>
+            <button
+              type="button"
+              className={btnPrimary}
+              onClick={() => setComposer({ picker: true })}
+            >
+              <Plus size={16} aria-hidden="true" />
+              Publicar
+            </button>
+          </>
+        }
+      />
 
       <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)] max-[900px]:grid-cols-1">
         <aside className="flex min-h-0 flex-col gap-1 overflow-auto border-r border-ink/10 px-3 py-4 max-[900px]:border-r-0 max-[900px]:border-b">
@@ -320,12 +326,12 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
                   >
                     <header className="flex items-start gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="m-0 text-[0.75rem] font-bold tracking-[0.03em] text-ink-soft uppercase">
+                        <p className="m-0 text-xs font-semibold tracking-[0.03em] text-ink-soft uppercase">
                           {titleByPath[item.coursePath] || item.coursePath}
                           {item.sectionTitle ? ` · ${item.sectionTitle}` : ''}
                           {formatWhen(item.publishedAt) ? ` · ${formatWhen(item.publishedAt)}` : ''}
                         </p>
-                        <h2 className="m-0 mt-1 font-display text-[1.2rem] font-black tracking-[-0.02em]">
+                        <h2 className="m-0 mt-1 font-display text-lg font-bold tracking-[-0.02em]">
                           {item.title}
                         </h2>
                       </div>
@@ -352,7 +358,7 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
                     <p className="m-0 whitespace-pre-wrap leading-relaxed">{item.learned}</p>
                     {item.differently ? (
                       <p className="m-0 whitespace-pre-wrap leading-relaxed text-ink-soft">
-                        <span className="font-extrabold text-ink">Qué haría distinto. </span>
+                        <span className="font-semibold text-ink">Qué haría distinto. </span>
                         {item.differently}
                       </p>
                     ) : null}
@@ -379,7 +385,7 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
                     <div className="border-t border-ink/10 pt-3">
                       <button
                         type="button"
-                        className="cursor-pointer border-0 bg-transparent p-0 text-[0.82rem] font-extrabold text-ink-soft"
+                        className="cursor-pointer border-0 bg-transparent p-0 text-sm font-semibold text-ink-soft"
                         aria-expanded={threadOpen}
                         onClick={() => {
                           setOpenThread(threadOpen ? null : item.id)
@@ -392,12 +398,12 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
                         <div className="mt-3 flex flex-col gap-3">
                           {comments.map((comment) => (
                             <div key={comment.id} className="flex items-start gap-3">
-                              <p className="m-0 min-w-0 flex-1 whitespace-pre-wrap text-[0.92rem] leading-relaxed">
+                              <p className="m-0 min-w-0 flex-1 whitespace-pre-wrap text-base leading-relaxed">
                                 {comment.body}
                               </p>
                               <button
                                 type="button"
-                                className="cursor-pointer border-0 bg-transparent p-0 text-[0.75rem] font-bold text-ink-soft"
+                                className="cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-ink-soft"
                                 onClick={() => void removeFollowup(item, comment)}
                               >
                                 Quitar
@@ -450,8 +456,8 @@ function RailButton({ active, label, count, nested = false, empty = false, onCli
     <button
       type="button"
       className={cn(
-        'flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 py-[0.4rem] text-left text-[0.85rem] font-bold text-ink hover:bg-ink/5',
-        nested && 'pl-4 text-[0.8rem] font-semibold',
+        'flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 py-[0.4rem] text-left text-sm font-semibold text-ink hover:bg-ink/5',
+        nested && 'pl-4 text-sm font-semibold',
         empty && 'text-ink-soft',
         active && 'bg-ink/5 text-coral-deep'
       )}
@@ -459,7 +465,7 @@ function RailButton({ active, label, count, nested = false, empty = false, onCli
       onClick={onClick}
     >
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="text-[0.72rem] font-bold text-ink-soft">{empty ? 'sin cierre' : count}</span>
+      <span className="text-xs font-semibold text-ink-soft">{empty ? 'sin cierre' : count}</span>
     </button>
   )
 }

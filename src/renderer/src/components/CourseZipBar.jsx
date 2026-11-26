@@ -53,11 +53,11 @@ function CourseZipBar({
       aria-label="Exportar cursos"
     >
       <div className="flex items-center gap-[0.65rem]">
-        <p className="m-0 min-w-0 flex-1 font-extrabold">
+        <p className="m-0 min-w-0 flex-1 font-semibold">
           {courseLabel}
           {listLabel}
           {detail ? (
-            <span className="mt-[0.1rem] block text-[0.8rem] font-semibold text-ink-soft">
+            <span className="mt-[0.1rem] block text-sm font-semibold text-ink-soft">
               {detail}
             </span>
           ) : null}

@@ -7,7 +7,7 @@ function CoursePickBox({ checked, indeterminate = false, label, onPick, classNam
   return (
     <label
       className={cn(
-        'grid h-[1.45rem] w-[1.45rem] shrink-0 cursor-pointer place-items-center rounded-[0.35rem] border border-ink/10 bg-surface shadow-card',
+        'grid h-[1.45rem] w-[1.45rem] shrink-0 cursor-pointer place-items-center rounded-sm border border-ink/10 bg-surface shadow-card',
         className
       )}
       onPointerDown={(event) => {

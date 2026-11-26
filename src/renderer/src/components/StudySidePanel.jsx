@@ -3,16 +3,15 @@ import NoteEditor, { NoteBody } from './NoteEditor'
 import { noteDisplayTitles, playbackMarkLabel } from '../../../shared/knowledgeGraph.js'
 import { sortWithinGroup } from '../utils/annotationGroups'
 import { cn } from '../ui/cn'
-import { btnGhost, btnPrimary } from '../ui/classes'
+import { btnGhost, btnPrimary, segmented, segmentedItem } from '../ui/classes'
 
 const studyIcon = 'block size-4'
 const studyAction =
-  'shrink-0 cursor-pointer rounded-sm border border-ink/10 bg-surface px-[0.55rem] py-[0.28rem] text-[0.72rem] leading-[1.2] font-bold whitespace-nowrap text-ink hover:border-coral hover:text-coral-deep disabled:cursor-default disabled:opacity-55 disabled:hover:border-ink/10 disabled:hover:text-ink'
+  'shrink-0 cursor-pointer rounded-sm border border-ink/10 bg-surface px-[0.55rem] py-[0.28rem] text-xs leading-[1.2] font-semibold whitespace-nowrap text-ink hover:border-coral hover:text-coral-deep disabled:cursor-default disabled:opacity-55 disabled:hover:border-ink/10 disabled:hover:text-ink'
 const studyIconBtn =
   'inline-flex size-[1.85rem] cursor-pointer items-center justify-center rounded-sm border border-ink/10 bg-surface p-0 text-ink hover:border-coral hover:text-coral-deep disabled:cursor-default disabled:opacity-55'
-const scopeBtn =
-  'cursor-pointer rounded-sm border border-ink/10 bg-cream px-2 py-[0.45rem] text-[0.75rem] font-bold text-ink-soft disabled:cursor-not-allowed disabled:opacity-40'
-const scopeOn = 'border-coral bg-[rgba(232,69,112,0.08)] text-coral-deep'
+const scopeBtn = cn(segmentedItem, 'min-w-0 flex-1 truncate px-2 text-xs')
+const scopeOn = 'bg-surface text-ink shadow-card'
 const dock =
   'group relative flex min-h-0 items-stretch gap-0 border-l border-ink/10 bg-transparent max-[900px]:max-h-[42%] max-[900px]:w-auto max-[900px]:border-t max-[900px]:border-l-0 max-[900px]:border-ink/10 min-[901px]:[&.is-open]:w-[min(calc(var(--study-panel-w,340px)+3.4rem),90vw)] min-[901px]:[&.is-open]:flex-none max-[900px]:[&.is-open]:w-auto max-[900px]:[&.is-open]:flex-col [&.is-resizing]:select-none'
 const resizer =
@@ -20,13 +19,13 @@ const resizer =
 const rail =
   'flex w-11 shrink-0 flex-col items-center gap-[0.4rem] self-stretch bg-transparent pt-[0.55rem] text-ink-soft group-[.is-open]:border-l group-[.is-open]:border-ink/10 max-[900px]:h-auto max-[900px]:w-auto max-[900px]:flex-none max-[900px]:flex-row max-[900px]:border-r-0 max-[900px]:border-b-0 max-[900px]:px-2 max-[900px]:py-[0.35rem]'
 const railToggle =
-  'inline-flex w-[2.4rem] min-h-[2.4rem] cursor-pointer flex-col items-center justify-center gap-[0.15rem] rounded-[12px] border-0 bg-transparent px-[0.1rem] py-[0.3rem] text-[0.62rem] leading-[1.1] font-bold text-ink-soft hover:bg-surface hover:text-coral-deep hover:shadow-card'
+  'inline-flex w-[2.4rem] min-h-[2.4rem] cursor-pointer flex-col items-center justify-center gap-[0.15rem] rounded-md border-0 bg-transparent px-[0.1rem] py-[0.3rem] text-2xs leading-[1.1] font-semibold text-ink-soft hover:bg-surface hover:text-coral-deep hover:shadow-card'
 const railMark =
-  'w-full cursor-pointer rounded-[8px] border border-[rgba(232,69,112,0.35)] bg-[rgba(232,69,112,0.12)] px-[0.1rem] py-[0.28rem] text-[0.62rem] leading-[1.1] font-extrabold text-coral-deep tabular-nums hover:bg-[rgba(232,69,112,0.22)] max-[900px]:w-auto max-[900px]:px-[0.4rem] max-[900px]:whitespace-nowrap'
+  'w-full cursor-pointer rounded-sm border border-[rgba(232,69,112,0.35)] bg-[rgba(232,69,112,0.12)] px-[0.1rem] py-[0.28rem] text-2xs leading-[1.1] font-semibold text-coral-deep tabular-nums hover:bg-[rgba(232,69,112,0.22)] max-[900px]:w-auto max-[900px]:px-[0.4rem] max-[900px]:whitespace-nowrap'
 const panel =
   'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none bg-transparent shadow-none'
 const embeddedAnnotations =
-  'flex min-h-0 min-w-0 flex-1 overflow-hidden [&_header]:px-[0.7rem] [&_header]:py-[0.55rem] [&_header_h1]:text-[1.05rem] [&_header+div]:!flex [&_header+div]:!flex-col [&_header+div]:!overflow-auto [&_[data-annotations-list]]:max-h-[38%] [&_[data-annotations-list]]:min-h-[7.5rem] [&_[data-annotations-list]]:flex-none [&_[data-annotations-list]]:overflow-auto [&_[data-annotations-doc]]:min-h-56 [&_[data-annotations-doc]]:flex-[1_0_14rem] [&_header+div>aside:last-child]:min-h-48 [&_header+div>aside:last-child]:flex-[0_0_12rem] [&_[role=separator]]:hidden'
+  'flex min-h-0 min-w-0 flex-1 overflow-hidden [&_header]:px-[0.7rem] [&_header]:py-[0.55rem] [&_header_h1]:text-md [&_header+div]:!flex [&_header+div]:!flex-col [&_header+div]:!overflow-auto [&_[data-annotations-list]]:max-h-[38%] [&_[data-annotations-list]]:min-h-[7.5rem] [&_[data-annotations-list]]:flex-none [&_[data-annotations-list]]:overflow-auto [&_[data-annotations-doc]]:min-h-56 [&_[data-annotations-doc]]:flex-[1_0_14rem] [&_header+div>aside:last-child]:min-h-48 [&_header+div>aside:last-child]:flex-[0_0_12rem] [&_[role=separator]]:hidden'
 
 const PANEL_MIN = 260
 const PANEL_MAX = 720
@@ -139,7 +138,7 @@ function IconTrash() {
 function ScopeSegments({ noteScope, hasLesson, hasTarget, fileSegment, onChange }) {
   return (
     <div
-      className="grid w-full grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-[0.35rem]"
+      className={cn(segmented, 'flex h-8 w-full')}
       role="group"
       aria-label="Dónde guardar"
     >
@@ -147,6 +146,7 @@ function ScopeSegments({ noteScope, hasLesson, hasTarget, fileSegment, onChange 
         <button
           type="button"
           className={cn(scopeBtn, noteScope === 'moment' && scopeOn)}
+          aria-pressed={noteScope === 'moment'}
           onClick={() => onChange('moment')}
         >
           Este momento
@@ -156,6 +156,7 @@ function ScopeSegments({ noteScope, hasLesson, hasTarget, fileSegment, onChange 
         <button
           type="button"
           className={cn(scopeBtn, noteScope === 'file' && scopeOn)}
+          aria-pressed={noteScope === 'file'}
           onClick={() => onChange('file')}
         >
           {fileSegment}
@@ -164,6 +165,7 @@ function ScopeSegments({ noteScope, hasLesson, hasTarget, fileSegment, onChange 
       <button
         type="button"
         className={cn(scopeBtn, noteScope === 'course' && scopeOn)}
+          aria-pressed={noteScope === 'course'}
         onClick={() => onChange('course')}
       >
         El curso
@@ -175,7 +177,7 @@ function ScopeSegments({ noteScope, hasLesson, hasTarget, fileSegment, onChange 
 function MomentChip({ timeSec, frozen, onUpdate, onRelease }) {
   return (
     <div className="flex flex-wrap items-center gap-[0.35rem]">
-      <span className="text-[0.75rem] font-extrabold text-coral-deep tabular-nums">
+      <span className="text-xs font-semibold text-coral-deep tabular-nums">
         {formatTime(timeSec)}
         {frozen ? ' · fijado' : ''}
       </span>
@@ -244,8 +246,8 @@ function AnnotationCard({ item, highlighted, onJump, onEdit, onDelete }) {
   return (
     <li
       className={cn(
-        'group overflow-hidden rounded-[12px] border border-ink/10 bg-surface px-[0.75rem] py-[0.7rem]',
-        highlighted && 'border-coral shadow-[0_0_0_2px_rgba(232,69,112,0.28)]'
+        'group overflow-hidden rounded-md border border-ink/10 bg-surface px-[0.75rem] py-[0.7rem]',
+        highlighted && 'border-coral shadow-ring-soft'
       )}
       data-note-id={item.id}
     >
@@ -253,14 +255,14 @@ function AnnotationCard({ item, highlighted, onJump, onEdit, onDelete }) {
         {timed ? (
           <button
             type="button"
-            className="cursor-pointer rounded-full border-0 bg-[rgba(232,69,112,0.12)] px-2 py-[0.15rem] text-[0.75rem] font-bold text-coral-deep"
+            className="cursor-pointer rounded-full border-0 bg-[rgba(232,69,112,0.12)] px-2 py-[0.15rem] text-xs font-semibold text-coral-deep"
             onClick={() => onJump(item)}
             title="Ir a este momento"
           >
             {formatTime(item.timeSec)}
           </button>
         ) : (
-          <span className="text-[0.7rem] font-bold tracking-[0.03em] text-teal uppercase">{tag}</span>
+          <span className="text-2xs font-semibold tracking-[0.03em] text-teal uppercase">{tag}</span>
         )}
         <div className="ml-auto flex gap-[0.2rem] opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
           <button
@@ -474,7 +476,7 @@ function StudySidePanel({
         />
       </div>
       <div className="flex items-center gap-[0.45rem]">
-        {dirty ? <span className="text-[0.72rem] font-bold text-ink-soft">Sin guardar</span> : null}
+        {dirty ? <span className="text-xs font-semibold text-ink-soft">Sin guardar</span> : null}
         <button type="button" className={btnPrimary} onClick={onSave} disabled={!canSave}>
           Guardar
         </button>
@@ -508,10 +510,10 @@ function StudySidePanel({
       {expanded ? (
         <aside className={panel} aria-label="Anotaciones del archivo actual">
           <div className="flex items-center justify-between gap-2 px-[0.85rem] pt-[0.8rem] pb-[0.35rem]">
-            <h2 className="m-0 flex items-baseline gap-[0.45rem] font-display text-[0.95rem] font-extrabold">
+            <h2 className="m-0 flex items-baseline gap-[0.45rem] font-display text-md font-semibold">
               {panelLabel}
               {hasTarget && targetNotes.length > 0 ? (
-                <span className="font-body text-[0.78rem] font-bold text-ink-soft">
+                <span className="font-body text-xs font-semibold text-ink-soft">
                   {targetNotes.length}
                 </span>
               ) : null}
@@ -520,7 +522,7 @@ function StudySidePanel({
               <button
                 type="button"
                 className={cn(
-                  'shrink-0 cursor-pointer border-0 bg-transparent p-0 text-[0.82rem] font-bold text-coral-deep hover:underline',
+                  'shrink-0 cursor-pointer border-0 bg-transparent p-0 text-sm font-semibold text-coral-deep hover:underline',
                   annotationsView && 'underline'
                 )}
                 title="Abrir la página de anotaciones"
@@ -538,7 +540,7 @@ function StudySidePanel({
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-3 pt-[0.35rem] pb-3">
             <div className="flex flex-col gap-[0.4rem] px-0 pt-[0.15rem] pb-[0.35rem]">
               {editingVisible ? (
-                <p className="m-0 text-[0.75rem] text-ink-soft">Termina o cancela la nota abierta</p>
+                <p className="m-0 text-xs text-ink-soft">Termina o cancela la nota abierta</p>
               ) : (
                 <>
                   <ScopeSegments
@@ -566,7 +568,7 @@ function StudySidePanel({
                   />
                   {saveRow(Boolean(editingId))}
                   {!editingId && hasLesson && targetNotes.length === 0 ? (
-                    <p className="px-2 py-2 text-[0.85rem] text-ink-soft [&_kbd]:rounded-[4px] [&_kbd]:border [&_kbd]:border-ink/10 [&_kbd]:bg-cream [&_kbd]:px-[0.3rem] [&_kbd]:py-[0.05rem] [&_kbd]:font-body [&_kbd]:text-[0.7em]">
+                    <p className="px-2 py-2 text-sm text-ink-soft [&_kbd]:rounded-[4px] [&_kbd]:border [&_kbd]:border-ink/10 [&_kbd]:bg-cream [&_kbd]:px-[0.3rem] [&_kbd]:py-[0.05rem] [&_kbd]:font-body [&_kbd]:text-[0.7em]">
                       <kbd>N</kbd> anota este momento · <kbd>B</kbd> deja una marca sin texto
                     </p>
                   ) : null}
@@ -580,9 +582,9 @@ function StudySidePanel({
                     <li
                       key={item.id}
                       className={cn(
-                        'flex flex-col gap-[0.45rem] overflow-hidden rounded-[12px] border border-ink/10 bg-surface px-[0.75rem] py-[0.7rem]',
+                        'flex flex-col gap-[0.45rem] overflow-hidden rounded-md border border-ink/10 bg-surface px-[0.75rem] py-[0.7rem]',
                         highlightNoteId === item.id &&
-                          'border-coral shadow-[0_0_0_2px_rgba(232,69,112,0.28)]'
+                          'border-coral shadow-ring-soft'
                       )}
                       data-note-id={item.id}
                     >
@@ -652,11 +654,11 @@ function StudySidePanel({
             <path d="M12 20h9" />
             <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
           </svg>
-          <span className="text-[0.62rem] font-bold">Notas</span>
+          <span className="text-2xs font-semibold">Notas</span>
         </button>
 
         {!expanded && hasLesson && timedNotes.length > 0 ? (
-          <div className="text-[0.65rem] font-extrabold text-ink-soft tabular-nums" title={`${timedNotes.length} marcas`}>
+          <div className="text-2xs font-semibold text-ink-soft tabular-nums" title={`${timedNotes.length} marcas`}>
             {timedNotes.length}
           </div>
         ) : null}

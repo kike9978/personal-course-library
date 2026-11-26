@@ -4,10 +4,10 @@ import { cn } from '../ui/cn'
 import { btnGhost, btnPrimary } from '../ui/classes'
 
 const control =
-  '[&_:is(input,select,textarea)]:w-full [&_:is(input,select,textarea)]:border [&_:is(input,select,textarea)]:border-ink/10 [&_:is(input,select,textarea)]:rounded-sm [&_:is(input,select,textarea)]:bg-surface [&_:is(input,select,textarea)]:px-3 [&_:is(input,select,textarea)]:py-[0.6rem] [&_:is(input,select,textarea)]:font-medium [&_:is(input,select,textarea)]:tracking-normal [&_:is(input,select,textarea)]:text-ink [&_:is(input,select,textarea)]:shadow-none [&_:is(input,select,textarea)]:outline-none [&_:is(input,select,textarea)]:transition-[box-shadow,border-color] [&_:is(input,select,textarea)]:duration-[120ms] [&_:is(input,select,textarea)]:focus:border-[rgba(232,69,112,0.45)] [&_:is(input,select,textarea)]:focus:shadow-[0_0_0_3px_rgba(232,69,112,0.18)] [&_textarea]:min-h-[5rem] [&_textarea]:resize-y [&_textarea]:leading-[1.45]'
+  '[&_:is(input,select,textarea)]:w-full [&_:is(input,select,textarea)]:border [&_:is(input,select,textarea)]:border-ink/10 [&_:is(input,select,textarea)]:rounded-sm [&_:is(input,select,textarea)]:bg-surface [&_:is(input,select,textarea)]:px-3 [&_:is(input,select,textarea)]:py-[0.6rem] [&_:is(input,select,textarea)]:font-medium [&_:is(input,select,textarea)]:tracking-normal [&_:is(input,select,textarea)]:text-ink [&_:is(input,select,textarea)]:shadow-none [&_:is(input,select,textarea)]:outline-none [&_:is(input,select,textarea)]:transition-[box-shadow,border-color] [&_:is(input,select,textarea)]:duration-150 [&_:is(input,select,textarea)]:focus:border-[rgba(232,69,112,0.45)] [&_:is(input,select,textarea)]:focus:shadow-focus [&_textarea]:min-h-[5rem] [&_textarea]:resize-y [&_textarea]:leading-[1.45]'
 const field = cn(
   control,
-  'flex flex-col gap-[0.4rem] text-[0.78rem] font-bold tracking-[0.02em] text-ink-soft'
+  'flex flex-col gap-[0.4rem] text-xs font-semibold tracking-[0.02em] text-ink-soft'
 )
 
 function statusTone(status) {
@@ -332,13 +332,13 @@ function ProjectPanel({
     >
       <div className="border-b border-ink/10 bg-surface-muted px-5 py-4 backdrop-blur-[10px]">
         <div className="flex flex-wrap items-center gap-[0.65rem]">
-          <h2 className="m-0 font-display text-[1.2rem] font-black tracking-[-0.02em] text-ink">
+          <h2 className="m-0 font-display text-lg font-bold tracking-[-0.02em] text-ink">
             {isNew ? 'Nuevo proyecto' : project.title}
           </h2>
           {!isNew ? (
             <span
               className={cn(
-                'inline-flex items-center rounded-full border px-[0.6rem] py-[0.22rem] text-[0.68rem] font-extrabold tracking-[0.05em] uppercase',
+                'inline-flex items-center rounded-full border px-[0.6rem] py-[0.22rem] text-2xs font-semibold tracking-[0.05em] uppercase',
                 statusTone(project.status)
               )}
             >
@@ -354,7 +354,7 @@ function ProjectPanel({
             className="flex flex-wrap items-center gap-[0.65rem] rounded-md border border-[rgba(232,69,112,0.28)] bg-[rgba(232,69,112,0.07)] px-[0.95rem] py-[0.85rem] shadow-card"
             role="alert"
           >
-            <p className="m-0 min-w-[12rem] flex-1 text-[0.88rem] font-medium text-ink">
+            <p className="m-0 min-w-[12rem] flex-1 text-base font-medium text-ink">
               La carpeta vinculada no existe o se movió. Vuelve a vincularla para seguir.
             </p>
             <button type="button" className={btnPrimary} onClick={pickFolder}>
@@ -377,7 +377,7 @@ function ProjectPanel({
               Elegir…
             </button>
           </div>
-          <p className="m-0 text-[0.75rem] font-medium text-ink-soft">
+          <p className="m-0 text-xs font-medium text-ink-soft">
             Puede estar en cualquier disco. No se mueve ni se copia nada del curso.
           </p>
         </div>
@@ -425,7 +425,7 @@ function ProjectPanel({
               </optgroup>
             ))}
           </select>
-          <p className="m-0 text-[0.75rem] font-medium text-ink-soft">
+          <p className="m-0 text-xs font-medium text-ink-soft">
             El proyecto puede quedar en una sección o junto a un archivo o video.
           </p>
         </label>

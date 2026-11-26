@@ -10,23 +10,23 @@ import { courseViewedAt, formatCourseDate } from '../utils/courseTable'
 import { cn } from '../ui/cn'
 import { cardLg } from '../ui/classes'
 
-const badge = 'rounded-full border px-[0.55rem] py-[0.18rem] text-[0.7rem] font-bold'
-const badgeNew = cn(badge, 'border-[#1a6b5c] bg-[#d8f3ec] text-[#0f4a40]')
-const badgeWarn = cn(badge, 'border-[#a66b1a] bg-[#ffe8c2] text-[#6b4508]')
+const badge = 'rounded-full border px-[0.55rem] py-[0.18rem] text-2xs font-semibold'
+const badgeNew = cn(badge, 'border-chip-status-border bg-chip-status text-chip-status-text')
+const badgeWarn = cn(badge, 'border-warn-border bg-warn text-warn-text')
 const badgePrograms = cn(
   badge,
   'border-chip-programs-border bg-chip-programs text-chip-programs-text'
 )
-const badgeTheme = cn(badge, 'border-[#5a4a7a] bg-[#ece6f7] text-[#3d3258]')
+const badgeTheme = cn(badge, 'border-chip-theme-border bg-chip-theme text-chip-theme-text')
 const badgeDone = cn(badge, 'border-chip-status-border bg-chip-status text-chip-status-text')
 const ribbon =
-  'static rounded-full border border-chip-status-border bg-chip-status px-[0.65rem] py-[0.28rem] text-[0.7rem] font-extrabold tracking-[0.03em] text-chip-status-text uppercase'
+  'static rounded-full border border-chip-status-border bg-chip-status px-[0.65rem] py-[0.28rem] text-2xs font-semibold tracking-[0.03em] text-chip-status-text uppercase'
 const ribbonRecent = 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
 const cell =
   'border-b border-ink/10 px-[0.55rem] py-[0.45rem] text-left align-middle whitespace-nowrap'
 const headCell = cn(cell, 'sticky top-0 z-[2] bg-cream align-top')
 const filterControl =
-  'w-full min-w-0 rounded-sm border border-ink/10 bg-surface px-[0.4rem] py-[0.22rem] text-xs text-ink focus:shadow-[0_0_0_2px_rgba(232,69,112,0.28)] focus:outline-none'
+  'w-full min-w-0 rounded-sm border border-ink/10 bg-surface px-[0.4rem] py-[0.22rem] text-xs text-ink focus:shadow-ring-soft focus:outline-none'
 const cardAction =
   'grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-ink/10 bg-surface shadow-card hover:bg-coral hover:text-white'
 
@@ -124,7 +124,7 @@ function Thumb({ coursePath, hasCover }) {
 function SortButton({ column, columnSort, onColumnSort }) {
   if (!column.kind)
     return (
-      <span className="text-[0.68rem] font-extrabold tracking-[0.04em] text-ink-soft uppercase">
+      <span className="text-2xs font-semibold tracking-[0.04em] text-ink-soft uppercase">
         {column.label}
       </span>
     )
@@ -134,7 +134,7 @@ function SortButton({ column, columnSort, onColumnSort }) {
     <button
       type="button"
       className={cn(
-        'cursor-pointer border-0 bg-transparent p-0 text-left text-[0.68rem] font-extrabold tracking-[0.04em] text-ink-soft uppercase',
+        'cursor-pointer border-0 bg-transparent p-0 text-left text-2xs font-semibold tracking-[0.04em] text-ink-soft uppercase',
         active && 'text-coral-deep'
       )}
       onClick={() => onColumnSort(column.key, column.kind)}
@@ -243,7 +243,7 @@ function FilterMenu({ label, value, options, onChange }) {
                     role="option"
                     aria-selected={isSelected}
                     className={cn(
-                      'block w-full cursor-pointer truncate rounded-[8px] border-0 bg-transparent px-2 py-1.5 text-left text-xs font-semibold text-ink hover:bg-ink/5',
+                      'block w-full cursor-pointer truncate rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-xs font-semibold text-ink hover:bg-ink/5',
                       isSelected && 'bg-ink/5'
                     )}
                     onClick={(event) => pick(event, option.value)}
@@ -388,7 +388,7 @@ function ChipList({ items, className }) {
           {item}
         </span>
       ))}
-      {extra > 0 ? <span className="text-[0.72rem] font-bold text-ink-soft">+{extra}</span> : null}
+      {extra > 0 ? <span className="text-xs font-semibold text-ink-soft">+{extra}</span> : null}
     </div>
   )
 }
@@ -441,8 +441,8 @@ function TableRow({
   return (
     <tr
       className={cn(
-        'cursor-pointer hover:bg-[#fff7f4] focus-visible:bg-[#fff7f4]',
-        isSelected && 'bg-[#fff7f4] shadow-[inset_3px_0_0_#e84570]',
+        'cursor-pointer hover:bg-coral-soft/60 focus-visible:bg-coral-soft/60',
+        isSelected && 'bg-coral-soft/60 shadow-[inset_3px_0_0_var(--color-coral)]',
         isPicked && 'outline outline-2 outline-offset-1 outline-coral'
       )}
       data-course-path={course.path}
@@ -476,12 +476,12 @@ function TableRow({
         />
       </td>
       <td className={cell}>
-        <div className="h-10 w-16 overflow-hidden rounded-[8px] border border-ink/10 bg-cream-deep">
+        <div className="h-10 w-16 overflow-hidden rounded-sm border border-ink/10 bg-cream-deep">
           <Thumb coursePath={course.path} hasCover={course.hasCover} />
         </div>
       </td>
       <td className={cell}>
-        <div className="max-w-[18rem] truncate font-display font-extrabold" title={course.title}>
+        <div className="max-w-[18rem] truncate font-display font-semibold" title={course.title}>
           {course.title}
         </div>
       </td>
@@ -517,7 +517,7 @@ function TableRow({
         {percent == null ? (
           '—'
         ) : (
-          <span className="font-bold text-teal" title={course.learning?.lastLessonTitle || ''}>
+          <span className="font-semibold text-teal" title={course.learning?.lastLessonTitle || ''}>
             {percent}%
           </span>
         )}
@@ -616,7 +616,7 @@ export default function CourseTable({
 }) {
   return (
     <div className={cn(cardLg, 'w-full overflow-x-auto')}>
-      <table className="w-full min-w-[1280px] border-separate border-spacing-0 text-[0.84rem]">
+      <table className="w-full min-w-[1280px] border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
             <th scope="col" className={cn(headCell, 'w-10 text-center')}>

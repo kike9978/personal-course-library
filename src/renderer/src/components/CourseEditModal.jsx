@@ -5,11 +5,17 @@ import brandMark from '../assets/img/brand-mark.svg'
 import ChipAutocomplete from './ChipAutocomplete'
 import { CourseDescriptionDialog } from './CourseDescription'
 import { cn } from '../ui/cn'
-import { btnGhost, btnPrimary, fieldControl, fieldLabel } from '../ui/classes'
+import {
+  btnGhost,
+  btnPrimary,
+  fieldControl,
+  fieldLabel,
+  dialogShell as dialogBase,
+  dialogBody
+} from '../ui/classes'
 
-const dialogShell =
-  'w-[calc(100%-2rem)] max-w-[460px] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel open:flex open:flex-col backdrop:bg-[rgba(26,20,35,0.45)]'
-const dialogForm = 'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem]'
+const dialogShell = cn(dialogBase, 'max-w-[460px]')
+const dialogForm = dialogBody
 const textArea = cn(fieldControl, 'min-h-[4.5rem] resize-y')
 
 function StarRate({ value, onChange }) {
@@ -20,7 +26,7 @@ function StarRate({ value, onChange }) {
           key={n}
           type="button"
           className={cn(
-            'cursor-pointer border-0 bg-transparent px-[0.15rem] py-[0.1rem] text-[1.35rem] leading-none text-[rgba(26,20,35,0.28)]',
+            'cursor-pointer border-0 bg-transparent px-[0.15rem] py-[0.1rem] text-xl leading-none text-[rgba(23,21,28,0.28)]',
             value >= n && 'text-coral-deep'
           )}
           aria-pressed={value >= n}
@@ -33,7 +39,7 @@ function StarRate({ value, onChange }) {
       {value > 0 ? (
         <button
           type="button"
-          className="ml-[0.35rem] cursor-pointer border-0 bg-transparent text-[0.8rem] font-[650] text-ink-soft underline"
+          className="ml-[0.35rem] cursor-pointer border-0 bg-transparent text-sm font-semibold text-ink-soft underline"
           onClick={() => onChange(0)}
         >
           Quitar
@@ -203,7 +209,7 @@ function CourseEditModal({
           </div>
           <div>
             <h3>Editar propiedades</h3>
-            <p className="m-0 text-[0.85rem] text-ink-soft">
+            <p className="m-0 text-sm text-ink-soft">
               {course.title}
               {course.missingProps ? ' · Sin courseProps (se creará al guardar)' : ''}
             </p>
@@ -274,12 +280,12 @@ function CourseEditModal({
 
           <div>
             <div className="mb-[0.3rem] flex items-baseline justify-between gap-2">
-              <span className="text-[0.78rem] font-extrabold tracking-[0.04em] text-ink-soft uppercase">
+              <span className="text-xs font-semibold tracking-[0.04em] text-ink-soft uppercase">
                 Descripción
               </span>
               <button
                 type="button"
-                className="cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-coral-deep hover:underline"
+                className="cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-coral-deep hover:underline"
                 onClick={() => setWritingDescription(true)}
               >
                 {description ? 'Reescribir' : 'Escribir'}
@@ -287,7 +293,7 @@ function CourseEditModal({
             </div>
             <p
               className={cn(
-                'm-0 line-clamp-3 text-[0.82rem] leading-[1.4]',
+                'm-0 line-clamp-3 text-sm leading-[1.4]',
                 !description && 'text-ink-soft'
               )}
             >
@@ -299,7 +305,7 @@ function CourseEditModal({
 
           <div>
             <label
-              className="flex w-fit cursor-pointer items-center gap-2 text-[0.92rem] font-bold tracking-normal text-ink normal-case"
+              className="flex w-fit cursor-pointer items-center gap-2 text-base font-semibold tracking-normal text-ink normal-case"
               htmlFor="course-hide"
             >
               <input
@@ -311,7 +317,7 @@ function CourseEditModal({
               />
               <span>Ocultar</span>
             </label>
-            <p className="mt-[0.35rem] mb-0 text-[0.78rem] leading-[1.4] text-ink-soft">
+            <p className="mt-[0.35rem] mb-0 text-xs leading-[1.4] text-ink-soft">
               No entra en las listas ni en el resto de la app. Para volver a verlo, pon{' '}
               <code>hide</code> en <code>false</code> dentro de courseProps.json.
             </p>

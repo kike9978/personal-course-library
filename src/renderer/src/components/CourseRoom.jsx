@@ -14,10 +14,19 @@ import ExcitementGauge from './ExcitementGauge'
 import { collectCourseFacets } from '../utils/courseFilters'
 import Loader from './Loader'
 import { cn } from '../ui/cn'
-import { iconBtn, iconBtnGhost } from '../ui/classes'
+import { ArrowLeft, Ellipsis } from 'lucide-react'
+import {
+  btnCompact,
+  btnPrimary,
+  btnQuiet,
+  iconBtn,
+  iconBtnGhost,
+  iconOnly,
+  menuItem,
+  popover
+} from '../ui/classes'
 
-const roomPopoverItem =
-  'flex w-full cursor-pointer flex-col items-start gap-[2px] rounded-[8px] border-0 bg-transparent px-[10px] py-2 text-left text-[0.875rem] font-bold text-ink hover:enabled:bg-ink/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral disabled:cursor-not-allowed disabled:opacity-50'
+const roomPopoverItem = menuItem
 
 const SIDEBAR_OPEN_KEY = 'course-sidebar-open'
 
@@ -592,11 +601,11 @@ function CourseRoom({
           if (await shouldOfferCierre(subject)) {
             toast.custom(
               (t) => (
-                <div className="flex items-center gap-3 rounded-[14px] border-[3px] border-[#1a1423] bg-[#fff4e8] px-4 py-3 font-bold text-[#1a1423]">
+                <div className="flex items-center gap-3 rounded-md border border-ink/8 bg-surface py-2 pr-2 pl-4 text-sm font-medium text-ink shadow-panel">
                   <span>Lección completada</span>
                   <button
                     type="button"
-                    className="cursor-pointer rounded-full border-0 bg-[#1a1423] px-3 py-1 text-white"
+                    className={cn(btnPrimary, btnCompact, 'h-8 px-3')}
                     onClick={() => {
                       toast.dismiss(t.id)
                       setCierreDraft(subject)
@@ -1285,22 +1294,26 @@ function CourseRoom({
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-cream-deep">
-      <header className="z-20 flex min-h-[52px] flex-wrap items-center justify-between gap-4 border-b border-ink/10 bg-surface px-[0.9rem] py-[0.45rem]">
-        <button type="button" className={cn(iconBtn, iconBtnGhost)} onClick={onBack}>
-          ← {backLabel}
+      <header className="z-20 flex min-h-14 flex-wrap items-center justify-between gap-4 border-b border-ink/8 bg-surface px-4 py-2">
+        <button type="button" className={cn(btnQuiet, 'h-8 px-2 text-ink')} onClick={onBack}>
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          {backLabel}
         </button>
+        <span className="h-6 w-px bg-ink/10" aria-hidden="true" />
         <div className="flex min-w-0 flex-1 flex-col justify-center gap-[0.12rem]">
           <h1
-            className="m-0 overflow-hidden font-display text-[1.15rem] leading-[1.15] font-extrabold text-ellipsis whitespace-nowrap"
+            className="m-0 overflow-hidden font-display text-lg leading-tight font-bold tracking-tight text-ellipsis whitespace-nowrap"
             title={[course.title, course.instructor].filter(Boolean).join(' ')}
           >
             {course.title || 'Curso'}
-            {course.instructor ? <span className="ml-[0.4rem] font-bold">{course.instructor}</span> : null}
+            {course.instructor ? (
+              <span className="ml-2 font-body text-sm font-normal text-ink-soft">{course.instructor}</span>
+            ) : null}
           </h1>
           <InstitutionMark
             institution={course.institution}
             markClassName="mt-[0.12rem] block max-h-[1.45rem] max-w-[8.5rem] object-[left_center]"
-            nameClassName="mt-[0.12rem] block overflow-hidden font-display text-[1.02rem] leading-none font-extrabold tracking-[0.06em] text-ellipsis whitespace-nowrap text-[#ff3b1f] uppercase"
+            nameClassName="mt-0.5 block overflow-hidden text-xs leading-none font-semibold tracking-[0.06em] text-ellipsis whitespace-nowrap text-coral-deep uppercase"
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1312,17 +1325,18 @@ function CourseRoom({
           <div className="relative z-[4] shrink-0" ref={moreMenuRef}>
             <button
               type="button"
-              className={cn(iconBtn, iconBtnGhost)}
+              className={cn(iconOnly, moreOpen && 'bg-ink/6 text-ink')}
               aria-haspopup="menu"
               aria-expanded={moreOpen}
               onClick={() => setMoreOpen((open) => !open)}
               title="Más acciones"
+              aria-label="Más acciones"
             >
-              ···
+              <Ellipsis aria-hidden="true" />
             </button>
             {moreOpen ? (
               <div
-                className="absolute top-[calc(100%+6px)] right-0 z-[5] min-w-[17rem] rounded-md border border-ink/10 bg-surface p-[6px] shadow-panel"
+                className={popover}
                 role="menu"
                 aria-label="Acciones del curso"
               >
@@ -1337,7 +1351,7 @@ function CourseRoom({
                   }}
                 >
                   <span>Rescanear</span>
-                  <small className="text-xs font-medium text-ink-soft">Vuelve a leer la carpeta del curso</small>
+                  <small>Vuelve a leer la carpeta del curso</small>
                 </button>
                 <button
                   type="button"
@@ -1349,7 +1363,7 @@ function CourseRoom({
                   }}
                 >
                   <span>Abrir en explorador</span>
-                  <small className="text-xs font-medium text-ink-soft">Archivos reales de esta carpeta</small>
+                  <small>Archivos reales de esta carpeta</small>
                 </button>
               </div>
             ) : null}
@@ -1397,7 +1411,7 @@ function CourseRoom({
         >
           <aside
             className={cn(
-              'min-h-0 overflow-auto rounded-[16px] bg-surface shadow-card',
+              'min-h-0 overflow-auto rounded-lg bg-surface shadow-card',
               !sidebarOpen &&
                 'flex flex-col items-center overflow-hidden pt-[0.7rem] max-[900px]:flex-row max-[900px]:items-center max-[900px]:px-[0.65rem] max-[900px]:pt-0'
             )}
@@ -1436,7 +1450,7 @@ function CourseRoom({
               playableCount={progress?.playableCount ?? 0}
             />
           </aside>
-          <div className="flex min-h-0 min-w-0 overflow-hidden rounded-[16px] bg-surface shadow-card max-[900px]:flex-col">
+          <div className="flex min-h-0 min-w-0 overflow-hidden rounded-lg bg-surface shadow-card max-[900px]:flex-col">
           <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
             {panelMode === 'project' ? (
               <ProjectPanel

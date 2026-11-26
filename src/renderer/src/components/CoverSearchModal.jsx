@@ -1,19 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { cn } from '../ui/cn'
-import { btnCompact, btnGhost, btnPrimary, fieldControl, fieldLabel } from '../ui/classes'
+import {
+  btnCompact,
+  btnGhost,
+  btnPrimary,
+  fieldControl,
+  fieldLabel,
+  dialogShell as dialogBase,
+  dialogBody,
+  dialogLead as sharedDialogLead
+} from '../ui/classes'
 
-const dialogShell =
-  'w-[calc(100%-2rem)] max-w-[760px] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel open:flex open:max-h-[calc(100vh-2rem)] open:flex-col backdrop:bg-[rgba(26,20,35,0.45)]'
-const dialogForm = 'flex flex-col gap-[0.85rem] overflow-auto px-[1.15rem] pt-2 pb-[1.15rem]'
-const dialogLead = 'mt-[0.35rem] mb-0 text-[0.85rem] leading-[1.4] text-ink-soft'
+const dialogShell = cn(dialogBase, 'max-w-[760px] open:max-h-[calc(100vh-2rem)]')
+const dialogForm = cn(dialogBody, 'overflow-auto')
+const dialogLead = sharedDialogLead
 const searchInput =
   'w-full rounded-md border border-ink/10 bg-surface px-3 py-[0.55rem] text-ink outline-none focus:shadow-focus motion-reduce:animate-none'
 const rowBase =
-  'flex cursor-pointer items-start gap-[0.65rem] rounded-[10px] px-[0.65rem] py-[0.55rem] hover:bg-coral/8'
+  'flex cursor-pointer items-start gap-[0.65rem] rounded-md px-[0.65rem] py-[0.55rem] hover:bg-coral/8'
 const listBox =
   'flex max-h-[min(42vh,360px)] flex-col gap-[0.35rem] overflow-auto rounded-md border border-ink/10 bg-surface p-[0.15rem]'
-const emptyNote = 'm-0 p-4 text-center text-[0.9rem] text-ink-soft'
+const emptyNote = 'm-0 p-4 text-center text-base text-ink-soft'
 
 function coverQueryFor(course) {
   return [course?.institution, course?.title]
@@ -390,7 +398,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
   return (
     <dialog
       ref={dialogRef}
-      className={cn(dialogShell, dragOver && 'shadow-[0_0_0_3px_#e84570]')}
+      className={cn(dialogShell, dragOver && 'shadow-ring')}
       onClose={handleClose}
       onClick={handleBackdropClick}
     >
@@ -467,10 +475,10 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                         onChange={() => toggleOne(course.path)}
                       />
                       <span className="flex min-w-0 flex-col gap-[0.15rem]">
-                        <span className="font-display leading-[1.25] font-extrabold text-ink">
+                        <span className="font-display leading-[1.25] font-semibold text-ink">
                           {course.title || course.path}
                         </span>
-                        <span className="text-[0.78rem] break-all text-ink-soft">
+                        <span className="text-xs break-all text-ink-soft">
                           {course.path}
                         </span>
                         <span className="text-xs text-ink-soft">
@@ -483,7 +491,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
               )}
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]">
-              <span className="text-[0.85rem] font-bold text-ink-soft">
+              <span className="text-sm font-semibold text-ink-soft">
                 {selectedCount} de {courses.length} seleccionado{selectedCount === 1 ? '' : 's'}
               </span>
               <div className="flex gap-2">
@@ -515,7 +523,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                   ? 'La imagen actual se sustituye cuando guardes otra.'
                   : 'Elige cómo conseguir la imagen. La búsqueda web no empieza sola.'}
               </p>
-              <p className="mt-[0.35rem] mb-0 font-display font-extrabold text-ink">
+              <p className="mt-[0.35rem] mb-0 font-display font-semibold text-ink">
                 {courses[0].title || courses[0].path}
               </p>
             </div>
@@ -553,8 +561,8 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
             </div>
             <p
               className={cn(
-                'm-0 text-[0.8rem] text-ink-soft',
-                dragOver && 'font-extrabold text-coral-deep'
+                'm-0 text-sm text-ink-soft',
+                dragOver && 'font-semibold text-coral-deep'
               )}
             >
               {dragOver
@@ -592,7 +600,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
             >
               <span className="block h-full bg-coral" style={{ width: `${progressPct}%` }} />
             </div>
-            <p className="m-0 text-[0.9rem] text-ink-soft">
+            <p className="m-0 text-base text-ink-soft">
               {progress.title || 'Preparando búsqueda…'}
             </p>
             <div className="flex justify-end gap-2 pt-[0.35rem]">
@@ -613,7 +621,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                 {reviewIndex + 1} de {items.length}
                 {current.course.institution ? ` · ${current.course.institution}` : ''}
               </p>
-              <p className="mt-[0.35rem] mb-0 font-display font-extrabold text-ink">
+              <p className="mt-[0.35rem] mb-0 font-display font-semibold text-ink">
                 {current.course.title || current.course.path}
               </p>
             </div>
@@ -657,8 +665,8 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
             </div>
             <p
               className={cn(
-                'm-0 text-[0.8rem] text-ink-soft',
-                dragOver && 'font-extrabold text-coral-deep'
+                'm-0 text-sm text-ink-soft',
+                dragOver && 'font-semibold text-coral-deep'
               )}
             >
               {dragOver
@@ -667,7 +675,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
             </p>
 
             {current.error ? (
-              <p className="m-0 text-[0.9rem] text-coral-deep">{current.error}</p>
+              <p className="m-0 text-base text-coral-deep">{current.error}</p>
             ) : null}
 
             {current.candidates.length > 0 ? (
@@ -685,13 +693,13 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
                       role="radio"
                       aria-checked={isSelected}
                       className={cn(
-                        'cursor-pointer rounded-md border border-ink/10 bg-cream-deep p-0 shadow-none focus-visible:border-coral focus-visible:shadow-[0_0_0_3px_#e84570] disabled:cursor-default disabled:opacity-70',
-                        isSelected && 'border-coral shadow-[0_0_0_3px_#e84570]'
+                        'cursor-pointer rounded-md border border-ink/10 bg-cream-deep p-0 shadow-none focus-visible:border-coral focus-visible:shadow-ring disabled:cursor-default disabled:opacity-70',
+                        isSelected && 'border-coral shadow-ring'
                       )}
                       onClick={() => setSelectedId(candidate.id)}
                       disabled={researching || saving}
                     >
-                      <span className="block aspect-[16/10] overflow-hidden rounded-[12px]">
+                      <span className="block aspect-[16/10] overflow-hidden rounded-md">
                         <img
                           className="block h-full w-full object-cover"
                           src={candidate.dataUrl}
@@ -707,7 +715,7 @@ function CoverSearchModal({ courses = [], initialStep = 'select', onClose }) {
             )}
 
             {selectedCandidate?.source ? (
-              <p className="m-0 text-[0.78rem] text-ink-soft">{selectedCandidate.source}</p>
+              <p className="m-0 text-xs text-ink-soft">{selectedCandidate.source}</p>
             ) : null}
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]">

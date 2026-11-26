@@ -1,36 +1,38 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { cn } from '../ui/cn'
-import { btnGhost, btnPrimary } from '../ui/classes'
+import {
+  btnGhost,
+  btnPrimary,
+  dialogShell as dialogBase,
+  dialogBody,
+  dialogLead as sharedDialogLead, menuItem as sharedMenuItem } from '../ui/classes'
 
-const dialogBox =
-  'w-[calc(100%-2rem)] max-w-[460px] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel [&:modal]:flex [&:modal]:flex-col [&::backdrop]:bg-[rgba(26,20,35,0.45)]'
+const dialogBox = cn(dialogBase, 'max-w-[460px]')
 const notionDialog = cn(
   dialogBox,
   'max-h-[min(90vh,48rem)] max-w-[40rem] overflow-auto [&_[data-cols]]:!grid-cols-1'
 )
-const dialogForm =
-  'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem] [&_h3]:m-0 [&_h3]:font-display [&_h3]:text-[1.2rem] [&_h3]:font-black'
-const dialogLead = 'mt-[0.35rem] text-[0.85rem] leading-[1.4] text-ink-soft [&_code]:text-[0.8em]'
+const dialogForm = cn(dialogBody, '[&_h3]:m-0 [&_h3]:font-display [&_h3]:text-xl [&_h3]:font-bold [&_h3]:tracking-tight')
+const dialogLead = sharedDialogLead
 const actionsSpread = 'flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]'
 const actionsBtns = 'flex gap-2'
 const field =
-  '[&_label]:mb-[0.3rem] [&_label]:block [&_label]:text-[0.78rem] [&_label]:font-extrabold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:px-3 [&_input]:py-[0.65rem] [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-focus'
+  '[&_label]:mb-[0.3rem] [&_label]:block [&_label]:text-xs [&_label]:font-semibold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:px-3 [&_input]:py-[0.65rem] [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-focus'
 const credentialLabel =
-  'mb-[0.3rem] block text-[0.78rem] font-extrabold tracking-[0.04em] text-ink-soft uppercase'
+  'mb-[0.3rem] block text-xs font-semibold tracking-[0.04em] text-ink-soft uppercase'
 const cols = 'grid grid-cols-2 gap-3 max-[720px]:grid-cols-1'
 const block =
-  'flex flex-col gap-[0.65rem] rounded-md border border-ink/10 bg-surface p-[0.85rem] [&_h3]:m-0 [&_h3]:font-display [&_h4]:m-0 [&_h4]:font-display [&_p]:m-0 [&_p]:text-[0.88rem] [&_p]:text-ink-soft [&_pre]:mt-[0.35rem] [&_pre]:mb-0 [&_pre]:max-h-[12rem] [&_pre]:overflow-auto [&_pre]:font-body [&_pre]:text-[0.82rem] [&_pre]:whitespace-pre-wrap [&_pre]:text-ink'
+  'flex flex-col gap-[0.65rem] rounded-md border border-ink/10 bg-surface p-[0.85rem] [&_h3]:m-0 [&_h3]:font-display [&_h4]:m-0 [&_h4]:font-display [&_p]:m-0 [&_p]:text-base [&_p]:text-ink-soft [&_pre]:mt-[0.35rem] [&_pre]:mb-0 [&_pre]:max-h-[12rem] [&_pre]:overflow-auto [&_pre]:font-body [&_pre]:text-sm [&_pre]:whitespace-pre-wrap [&_pre]:text-ink'
 const conflictCard = cn(block, 'mb-4')
-const deletes = 'flex flex-col gap-3 [&_h4]:m-0 [&_h4]:font-display [&_p]:m-0 [&_p]:text-[0.88rem] [&_p]:text-ink-soft'
+const deletes = 'flex flex-col gap-3 [&_h4]:m-0 [&_h4]:font-display [&_p]:m-0 [&_p]:text-base [&_p]:text-ink-soft'
 const scopeList =
-  'mt-[0.2rem] flex list-none flex-col gap-[0.65rem] p-0 [&_li]:flex [&_li]:flex-col [&_li]:gap-[0.15rem] [&_li]:rounded-md [&_li]:border [&_li]:border-ink/10 [&_li]:bg-surface [&_li]:px-[0.8rem] [&_li]:py-[0.7rem] [&_strong]:font-display [&_span]:text-[0.86rem] [&_span]:leading-[1.4] [&_span]:text-ink-soft'
+  'mt-[0.2rem] flex list-none flex-col gap-[0.65rem] p-0 [&_li]:flex [&_li]:flex-col [&_li]:gap-[0.15rem] [&_li]:rounded-md [&_li]:border [&_li]:border-ink/10 [&_li]:bg-surface [&_li]:px-[0.8rem] [&_li]:py-[0.7rem] [&_strong]:font-display [&_span]:text-sm [&_span]:leading-[1.4] [&_span]:text-ink-soft'
 const fold =
-  'flex flex-col gap-3 rounded-md border border-ink/10 bg-surface p-[0.85rem] [&_summary]:cursor-pointer [&_summary]:font-display [&_summary]:font-[650]'
+  'flex flex-col gap-3 rounded-md border border-ink/10 bg-surface p-[0.85rem] [&_summary]:cursor-pointer [&_summary]:font-display [&_summary]:font-semibold'
 const debugBox =
-  'flex flex-col gap-3 rounded-md border border-ink/10 bg-surface p-[0.85rem] [&_summary]:cursor-pointer [&_summary]:font-display [&_summary]:font-[650] [&_p]:m-0 [&_p]:text-[0.88rem] [&_p]:text-ink-soft [&_pre]:m-0 [&_pre]:max-h-[16rem] [&_pre]:overflow-auto [&_pre]:font-body [&_pre]:text-[0.75rem] [&_pre]:whitespace-pre-wrap [&_pre]:text-ink'
-const menuItem =
-  'flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left text-[0.875rem] font-bold text-ink hover:bg-[rgba(42,36,56,0.05)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral disabled:cursor-not-allowed disabled:opacity-50 [&_small]:text-[0.75rem] [&_small]:font-medium [&_small]:text-ink-soft'
+  'flex flex-col gap-3 rounded-md border border-ink/10 bg-surface p-[0.85rem] [&_summary]:cursor-pointer [&_summary]:font-display [&_summary]:font-semibold [&_p]:m-0 [&_p]:text-base [&_p]:text-ink-soft [&_pre]:m-0 [&_pre]:max-h-[16rem] [&_pre]:overflow-auto [&_pre]:font-body [&_pre]:text-xs [&_pre]:whitespace-pre-wrap [&_pre]:text-ink'
+const menuItem = sharedMenuItem
 const cancelBtn = cn(btnGhost, 'mt-[0.45rem]')
 
 function notionErrorText(error, fallback) {
@@ -178,7 +180,7 @@ function SyncProgress({ status, active }) {
   if (!active) return null
   return (
     <div
-      className="flex flex-col gap-[0.35rem] [&_span]:text-[0.78rem] [&_span]:font-[650] [&_span]:text-ink-soft"
+      className="flex flex-col gap-[0.35rem] [&_span]:text-xs [&_span]:font-semibold [&_span]:text-ink-soft"
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={known ? shownTotal : undefined}
@@ -492,7 +494,7 @@ function NotionSyncAttention({ status, resolvingId, resolveWith, retryingSave })
   return (
     <>
       {status?.lastError ? (
-        <p className="m-0 text-[0.86rem] text-coral-deep">
+        <p className="m-0 text-sm text-coral-deep">
           {status.lastError}
           {retryingSave ? ' Se vuelve a intentar.' : ''}
           {status.lastErrorCode === 'conflict_error' && !retryingSave
@@ -909,16 +911,21 @@ export function NotionSyncButton() {
         type="button"
         className={cn(
           btnGhost,
-          'mr-[0.2rem] inline-flex h-9 flex-row items-center gap-[0.4rem] px-[0.7rem] py-0 leading-[1.15] [&_small]:text-[0.68rem] [&_small]:font-semibold',
+          'h-8 gap-2 px-2.5 shadow-none [&_small]:text-xs [&_small]:font-normal',
           status?.lastError
             ? '[&_small]:text-coral-deep'
-            : status?.enabled
-              ? '[&_small]:text-ink'
-              : '[&_small]:text-ink-soft'
+            : '[&_small]:text-ink-soft'
         )}
         onClick={() => setOpen(true)}
         title={status?.lastError || 'Conectar la biblioteca con Notion'}
       >
+        <span
+          className={cn(
+            'size-2 shrink-0 rounded-full',
+            status?.lastError ? 'bg-coral' : status?.enabled ? 'bg-teal' : 'bg-ink/20'
+          )}
+          aria-hidden="true"
+        />
         Notion
         {status?.enabled || conflictCount ? (
           <small>
@@ -958,7 +965,7 @@ export function NotionSyncButton() {
                 <ShareScope expanded />
               </>
             )}
-            <p className="flex items-center gap-2 font-bold">
+            <p className="flex items-center gap-2 font-semibold">
               {connected ? 'Esta biblioteca está conectada.' : 'Esta biblioteca está desconectada.'}
             </p>
             {status?.migrating ? (
@@ -1074,7 +1081,7 @@ export function NotionSyncConflict({
   return (
     <>
       {note.notion?.error && !conflict ? (
-        <p className="m-0 text-[0.86rem] text-coral-deep">{note.notion.error}</p>
+        <p className="m-0 text-sm text-coral-deep">{note.notion.error}</p>
       ) : null}
       {conflict ? (
         <section className={conflictCard} aria-label="Conflicto con Notion">

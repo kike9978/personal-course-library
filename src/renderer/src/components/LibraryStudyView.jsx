@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import AnnotationsWorkspace from './AnnotationsWorkspace'
-import AppNav from './AppNav'
 import { collectCourseFacets } from '../utils/courseFilters'
 
 function noteInCourse(item, coursePath) {
@@ -194,7 +193,8 @@ function LibraryStudyView({
       <AnnotationsWorkspace
         title="Anotaciones"
         subtitle={courseFilter ? titleByPath[courseFilter] || courseFilter : 'Toda la biblioteca'}
-        nav={<AppNav active="annotations" onSelect={onNavigate} />}
+        navActive="annotations"
+        onNavigate={onNavigate}
         onBack={onBack}
         courseFilter={{
           id: 'annotations-course-filter',

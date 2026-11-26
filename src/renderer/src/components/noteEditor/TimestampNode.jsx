@@ -54,7 +54,7 @@ export class TimestampNode extends DecoratorNode {
     const span = document.createElement('span')
     span.setAttribute(
       'class',
-      'mx-[0.1em] inline-flex cursor-pointer items-center rounded-full border border-ink/16 bg-surface px-[0.4em] py-[0.05em] align-baseline text-[0.85em] font-bold text-coral-deep tabular-nums'
+      'mx-[0.1em] inline-flex cursor-pointer items-center rounded-full border border-ink/16 bg-surface px-[0.4em] py-[0.05em] align-baseline text-[0.85em] font-semibold text-coral-deep tabular-nums'
     )
     span.setAttribute('data-time-sec', String(this.__timeSec))
     span.textContent = this.getDisplayLabel()
@@ -97,7 +97,7 @@ function TimestampChip({ timeSec, label }) {
   return (
     <button
       type="button"
-      className="mx-[0.1em] inline-flex cursor-pointer items-center rounded-full border border-ink/16 bg-surface px-[0.4em] py-[0.05em] align-baseline text-[0.85em] font-bold text-coral-deep tabular-nums [font:inherit] hover:bg-black/5"
+      className="mx-[0.1em] inline-flex cursor-pointer items-center rounded-full border border-ink/16 bg-surface px-[0.4em] py-[0.05em] align-baseline text-[0.85em] font-semibold text-coral-deep tabular-nums [font:inherit] hover:bg-black/5"
       title={`Ir a ${label}`}
       onMouseDown={(e) => e.preventDefault()}
       onClick={(e) => {

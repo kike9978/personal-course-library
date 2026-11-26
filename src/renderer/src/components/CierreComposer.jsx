@@ -36,7 +36,7 @@ export async function suggestProjectCierre(subject) {
   return yes
 }
 
-const field = 'flex flex-col gap-[0.35rem] text-[0.78rem] font-bold tracking-[0.02em] text-ink-soft'
+const field = 'flex flex-col gap-[0.35rem] text-xs font-semibold tracking-[0.02em] text-ink-soft'
 
 function courseTitle(courses, coursePath) {
   return courses.find((course) => course.path === coursePath)?.title || coursePath
@@ -220,7 +220,7 @@ function CierreComposer({ open, initial = null, picker = false, courses = [], on
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(26,20,35,0.45)] p-4">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(23,21,28,0.45)] p-4">
       <form
         role="dialog"
         aria-modal="true"
@@ -234,11 +234,11 @@ function CierreComposer({ open, initial = null, picker = false, courses = [], on
         <header>
           <h2
             id="cierre-composer-title"
-            className="m-0 font-display text-[1.35rem] font-black tracking-[-0.02em]"
+            className="m-0 font-display text-xl font-bold tracking-[-0.02em]"
           >
             {subject?.id ? 'Editar cierre' : 'Publicar cierre'}
           </h2>
-          <p className="m-0 mt-1 text-[0.85rem] leading-snug text-ink-soft">
+          <p className="m-0 mt-1 text-sm leading-snug text-ink-soft">
             {subject
               ? `${courseTitle(courses, subject.coursePath)}${
                   subject.sectionTitle ? ` · ${subject.sectionTitle}` : ''
@@ -250,11 +250,11 @@ function CierreComposer({ open, initial = null, picker = false, courses = [], on
         {!subject && picker ? (
           <div className="flex flex-col gap-4">
             <section className="flex flex-col gap-2">
-              <h3 className="m-0 text-[0.78rem] font-extrabold tracking-[0.04em] text-ink-soft uppercase">
+              <h3 className="m-0 text-xs font-semibold tracking-[0.04em] text-ink-soft uppercase">
                 Proyectos hechos
               </h3>
               {pendingProjects.length === 0 ? (
-                <p className="m-0 text-[0.85rem] text-ink-soft">
+                <p className="m-0 text-sm text-ink-soft">
                   No hay proyectos hechos sin cierre.
                 </p>
               ) : (
@@ -276,8 +276,8 @@ function CierreComposer({ open, initial = null, picker = false, courses = [], on
                           })
                         }
                       >
-                        <span className="font-extrabold">{project.title}</span>
-                        <span className="text-[0.78rem] text-ink-soft">
+                        <span className="font-semibold">{project.title}</span>
+                        <span className="text-xs text-ink-soft">
                           {courseTitle(courses, project.coursePath)}
                         </span>
                       </button>
@@ -287,7 +287,7 @@ function CierreComposer({ open, initial = null, picker = false, courses = [], on
               )}
             </section>
             <section className="flex flex-col gap-2">
-              <h3 className="m-0 text-[0.78rem] font-extrabold tracking-[0.04em] text-ink-soft uppercase">
+              <h3 className="m-0 text-xs font-semibold tracking-[0.04em] text-ink-soft uppercase">
                 Lecciones completadas
               </h3>
               <label className={field}>
@@ -306,9 +306,9 @@ function CierreComposer({ open, initial = null, picker = false, courses = [], on
                 </select>
               </label>
               {lessonsLoading ? (
-                <p className="m-0 text-[0.85rem] text-ink-soft">Buscando lecciones…</p>
+                <p className="m-0 text-sm text-ink-soft">Buscando lecciones…</p>
               ) : lessonCourse && pendingLessons.length === 0 ? (
-                <p className="m-0 text-[0.85rem] text-ink-soft">
+                <p className="m-0 text-sm text-ink-soft">
                   Este curso no tiene lecciones completadas sin cierre.
                 </p>
               ) : (
@@ -320,9 +320,9 @@ function CierreComposer({ open, initial = null, picker = false, courses = [], on
                         className="flex w-full cursor-pointer flex-col items-start rounded-md border border-ink/10 bg-surface px-3 py-2 text-left hover:border-coral/40"
                         onClick={() => choose(lesson)}
                       >
-                        <span className="font-extrabold">{lesson.lessonTitle}</span>
+                        <span className="font-semibold">{lesson.lessonTitle}</span>
                         {lesson.sectionTitle ? (
-                          <span className="text-[0.78rem] text-ink-soft">
+                          <span className="text-xs text-ink-soft">
                             {lesson.sectionTitle}
                           </span>
                         ) : null}

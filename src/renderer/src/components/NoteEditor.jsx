@@ -119,10 +119,10 @@ const theme = {
   paragraph: 'mb-[0.35rem]',
   quote: 'my-[0.35rem] border-l-[3px] border-l-ink/16 pl-[0.65rem] text-ink-soft',
   heading: {
-    h2: 'mt-[0.55rem] mb-[0.35rem] text-[1.15rem] leading-[1.3] font-extrabold text-ink',
+    h2: 'mt-[0.55rem] mb-[0.35rem] text-lg leading-[1.3] font-semibold text-ink',
     h3: 'mt-[0.45rem] mb-[0.3rem] text-base leading-[1.35] [font-weight:750] text-ink'
   },
-  code: `my-[0.45rem] block overflow-x-auto rounded-[6px] bg-black/6 px-[0.65rem] py-[0.55rem] text-[0.82rem] leading-[1.45] whitespace-pre-wrap [tab-size:2] ${mono}`,
+  code: `my-[0.45rem] block overflow-x-auto rounded-sm bg-black/6 px-[0.65rem] py-[0.55rem] text-sm leading-[1.45] whitespace-pre-wrap [tab-size:2] ${mono}`,
   codeHighlight: {
     atrule: tokenAttr,
     attr: tokenAttr,
@@ -166,7 +166,7 @@ const theme = {
   tableCell:
     'relative min-w-[4.5rem] border border-ink/16 px-[0.45rem] py-[0.35rem] text-left align-top outline-none',
   tableCellHeader:
-    'relative min-w-[4.5rem] border border-ink/16 bg-black/4 px-[0.45rem] py-[0.35rem] text-left align-top font-bold outline-none',
+    'relative min-w-[4.5rem] border border-ink/16 bg-black/4 px-[0.45rem] py-[0.35rem] text-left align-top font-semibold outline-none',
   tableRow: '',
   list: {
     ul: 'mt-[0.2rem] mb-[0.45rem] pl-5',
@@ -179,7 +179,7 @@ const theme = {
   },
   link: 'text-coral-deep underline',
   text: {
-    bold: 'font-extrabold',
+    bold: 'font-semibold',
     italic: 'italic',
     underline: 'underline',
     strikethrough: 'line-through',
@@ -188,7 +188,7 @@ const theme = {
 }
 
 const toolbarBtn =
-  'h-7 min-w-7 cursor-pointer rounded-[6px] border border-transparent bg-transparent px-[0.4rem] text-[0.78rem] font-extrabold text-ink-soft hover:border-ink/10 hover:text-ink'
+  'h-7 min-w-7 cursor-pointer rounded-sm border border-transparent bg-transparent px-[0.4rem] text-xs font-semibold text-ink-soft hover:border-ink/10 hover:text-ink'
 const toolbarBtnOn =
   'border-coral bg-coral/8 text-coral-deep hover:border-coral hover:text-coral-deep'
 
@@ -197,7 +197,7 @@ function toolBtn(active) {
 }
 
 const linkInputClass =
-  'h-7 min-w-0 flex-1 rounded-[6px] border border-ink/10 bg-cream px-[0.45rem] text-[0.78rem] font-medium text-ink outline-none focus:border-coral'
+  'h-7 min-w-0 flex-1 rounded-sm border border-ink/10 bg-cream px-[0.45rem] text-xs font-medium text-ink outline-none focus:border-coral'
 
 const editorNodes = [
   HeadingNode,
@@ -1106,13 +1106,13 @@ function NoteEditor({
                 contentEditable={
                   <ContentEditable
                     className={cn(
-                      'relative z-[1] min-h-[5.5rem] cursor-text overflow-visible py-[0.55rem] pr-[0.65rem] pl-[1.85rem] text-[0.88rem] leading-[1.45] text-ink caret-coral-deep select-text [font:inherit] outline-none',
+                      'relative z-[1] min-h-[5.5rem] cursor-text overflow-visible py-[0.55rem] pr-[0.65rem] pl-[1.85rem] text-base leading-[1.45] text-ink caret-coral-deep select-text [font:inherit] outline-none',
                       variant === 'document' &&
                         'min-h-64 max-h-none py-[0.35rem] pr-[0.35rem] pl-[1.85rem] text-base leading-[1.55]'
                     )}
                     aria-placeholder={placeholder}
                     placeholder={
-                      <div className="pointer-events-none absolute top-[0.55rem] left-[1.85rem] text-[0.88rem] text-ink-soft opacity-70">
+                      <div className="pointer-events-none absolute top-[0.55rem] left-[1.85rem] text-base text-ink-soft opacity-70">
                         {placeholder}
                       </div>
                     }
@@ -1180,14 +1180,14 @@ function stripImageTime(markdown) {
 function NoteBody({ body }) {
   const markdown = stripImageTime(String(body || '').trim())
   if (!markdown) {
-    return <p className="mb-[0.45rem] text-[0.86rem] leading-[1.4] italic opacity-55">Sin texto</p>
+    return <p className="mb-[0.45rem] text-sm leading-[1.4] italic opacity-55">Sin texto</p>
   }
 
   marked.setOptions({ gfm: true, breaks: true })
   const html = marked.parse(markdown)
   return (
     <div
-      className="mb-[0.45rem] text-[0.86rem] leading-[1.4] whitespace-normal [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_a]:text-coral-deep [&_blockquote]:mb-[0.45rem] [&_code]:rounded-[4px] [&_code]:bg-black/6 [&_code]:px-[0.35em] [&_code]:py-[0.1em] [&_code]:text-[0.86em] [&_code]:[font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace] [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-[6px] [&_img]:border [&_img]:border-ink/10 [&_ol]:mb-[0.45rem] [&_p]:mb-[0.45rem] [&_pre]:mb-[0.45rem] [&_pre]:overflow-auto [&_pre]:rounded-[6px] [&_pre]:bg-black/6 [&_pre]:px-[0.55rem] [&_pre]:py-[0.45rem] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:mb-[0.45rem]"
+      className="mb-[0.45rem] text-sm leading-[1.4] whitespace-normal [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_a]:text-coral-deep [&_blockquote]:mb-[0.45rem] [&_code]:rounded-[4px] [&_code]:bg-black/6 [&_code]:px-[0.35em] [&_code]:py-[0.1em] [&_code]:text-[0.86em] [&_code]:[font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace] [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-sm [&_img]:border [&_img]:border-ink/10 [&_ol]:mb-[0.45rem] [&_p]:mb-[0.45rem] [&_pre]:mb-[0.45rem] [&_pre]:overflow-auto [&_pre]:rounded-sm [&_pre]:bg-black/6 [&_pre]:px-[0.55rem] [&_pre]:py-[0.45rem] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:mb-[0.45rem]"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )

@@ -150,20 +150,20 @@ function ChipAutocomplete({
 
       <div
         className={cn(
-          'flex min-h-[2.75rem] w-full cursor-text flex-wrap items-center gap-[0.35rem] rounded-md border border-ink/10 bg-surface px-[0.55rem] py-[0.4rem] focus-within:shadow-focus',
-          open && 'shadow-focus'
+          'flex min-h-9 w-full cursor-text flex-wrap items-center gap-1 rounded-sm border border-ink/12 bg-surface px-2 py-1 transition-[border-color,box-shadow] duration-150 hover:border-ink/20 focus-within:border-coral/60 focus-within:shadow-focus',
+          open && 'border-coral/60 shadow-focus'
         )}
         onClick={() => inputRef.current?.focus()}
       >
         {selected.map((value) => (
           <span
             key={value}
-            className="inline-flex max-w-full items-center gap-[0.2rem] rounded-full border border-chip-programs-border bg-chip-programs py-[0.2rem] pr-[0.35rem] pl-[0.55rem] text-[0.78rem] font-bold text-chip-programs-text"
+            className="inline-flex max-w-full items-center gap-[0.2rem] rounded-full border border-chip-programs-border bg-chip-programs py-[0.2rem] pr-[0.35rem] pl-[0.55rem] text-xs font-semibold text-chip-programs-text"
           >
             <span className="truncate">{value}</span>
             <button
               type="button"
-              className="grid h-[1.2rem] w-[1.2rem] cursor-pointer place-items-center rounded-full border-0 bg-transparent text-base leading-none text-inherit hover:bg-[rgba(26,20,35,0.08)]"
+              className="grid h-[1.2rem] w-[1.2rem] cursor-pointer place-items-center rounded-full border-0 bg-transparent text-base leading-none text-inherit hover:bg-[rgba(23,21,28,0.08)]"
               aria-label={`Quitar ${value}`}
               onClick={(e) => {
                 e.stopPropagation()
@@ -183,7 +183,7 @@ function ChipAutocomplete({
           aria-controls={listboxId}
           aria-autocomplete="list"
           aria-labelledby={label ? `${id}-label` : undefined}
-          className="min-w-[120px] flex-[1_1_120px] border-0 bg-transparent px-1 py-[0.35rem] text-inherit text-ink shadow-none outline-none"
+          className="min-w-[120px] flex-[1_1_120px] border-0 bg-transparent px-1 py-0.5 text-base text-ink shadow-none outline-none"
           value={query}
           placeholder={selected.length ? '' : placeholder}
           onChange={(e) => {
@@ -198,11 +198,11 @@ function ChipAutocomplete({
       {showList ? (
         <ul
           id={listboxId}
-          className="absolute top-[calc(100%+0.35rem)] right-0 left-0 z-50 m-0 max-h-[220px] list-none overflow-auto rounded-md border border-ink/10 bg-surface p-[0.35rem] shadow-panel"
+          className="absolute top-[calc(100%+0.35rem)] right-0 left-0 z-50 m-0 max-h-[220px] list-none overflow-auto rounded-md border border-ink/8 bg-surface p-1 shadow-panel animate-fade-in"
           role="listbox"
         >
           {flatItems.length === 0 ? (
-            <li className="px-[0.65rem] py-[0.65rem] text-[0.85rem] text-ink-soft">
+            <li className="px-[0.65rem] py-[0.65rem] text-sm text-ink-soft">
               Sin coincidencias
             </li>
           ) : (
@@ -215,7 +215,7 @@ function ChipAutocomplete({
                 <button
                   type="button"
                   className={cn(
-                    'flex w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] border-0 bg-transparent px-[0.65rem] py-[0.55rem] text-left font-[inherit] text-ink hover:bg-coral/10',
+                    'flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border-0 bg-transparent px-[0.65rem] py-[0.55rem] text-left font-[inherit] text-ink hover:bg-coral/10',
                     index === activeIndex && 'bg-coral/10'
                   )}
                   onMouseEnter={() => setActiveIndex(index)}
@@ -230,7 +230,7 @@ function ChipAutocomplete({
                     <span>{item.label}</span>
                   )}
                   {selectedKeys.has(item.label.toLowerCase()) ? (
-                    <span className="font-extrabold text-teal" aria-hidden="true">
+                    <span className="font-semibold text-teal" aria-hidden="true">
                       ✓
                     </span>
                   ) : null}

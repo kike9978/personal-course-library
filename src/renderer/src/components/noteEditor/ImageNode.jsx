@@ -14,10 +14,10 @@ import {
 export const INSERT_IMAGE_COMMAND = createCommand('INSERT_IMAGE_COMMAND')
 
 const linkInputClass =
-  'h-7 min-w-0 flex-1 rounded-[6px] border border-ink/10 bg-cream px-[0.45rem] text-[0.78rem] font-medium text-ink outline-none focus:border-coral'
-const imgClass = 'block h-auto max-w-full rounded-[6px] border border-ink/10'
+  'h-7 min-w-0 flex-1 rounded-sm border border-ink/10 bg-cream px-[0.45rem] text-xs font-medium text-ink outline-none focus:border-coral'
+const imgClass = 'block h-auto max-w-full rounded-sm border border-ink/10'
 const imageFormBtn =
-  'h-7 cursor-pointer rounded-[6px] border border-ink/10 bg-surface px-[0.55rem] text-[0.75rem] font-bold whitespace-nowrap text-ink [font:inherit] hover:border-coral hover:text-coral-deep focus-visible:border-coral focus-visible:text-coral-deep'
+  'h-7 cursor-pointer rounded-sm border border-ink/10 bg-surface px-[0.55rem] text-xs font-semibold whitespace-nowrap text-ink [font:inherit] hover:border-coral hover:text-coral-deep focus-visible:border-coral focus-visible:text-coral-deep'
 
 /**
  * Lexical DecoratorNode for note image attachments.
@@ -237,7 +237,7 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
       </button>
       <button
         type="button"
-        className="mt-[0.3rem] cursor-pointer rounded-sm border border-ink/10 bg-surface px-[0.45rem] py-[0.15rem] text-[0.72rem] font-bold text-ink-soft hover:border-coral hover:text-coral-deep"
+        className="mt-[0.3rem] cursor-pointer rounded-sm border border-ink/10 bg-surface px-[0.45rem] py-[0.15rem] text-xs font-semibold text-ink-soft hover:border-coral hover:text-coral-deep"
         aria-expanded={open}
         aria-label="Editar imagen"
         title="Editar imagen"
@@ -247,7 +247,7 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
         Editar
       </button>
       {footer ? (
-        <figcaption className="mt-[0.35rem] text-[0.82rem] leading-[1.4] text-ink-soft">{footer}</figcaption>
+        <figcaption className="mt-[0.35rem] text-sm leading-[1.4] text-ink-soft">{footer}</figcaption>
       ) : null}
       {open ? (
         <form
@@ -257,7 +257,7 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
           onKeyDown={(event) => event.stopPropagation()}
           onBeforeInput={(event) => event.stopPropagation()}
         >
-          <label className="flex flex-col gap-[0.2rem] text-[0.72rem] [font-weight:650] text-ink-soft">
+          <label className="flex flex-col gap-[0.2rem] text-xs [font-weight:650] text-ink-soft">
             Pie de foto
             <input
               className={linkInputClass}
@@ -270,7 +270,7 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
               placeholder="Texto bajo la imagen"
             />
           </label>
-          <label className="flex flex-col gap-[0.2rem] text-[0.72rem] [font-weight:650] text-ink-soft">
+          <label className="flex flex-col gap-[0.2rem] text-xs [font-weight:650] text-ink-soft">
             Texto alternativo
             <input
               className={linkInputClass}
@@ -283,7 +283,7 @@ function ImageBlock({ nodeKey, src, altText, caption, timeSec = null }) {
               placeholder="Describe la imagen"
             />
           </label>
-          <label className="flex flex-col gap-[0.2rem] text-[0.72rem] [font-weight:650] text-ink-soft">
+          <label className="flex flex-col gap-[0.2rem] text-xs [font-weight:650] text-ink-soft">
             Enlace
             <span className="flex items-center gap-[0.35rem]">
               <input

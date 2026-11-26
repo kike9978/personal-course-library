@@ -4,15 +4,23 @@ import {
   parseCourseDescription
 } from '../../../shared/courseDescription.js'
 import { cn } from '../ui/cn'
-import { btnGhost, btnPrimary, fieldControl, fieldLabel } from '../ui/classes'
+import {
+  btnGhost,
+  btnPrimary,
+  fieldControl,
+  fieldLabel,
+  dialogShell as dialogBase,
+  dialogBody,
+  dialogLead as sharedDialogLead,
+  dialogTitle as sharedDialogTitle
+} from '../ui/classes'
 
-const dialogShell =
-  'w-[calc(100%-2rem)] max-w-[40rem] rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel open:flex open:max-h-[min(90vh,48rem)] open:flex-col open:overflow-auto backdrop:bg-[rgba(26,20,35,0.45)] [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55'
-const dialogForm = 'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem]'
-const dialogTitle = 'm-0 font-display text-[1.2rem] font-black'
-const dialogLead = 'mt-[0.35rem] mb-0 text-[0.85rem] leading-[1.4] text-ink-soft'
-const briefField = cn(fieldControl, 'min-h-[8rem] resize-y text-[0.78rem] leading-[1.45]')
-const pasteField = cn(fieldControl, 'min-h-[6.5rem] resize-y text-[0.78rem] leading-[1.45]')
+const dialogShell = cn(dialogBase, 'max-w-[40rem] open:max-h-[min(90vh,48rem)] open:overflow-auto [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55')
+const dialogForm = dialogBody
+const dialogTitle = sharedDialogTitle
+const dialogLead = sharedDialogLead
+const briefField = cn(fieldControl, 'min-h-[8rem] resize-y text-xs leading-[1.45]')
+const pasteField = cn(fieldControl, 'min-h-[6.5rem] resize-y text-xs leading-[1.45]')
 
 export function CourseDescriptionDialog({ course, description, onClose, onSaved }) {
   const dialogRef = useRef(null)
@@ -175,7 +183,7 @@ export function CourseDescriptionDialog({ course, description, onClose, onSaved 
           />
         </div>
         {error ? (
-          <p className="m-0 text-[0.82rem] leading-[1.4] text-coral-deep" role="alert">
+          <p className="m-0 text-sm leading-[1.4] text-coral-deep" role="alert">
             {error}
           </p>
         ) : null}
@@ -210,14 +218,14 @@ function CourseDescription({ course }) {
       <h3 className="m-0">
         <button
           type="button"
-          className="group flex w-full cursor-pointer items-center justify-between gap-2 border-0 bg-transparent p-0 text-left font-display text-[0.95rem] font-extrabold text-ink hover:text-coral-deep focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-focus"
+          className="group flex w-full cursor-pointer items-center justify-between gap-2 border-0 bg-transparent p-0 text-left font-display text-md font-semibold text-ink hover:text-coral-deep focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-focus"
           aria-expanded={expanded}
           aria-controls={panelId}
           onClick={() => setExpanded((open) => !open)}
         >
           Descripción
           <svg
-            className="h-[0.7rem] w-[0.7rem] shrink-0 text-current transition-transform duration-[120ms] ease-pop group-aria-expanded:rotate-90"
+            className="h-[0.7rem] w-[0.7rem] shrink-0 text-current transition-transform duration-150 ease-pop group-aria-expanded:rotate-90"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -237,26 +245,26 @@ function CourseDescription({ course }) {
         hidden={!expanded}
       >
         {!description ? (
-          <p className="m-0 text-[0.82rem] leading-[1.4] text-ink-soft">
+          <p className="m-0 text-sm leading-[1.4] text-ink-soft">
             Sin descripción. Se escribe desde Editar detalles.
           </p>
         ) : (
           <>
-            <p className="m-0 text-[0.86rem] leading-[1.45]">{description.summary}</p>
+            <p className="m-0 text-sm leading-[1.45]">{description.summary}</p>
             {description.audience ? (
-              <p className="m-0 text-[0.78rem] leading-[1.4] text-ink-soft">
+              <p className="m-0 text-xs leading-[1.4] text-ink-soft">
                 {description.audience}
               </p>
             ) : null}
             {outcomes.length ? (
-              <ul className="m-0 flex list-disc flex-col gap-[0.15rem] pl-[1.1rem] text-[0.8rem] leading-[1.35]">
+              <ul className="m-0 flex list-disc flex-col gap-[0.15rem] pl-[1.1rem] text-sm leading-[1.35]">
                 {outcomes.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
             ) : null}
             {sourceUrl ? (
-              <p className="m-0 text-xs [&_a]:font-bold [&_a]:text-teal">
+              <p className="m-0 text-xs [&_a]:font-semibold [&_a]:text-teal">
                 <a href={sourceUrl} target="_blank" rel="noreferrer noopener">
                   {description.source.title || 'Fuente'}
                 </a>

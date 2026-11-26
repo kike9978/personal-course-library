@@ -1,29 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { EXCITEMENT_LEVELS } from './ExcitementGauge'
+import { Check, ChevronDown, Search, SlidersHorizontal } from 'lucide-react'
 import { cn } from '../ui/cn'
+import { btnGhost, popover, searchIcon, searchInput } from '../ui/classes'
 
 function CheckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="currentColor" d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-    </svg>
-  )
+  return <Check aria-hidden="true" strokeWidth={2.5} />
 }
 
 function CaretIcon() {
   return (
-    <svg
-      className="h-[18px] w-[18px] shrink-0 transition-transform duration-[120ms] ease-[ease] group-aria-expanded:rotate-180"
-      viewBox="0 0 24 24"
+    <ChevronDown
+      className="!size-3.5 shrink-0 text-ink-faint transition-transform duration-150 ease-pop group-aria-expanded:rotate-180"
       aria-hidden="true"
-    >
-      <path fill="currentColor" d="M7 10l5 5 5-5H7z" />
-    </svg>
+    />
   )
 }
 
 const chipBase =
-  'inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-sm border border-border-strong bg-surface px-3 text-[0.8125rem] font-[650] whitespace-nowrap text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus has-[svg]:px-2 [&_svg]:h-[18px] [&_svg]:w-[18px] [&_svg]:shrink-0'
+  'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-ink/10 bg-surface px-2.5 text-xs font-medium whitespace-nowrap text-ink transition-[background-color,border-color,color] duration-150 ease-pop hover:border-ink/20 focus-visible:outline-none focus-visible:shadow-focus [&_svg]:size-3.5 [&_svg]:shrink-0'
 
 function FilterChip({ pressed, onClick, title, tone = 'status', children }) {
   return (
@@ -34,9 +29,9 @@ function FilterChip({ pressed, onClick, title, tone = 'status', children }) {
         tone === 'status' &&
           'aria-pressed:border-chip-status-border aria-pressed:bg-chip-status aria-pressed:text-chip-status-text',
         tone === 'program' &&
-          'font-bold text-ink-soft aria-pressed:border-chip-programs-border aria-pressed:bg-chip-programs aria-pressed:text-chip-programs-text',
+          'text-ink-soft hover:text-ink aria-pressed:border-chip-programs-border aria-pressed:bg-chip-programs aria-pressed:text-chip-programs-text',
         tone === 'theme' &&
-          'aria-pressed:border-[#5a4a7a] aria-pressed:bg-[#ece6f7] aria-pressed:text-[#3d3058]'
+          'aria-pressed:border-chip-theme-border aria-pressed:bg-chip-theme aria-pressed:text-chip-theme-text'
       )}
       aria-pressed={pressed}
       title={title}
@@ -51,11 +46,10 @@ function FilterChip({ pressed, onClick, title, tone = 'status', children }) {
 const programsRail =
   'flex min-w-[4.5rem] flex-[1_1_auto] items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
 
-const popoverLabel =
-  'mt-3 flex flex-col gap-1 text-[0.72rem] font-bold tracking-[0.04em] text-ink-soft uppercase'
+const popoverLabel = 'mt-3 flex flex-col gap-1.5 text-xs font-medium text-ink-soft'
 
 const popoverSelect =
-  'rounded-sm border border-border-strong bg-surface px-2 py-1.5 text-[0.85rem] font-semibold tracking-normal text-ink normal-case focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus'
+  'h-9 cursor-pointer rounded-sm border border-ink/12 bg-surface px-2.5 text-sm font-medium text-ink outline-none hover:border-ink/20 focus:border-coral/60 focus:shadow-focus'
 
 function CourseFilterBar({
   board = false,
@@ -175,7 +169,7 @@ function CourseFilterBar({
     <div
       className={cn(
         board
-          ? 'relative z-[4] flex min-w-0 flex-wrap items-center gap-2 border-b border-ink/10 bg-surface-muted px-3 py-[0.55rem]'
+          ? 'relative z-[4] flex min-w-0 flex-wrap items-center gap-2 border-b border-ink/8 bg-surface-muted px-3 py-2 backdrop-blur-xl'
           : 'contents',
         extraClass
       )}
@@ -189,26 +183,11 @@ function CourseFilterBar({
               : 'min-w-[200px] max-w-[420px] flex-1'
           )}
         >
-          <svg
-            className={cn(
-              'pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 opacity-55',
-              board ? 'left-3' : 'left-[0.95rem]'
-            )}
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-          </svg>
+          <Search className={searchIcon} aria-hidden="true" />
           <input
             type="search"
             data-search-field=""
-            className={cn(
-              'w-full rounded-full border border-ink/10 bg-surface text-ink shadow-none outline-none transition-[box-shadow,transform] duration-[120ms] ease-[ease] focus:shadow-find motion-reduce:animate-none',
-              board
-                ? 'h-8 py-0 pr-[0.85rem] pl-[2.15rem] text-[0.8125rem]'
-                : 'py-[0.7rem] pr-4 pl-[2.6rem]'
-            )}
+            className={cn(searchInput, 'motion-reduce:animate-none', board && 'h-8 text-sm')}
             value={query}
             placeholder="Buscar título, academia, instructor, temas, notas…"
             onChange={(event) => onQueryChange(event.target.value)}
@@ -231,7 +210,7 @@ function CourseFilterBar({
 
       {programs.length > 0 ? (
         <>
-          <span className="h-[18px] w-px shrink-0 bg-border-strong" aria-hidden="true" />
+          <span className="h-4 w-px shrink-0 bg-ink/12" aria-hidden="true" />
           <div
             className={cn(
               programsRail,
@@ -262,10 +241,10 @@ function CourseFilterBar({
         <button
           type="button"
           className={cn(
-            chipBase,
-            'group',
+            btnGhost,
+            'group h-7 gap-1.5 rounded-full px-2.5 text-xs shadow-none [&_svg]:size-3.5',
             extraFilterCount
-              ? 'border-chip-status-border bg-chip-status text-chip-status-text'
+              ? 'border-chip-status-border bg-chip-status text-chip-status-text enabled:hover:bg-chip-status'
               : null
           )}
           aria-expanded={filtersOpen}
@@ -279,14 +258,14 @@ function CourseFilterBar({
             })
           }
         >
-          {extraFilterCount > 0 ? <CheckIcon /> : null}
+          <SlidersHorizontal aria-hidden="true" />
           {extraFilterCount ? `Filtros · ${extraFilterCount}` : 'Filtros'}
           <CaretIcon />
         </button>
         {filtersOpen ? (
           <div
             id={panelId}
-            className="absolute top-[calc(100%+6px)] right-0 z-[5] max-h-[min(70vh,480px)] w-[320px] overflow-auto rounded-md border border-ink/10 bg-surface p-3 shadow-panel"
+            className={cn(popover, 'max-h-[min(70vh,480px)] w-[320px] overflow-auto p-3')}
             role="dialog"
             aria-label="Filtros"
           >
@@ -379,7 +358,7 @@ function CourseFilterBar({
             {extraFilterCount > 0 ? (
               <button
                 type="button"
-                className="mt-3 h-8 w-full cursor-pointer rounded-sm border border-border-strong bg-transparent font-bold text-ink hover:bg-ink/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                className={cn(btnGhost, 'mt-3 h-8 w-full shadow-none')}
                 onClick={clearExtraFilters}
               >
                 Limpiar
@@ -391,7 +370,7 @@ function CourseFilterBar({
 
       {typeof courseCount === 'number' ? (
         <span
-          className="shrink-0 text-[0.8rem] font-[650] whitespace-nowrap text-ink-soft"
+          className="shrink-0 text-xs whitespace-nowrap text-ink-soft tabular-nums"
           aria-live="polite"
         >
           {narrowed

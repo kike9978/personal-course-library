@@ -1,56 +1,63 @@
 # UI style guidelines
 
 Source of truth for tokens: `@theme` in `src/renderer/src/assets/index.css`.
-Shared control classes: `src/renderer/src/ui/classes.js` (`iconBtn`, `btn`, `btnPrimary`, `btnGhost`, `fieldLabel`, `fieldControl`, `card`, `chip`).
-Compose conditional classes with `cn()` from `src/renderer/src/ui/cn.js`.
+Shared recipes: `src/renderer/src/ui/classes.js`. Compose with `cn()` from `src/renderer/src/ui/cn.js`
+(it knows the custom shadow tokens, so `cn(card, 'shadow-none')` merges correctly).
 
 Style UI with Tailwind utilities. Do not add component CSS files or plain CSS rules.
+Do not re-declare a recipe locally (dialog shell, menu item, popover, search input…): import it.
 
-## Icons
+## Direction
 
-Use `lucide-react`. Draw a custom icon only when the user asks for one.
+Calm, neutral canvas; white surfaces; one coral accent per region; teal for progress/done.
+Hierarchy comes from type size and spacing, not from heavy weights, thick borders or colored washes.
 
-## Tokens (use these — do not invent parallel palettes)
+## Page structure
 
-- **Ink:** `text-ink` (primary text), `text-ink-soft` (secondary/meta)
-- **Surfaces:** `bg-surface` (cards/panels), `bg-cream` / `bg-cream-deep` (page wash)
-- **Accent:** `bg-coral` / `text-coral-deep` (primary actions, “in progress”)
-- **Secondary accent:** `bg-teal` / `text-teal-soft` (success/done, project marks)
-- **Chips only:** `bg-chip-programs`, `border-chip-programs-border`, `text-chip-programs-text` (programs / in-progress labels), `bg-chip-status`, `border-chip-status-border`, `text-chip-status-text` (done/status labels)
-- **Radii:** `rounded-sm` controls, `rounded-md` content cards, `rounded-lg` columns/large cards, `rounded-full` filters/search/segmented only
-- **Shadows:** `shadow-card` default, `shadow-lift` hover, `shadow-panel` overlays, `shadow-focus` coral focus ring
-- **Fonts:** `font-display` (Nunito) titles, `font-body` (Outfit) UI copy
-- **Motion:** `ease-pop`, about `duration-[120ms]`
+- Every top-level view renders `<AppHeader active="…" onNavigate={…}>` (brand, nav, `center`, `actions`,
+  optional toolbar `children`). The active nav tab is the page title; do not add a visible page `<h1>`.
+- Page root: `pageShell`. Pop-out/embedded views use `AppHeader` without `active` and pass `title`/`subtitle`.
 
-Hairline borders are `border border-ink/10`.
+## Tokens (use these — do not invent parallel palettes or hex values)
 
-## Content cards (course cards, kanban project cards, stat cards)
-
-- `bg-surface`, `border border-ink/10`, `rounded-md` or `rounded-lg`, `shadow-card`
-- Title in ink + `font-display`; meta/notes in `text-ink-soft`
-- Hover: slight lift (`-translate-y-px` + `shadow-lift`), coral focus ring when focused
-- Do not paint the whole card with chip colors or use `rounded-full` on multi-line content cards
-- Status on a card: left accent border or a small chip/badge — never a full pink/teal card wash
-- If status is already shown by column/context (e.g. kanban), omit redundant status text on the card
-
-## Chips & filters
-
-- Pill radius is for compact controls (search, segmented, filter pills, status badges)
-- Chip background colors are for labels/filters only, not card containers
-
-## Panels & forms (project panel, drawers)
-
-- Page/panel wash: cream + subtle coral/teal radial washes (match library hub)
-- Header: muted surface + thin border (like app header / kanban header)
-- Inputs: `fieldControl` (surface fill, thick border, `rounded-sm`, coral focus ring)
-- Field labels: `fieldLabel`
+- **Ink:** `text-ink` (primary), `text-ink-soft` (secondary/meta), `text-ink-faint` (placeholders, tertiary)
+- **Surfaces:** `bg-surface` (cards/panels), `bg-cream` (subtle fill: sidebars, footers, wells), `bg-cream-deep` (page canvas)
+- **Accent:** `bg-coral` / `text-coral-deep` / `bg-coral-soft` (primary actions, selection, “in progress”)
+- **Secondary:** `bg-teal` / `text-teal` / `bg-teal-tint` (progress, done)
+- **Semantic tints:** `chip-programs-*` (programs), `chip-status-*` (done/new), `chip-theme-*` (themes), `warn*` (notices), `danger*` (destructive)
+- **Type scale:** `text-2xs` 11 · `text-xs` 12 · `text-sm` 13 · `text-base` 14 (body) · `text-md` 15 · `text-lg` 17 · `text-xl` 20 · `text-2xl` 24 · `text-3xl` 30. No `text-[…rem]`.
+- **Weights:** `font-medium` UI, `font-semibold` labels/buttons/card titles, `font-bold` display headings only. No `font-black` / `font-extrabold`.
+- **Fonts:** `font-display` (Bricolage Grotesque) for headings and card titles, `font-body` (Geist) for everything else.
+- **Radii:** `rounded-sm` (8) controls · `rounded-md` (12) content cards, menus · `rounded-lg` (16) large cards, dialogs, columns · `rounded-full` pills (chips, badges, filter pills) only. No `rounded-[Npx]` above 4px.
+- **Shadows:** `shadow-card` resting · `shadow-lift` hover · `shadow-panel` popovers/dialogs · `shadow-focus` input focus · `shadow-ring` / `shadow-ring-soft` selection
+- **Hairlines:** `border-ink/8` (surfaces) · `border-ink/12` (controls) · `border-ink/20` (hover)
+- **Motion:** `ease-pop` (crisp ease-out, no overshoot), `duration-150`
 
 ## Buttons
 
-- Prefer `btn`, `btnPrimary`, `btnGhost`, `iconBtn`, `iconBtnGhost` from `classes.js`
-- Compact actions inside cards: `btnCompact`, no heavy shadow
+- `btnPrimary` — one per region. `btnGhost` — secondary. `btnQuiet` — tertiary/toolbar. `btnDanger` — destructive.
+- `btnCompact` modifier for dense rows and card footers. `btnOn` for pressed toggles (with `aria-pressed`).
+- Icon-only: `iconOnly` + a Lucide icon + `aria-label` + `title`.
+- Buttons are `rounded-sm`, not pills.
 
-## Motion
+## Content cards
 
-- Prefer `ease-pop` for card hover/press; keep transitions short (~120–150ms)
-- Do not add glow effects, multi-layer decorative shadows, or emoji as UI chrome
+- `card` / `cardLg` (+ `cardHover` when clickable). Title in `font-display font-semibold`, meta in `text-ink-soft`.
+- Secondary actions on media cards appear on hover/focus (`opacity-0 group-hover:opacity-100 group-focus-within:opacity-100`).
+- Status: small badge (`badgeAccent`, `badgeSuccess`, `badgeTheme`, `badgeWarn`) or a colored dot — never a full colored border or wash.
+
+## Fields
+
+- Inputs `fieldControl`, selects `selectControl`, search `searchInput` + `<Search className={searchIcon} />`.
+- Labels `fieldLabel` (sentence case). Use `eyebrow` only for small uppercase group kickers.
+
+## Overlays
+
+- Dialogs: `dialogShell` + a `max-w-*`, `dialogBody`, `dialogTitle`, `dialogLead`. Backdrop and open animation are global.
+- Menus: `popover` container, `menuItem` rows (`<span>` title + `<small>` hint), `menuDivider`.
+- Notices/banners: `notice` with a leading Lucide icon and compact buttons.
+- Segmented choices: `segmented` + `segmentedItem` with `aria-pressed`.
+
+## Icons
+
+Use `lucide-react`. Size with Tailwind (`size-4`). Never use text glyphs (`‹ › ○ ▶ ···`) or emoji as UI chrome.

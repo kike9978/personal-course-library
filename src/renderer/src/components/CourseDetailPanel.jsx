@@ -7,23 +7,16 @@ import CourseDescription from './CourseDescription'
 import ExcitementGauge from './ExcitementGauge'
 import brandMark from '../assets/img/brand-mark.svg'
 import { cn } from '../ui/cn'
-import { iconBtn } from '../ui/classes'
+import { X } from 'lucide-react'
+import { badgeAccent, badgeSuccess, badgeTheme, badgeWarn, btnCompact, btnGhost, btnPrimary } from '../ui/classes'
 
-const badge = 'rounded-full border px-[0.55rem] py-[0.18rem] text-[0.7rem] font-bold'
-const badgeNew = cn(badge, 'border-[#1a6b5c] bg-[#d8f3ec] text-[#0f4a40]')
-const badgeWarn = cn(badge, 'border-[#a66b1a] bg-[#ffe8c2] text-[#6b4508]')
-const badgePrograms = cn(
-  badge,
-  'border-chip-programs-border bg-chip-programs text-chip-programs-text'
-)
-const badgeTheme = cn(badge, 'border-[#5a4a7a] bg-[#ece6f7] text-[#3d3258]')
-const badgeDone = cn(badge, 'border-chip-status-border bg-chip-status text-chip-status-text')
-const ribbon =
-  'static rounded-full border border-chip-status-border bg-chip-status px-[0.65rem] py-[0.28rem] text-[0.7rem] font-extrabold tracking-[0.03em] text-chip-status-text uppercase'
+const badgeNew = badgeSuccess
+const badgeDone = badgeSuccess
+const badgePrograms = badgeAccent
+const ribbon = cn(badgeSuccess, 'uppercase tracking-[0.04em]')
 const ribbonRecent = 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
-const detailUtil =
-  'min-h-[1.85rem] flex-[1_1_calc(50%-0.35rem)] cursor-pointer rounded-sm border border-ink/10 bg-surface px-[0.45rem] py-[0.28rem] text-center text-xs leading-[1.25] font-semibold text-ink-soft shadow-none hover:bg-cream-deep hover:text-ink'
-const detailUtilAccent = 'basis-full font-bold text-teal hover:bg-chip-status hover:text-teal'
+const detailUtil = cn(btnGhost, btnCompact, 'h-8 flex-[1_1_calc(50%-0.25rem)] text-ink-soft')
+const detailUtilAccent = 'basis-full text-teal enabled:hover:bg-chip-status enabled:hover:text-teal'
 
 function formatDuration(sec) {
   const total = Math.round(Number(sec) || 0)
@@ -59,7 +52,7 @@ function OutlineSections({
       <div key={section.id} className={cn('flex flex-col gap-[0.2rem]', depth > 0 && 'ml-3')}>
         {showSectionTitles ? (
           <h4
-            className="mt-[0.35rem] truncate text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase"
+            className="mt-[0.35rem] truncate text-2xs font-semibold tracking-[0.07em] text-ink-soft uppercase"
             title={section.title}
           >
             {section.title}
@@ -80,7 +73,7 @@ function OutlineSections({
                     type="button"
                     ref={current ? currentRef : null}
                     className={cn(
-                      'flex w-full min-w-0 cursor-pointer items-center gap-[0.45rem] rounded-sm border-0 bg-transparent px-[0.35rem] py-[0.28rem] text-left text-[0.82rem] leading-[1.3] text-ink hover:bg-surface',
+                      'flex w-full min-w-0 cursor-pointer items-center gap-[0.45rem] rounded-sm border-0 bg-transparent px-[0.35rem] py-[0.28rem] text-left text-sm leading-[1.3] text-ink hover:bg-surface',
                       current && 'bg-chip-programs'
                     )}
                     aria-current={current ? 'true' : undefined}
@@ -90,7 +83,7 @@ function OutlineSections({
                   >
                     <span
                       className={cn(
-                        'w-5 shrink-0 text-center text-[0.68rem] font-bold text-ink-soft',
+                        'w-5 shrink-0 text-center text-2xs font-semibold text-ink-soft',
                         done && 'text-teal',
                         current && 'text-coral-deep'
                       )}
@@ -102,7 +95,7 @@ function OutlineSections({
                       {lesson.title}
                     </span>
                     {length ? (
-                      <span className="shrink-0 text-[0.72rem] font-medium text-ink-soft">
+                      <span className="shrink-0 text-xs font-medium text-ink-soft">
                         {length}
                       </span>
                     ) : null}
@@ -181,14 +174,14 @@ function CourseOutline({ course, onOpenLesson }) {
         <h3 className="m-0 min-w-0 flex-1">
           <button
             type="button"
-            className="group flex w-full cursor-pointer items-center justify-between gap-2 border-0 bg-transparent p-0 text-left font-display text-[0.95rem] font-extrabold text-ink hover:text-coral-deep focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-focus"
+            className="group flex w-full cursor-pointer items-center justify-between gap-2 border-0 bg-transparent p-0 text-left font-display text-md font-semibold text-ink hover:text-coral-deep focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-focus"
             aria-expanded={open}
             aria-controls={panelId}
             onClick={() => setOpen((current) => !current)}
           >
             Temario
             <svg
-              className="h-[0.7rem] w-[0.7rem] shrink-0 text-current transition-transform duration-[120ms] ease-pop group-aria-expanded:rotate-90"
+              className="h-[0.7rem] w-[0.7rem] shrink-0 text-current transition-transform duration-150 ease-pop group-aria-expanded:rotate-90"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -202,17 +195,17 @@ function CourseOutline({ course, onOpenLesson }) {
           </button>
         </h3>
         {lessonCount > 0 ? (
-          <span className="text-xs font-bold text-ink-soft">
+          <span className="text-xs font-semibold text-ink-soft">
             {lessonCount}
             {totalLength ? ` · ${totalLength}` : ''}
           </span>
         ) : null}
       </div>
       <div id={panelId} hidden={!open}>
-        {loading ? <p className="m-0 text-[0.82rem] text-ink-soft">Cargando temario…</p> : null}
-        {!loading && error ? <p className="m-0 text-[0.82rem] text-ink-soft">{error}</p> : null}
+        {loading ? <p className="m-0 text-sm text-ink-soft">Cargando temario…</p> : null}
+        {!loading && error ? <p className="m-0 text-sm text-ink-soft">{error}</p> : null}
         {!loading && !error && lessonCount === 0 ? (
-          <p className="m-0 text-[0.82rem] text-ink-soft">Este curso no tiene lecciones.</p>
+          <p className="m-0 text-sm text-ink-soft">Este curso no tiene lecciones.</p>
         ) : null}
         <OutlineSections
           sections={sections}
@@ -309,23 +302,21 @@ function CourseDetailPanel({
   return (
     <aside
       className={cn(
-        'relative z-20 flex h-full min-h-0 w-detail max-w-[40vw] shrink-0 animate-slide-in flex-col self-stretch overflow-hidden border-l border-ink/10 bg-[#f7f2ec] bg-linear-to-b from-[#fffaf5] to-[#f7f2ec] motion-reduce:animate-none max-[900px]:max-h-[45vh] max-[900px]:w-full max-[900px]:max-w-none max-[900px]:flex-none max-[900px]:border-t max-[900px]:border-l-0 max-[900px]:border-ink/10',
+        'relative z-20 flex h-full min-h-0 w-detail max-w-[40vw] shrink-0 animate-slide-in flex-col self-stretch overflow-hidden border-l border-ink/8 bg-surface motion-reduce:animate-none max-[900px]:max-h-[45vh] max-[900px]:w-full max-[900px]:max-w-none max-[900px]:flex-none max-[900px]:border-t max-[900px]:border-l-0 max-[900px]:border-ink/10',
         dock &&
           'max-w-none flex-none max-[900px]:w-[min(100vw,300px)] max-[900px]:max-w-none max-[900px]:border-t-0 max-[900px]:border-l max-[800px]:!w-full max-[800px]:max-h-[45vh] max-[800px]:border-t max-[800px]:border-l-0'
       )}
       aria-label="Detalle del curso"
     >
-      <div className="relative aspect-[16/7] max-h-36 shrink-0 overflow-hidden border-b border-ink/10 bg-cream-deep">
+      <div className="relative aspect-[16/7] max-h-40 shrink-0 overflow-hidden bg-cream-deep">
         <button
           type="button"
-          className="absolute top-[0.55rem] right-[0.55rem] z-[2] grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-ink/10 bg-surface shadow-card hover:bg-coral hover:text-white"
+          className="absolute top-2 right-2 z-[2] grid size-8 cursor-pointer place-items-center rounded-full border-0 bg-white/90 text-ink shadow-card backdrop-blur-md transition-colors duration-150 hover:bg-ink hover:text-white"
           onClick={onClose}
           title="Cerrar"
           aria-label="Cerrar panel"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-          </svg>
+          <X className="size-4" aria-hidden="true" />
         </button>
         {course.hasCover ? (
           <img
@@ -349,9 +340,9 @@ function CourseDetailPanel({
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-4 pt-[0.9rem] pb-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-5 pt-4 pb-5">
         <div className="flex flex-col gap-[0.3rem]">
-          <h2 className="m-0 font-display text-[1.25rem] leading-[1.2] font-black">
+          <h2 className="m-0 font-display text-xl leading-tight font-bold tracking-tight">
             {course.title}
           </h2>
           {course.institution ? (
@@ -362,11 +353,11 @@ function CourseDetailPanel({
         </div>
 
         <section
-          className="flex flex-col gap-[0.55rem] rounded-md border border-ink/10 bg-surface p-3 shadow-card"
+          className="flex flex-col gap-2.5 rounded-md border border-ink/8 bg-cream p-3.5"
           aria-label="Continuar"
         >
           <div className="flex items-center justify-between gap-3">
-            <span className="text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+            <span className="text-2xs font-semibold tracking-[0.07em] text-ink-soft uppercase">
               Emoción
             </span>
             <ExcitementGauge
@@ -387,14 +378,14 @@ function CourseDetailPanel({
               ) : null}
               {course.isNew ? <span className={badgeNew}>Nuevo</span> : null}
               {course.missingProps ? <span className={badgeWarn}>Sin props</span> : null}
-              {showIdle ? <span className="text-[0.8rem] text-ink-soft">Sin empezar</span> : null}
+              {showIdle ? <span className="text-sm text-ink-soft">Sin empezar</span> : null}
             </div>
           ) : null}
 
           {showProgress ? (
             <div className="flex items-center gap-2">
               <div
-                className="h-1 flex-1 overflow-hidden rounded-full bg-ink/[0.08]"
+                className="h-1 flex-1 overflow-hidden rounded-full bg-ink/8"
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={100}
@@ -406,17 +397,17 @@ function CourseDetailPanel({
                   style={{ width: `${percent}%` }}
                 />
               </div>
-              <span className="text-xs font-bold text-teal">{percent}%</span>
+              <span className="text-xs font-semibold text-teal">{percent}%</span>
             </div>
           ) : null}
 
           {course.learning?.lastLessonTitle ? (
             <p className="m-0 flex min-w-0 flex-col gap-[0.1rem]">
-              <span className="text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+              <span className="text-2xs font-semibold tracking-[0.07em] text-ink-soft uppercase">
                 Última lección
               </span>
               <strong
-                className="line-clamp-2 text-[0.9rem] leading-[1.3] font-[650]"
+                className="line-clamp-2 text-base leading-[1.3] font-semibold"
                 title={course.learning.lastLessonTitle}
               >
                 {course.learning.lastLessonTitle}
@@ -424,7 +415,7 @@ function CourseDetailPanel({
             </p>
           ) : null}
 
-          <button type="button" className={cn(iconBtn, 'w-full')} onClick={handleOpenCourse}>
+          <button type="button" className={cn(btnPrimary, 'w-full')} onClick={handleOpenCourse}>
             Abrir curso
           </button>
         </section>
@@ -438,18 +429,18 @@ function CourseDetailPanel({
             <dl className="m-0 flex flex-col gap-[0.45rem]">
               {course.instructor ? (
                 <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-[0.35rem]">
-                  <dt className="m-0 pt-[0.15rem] text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+                  <dt className="m-0 pt-[0.15rem] text-2xs font-semibold tracking-[0.07em] text-ink-soft uppercase">
                     Instructor
                   </dt>
-                  <dd className="m-0 min-w-0 text-[0.88rem]">{course.instructor}</dd>
+                  <dd className="m-0 min-w-0 text-base">{course.instructor}</dd>
                 </div>
               ) : null}
               {programs.length ? (
                 <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-start gap-x-2 gap-y-[0.35rem]">
-                  <dt className="m-0 pt-[0.15rem] text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+                  <dt className="m-0 pt-[0.15rem] text-2xs font-semibold tracking-[0.07em] text-ink-soft uppercase">
                     Programas
                   </dt>
-                  <dd className="m-0 flex min-w-0 flex-wrap gap-[0.3rem] text-[0.88rem]">
+                  <dd className="m-0 flex min-w-0 flex-wrap gap-[0.3rem] text-base">
                     {programs.map((program, index) => (
                       <span key={`${program}-${index}`} className={badgePrograms}>
                         {program}
@@ -460,10 +451,10 @@ function CourseDetailPanel({
               ) : null}
               {themes.length ? (
                 <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-start gap-x-2 gap-y-[0.35rem]">
-                  <dt className="m-0 pt-[0.15rem] text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+                  <dt className="m-0 pt-[0.15rem] text-2xs font-semibold tracking-[0.07em] text-ink-soft uppercase">
                     Temas
                   </dt>
-                  <dd className="m-0 flex min-w-0 flex-wrap gap-[0.3rem] text-[0.88rem]">
+                  <dd className="m-0 flex min-w-0 flex-wrap gap-[0.3rem] text-base">
                     {themes.map((theme, index) => (
                       <span key={`${theme}-${index}`} className={badgeTheme}>
                         {theme}
@@ -474,12 +465,12 @@ function CourseDetailPanel({
               ) : null}
               {hasRating ? (
                 <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-[0.35rem]">
-                  <dt className="m-0 pt-[0.15rem] text-[0.68rem] font-bold tracking-[0.04em] text-ink-soft uppercase">
+                  <dt className="m-0 pt-[0.15rem] text-2xs font-semibold tracking-[0.07em] text-ink-soft uppercase">
                     Valoración
                   </dt>
-                  <dd className="m-0 min-w-0 text-[0.88rem]">
+                  <dd className="m-0 min-w-0 text-base">
                     <span
-                      className="text-[0.85rem] tracking-[0.04em] text-coral-deep"
+                      className="text-sm tracking-[0.04em] text-coral-deep"
                       aria-label={`${course.rate} de 5`}
                     >
                       <span aria-hidden="true">{'★'.repeat(course.rate)}</span>
@@ -493,7 +484,7 @@ function CourseDetailPanel({
             </dl>
           ) : (
             <div className="flex flex-wrap items-center gap-x-[0.65rem] gap-y-[0.35rem]">
-              <span className="text-[0.85rem] text-ink-soft">Sin ficha</span>
+              <span className="text-sm text-ink-soft">Sin ficha</span>
               <button
                 type="button"
                 className={cn(detailUtil, 'flex-none')}
@@ -515,7 +506,7 @@ function CourseDetailPanel({
         </section>
       </div>
 
-      <div className="flex shrink-0 flex-wrap gap-[0.35rem] border-t border-ink/10 bg-[#f7f2ec] px-4 pt-[0.55rem] pb-3">
+      <div className="flex shrink-0 flex-wrap gap-2 border-t border-ink/8 bg-cream px-5 py-3">
         {onSearchCover ? (
           <button type="button" className={detailUtil} onClick={() => onSearchCover(course)}>
             {course.hasCover ? 'Cambiar portada' : 'Buscar portada'}

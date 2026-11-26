@@ -8,12 +8,12 @@ import { cn } from '../../ui/cn'
 import { CardImage, CardText } from './CardFace'
 
 const area =
-  'w-full resize-y rounded-md border border-ink/10 bg-surface px-[0.6rem] py-[0.45rem] text-[0.85rem] leading-[1.4] text-ink outline-none focus:shadow-focus'
-const small = 'text-[0.72rem] font-bold text-ink-soft'
+  'w-full resize-y rounded-md border border-ink/10 bg-surface px-[0.6rem] py-[0.45rem] text-sm leading-[1.4] text-ink outline-none focus:shadow-focus'
+const small = 'text-xs font-semibold text-ink-soft'
 
 export function TypeBadge({ type }) {
   return (
-    <span className="rounded-full border border-ink/10 bg-cream px-2 py-[0.1rem] text-[0.68rem] font-extrabold tracking-[0.03em] text-ink-soft uppercase">
+    <span className="rounded-full border border-ink/10 bg-cream px-2 py-[0.1rem] text-2xs font-semibold tracking-[0.03em] text-ink-soft uppercase">
       {CARD_TYPE_LABELS[type] || CARD_TYPE_LABELS.basic}
     </span>
   )
@@ -40,7 +40,7 @@ export function CardFields({ card, images = [], onChange }) {
         />
       </label>
       {cloze || hasCode(card.front) ? (
-        <div className="m-0 text-[0.82rem] leading-[1.4] text-ink-soft">
+        <div className="m-0 text-sm leading-[1.4] text-ink-soft">
           <CardText text={card.front} hide={cloze ? 'all' : null} />
         </div>
       ) : null}
@@ -56,7 +56,7 @@ export function CardFields({ card, images = [], onChange }) {
         />
       </label>
       {hasCode(card.back) ? (
-        <div className="m-0 text-[0.82rem] leading-[1.4] text-ink-soft">
+        <div className="m-0 text-sm leading-[1.4] text-ink-soft">
           <CardText text={card.back} />
         </div>
       ) : null}
@@ -65,7 +65,7 @@ export function CardFields({ card, images = [], onChange }) {
           <label className="flex items-center gap-2">
             <span className={small}>Imagen</span>
             <select
-              className="rounded-md border border-ink/10 bg-surface px-2 py-1 text-[0.8rem]"
+              className="rounded-md border border-ink/10 bg-surface px-2 py-1 text-sm"
               value={card.image?.file || ''}
               onChange={(event) => {
                 const picked = images.find((image) => image.file === event.target.value)
@@ -89,12 +89,12 @@ export function CardFields({ card, images = [], onChange }) {
           </label>
           <CardImage image={card.image} className="max-h-[5rem]" />
           {card.imageAuto && card.image ? (
-            <span className="text-[0.72rem] text-ink-soft">Primera imagen de la nota</span>
+            <span className="text-xs text-ink-soft">Primera imagen de la nota</span>
           ) : null}
         </div>
       ) : null}
       {!check.ok ? (
-        <p className="m-0 text-[0.78rem] font-bold text-coral-deep">{check.error}</p>
+        <p className="m-0 text-xs font-semibold text-coral-deep">{check.error}</p>
       ) : null}
     </div>
   )
@@ -129,17 +129,17 @@ function CardReview({ cards, sourcesByRef, onChange }) {
                 aria-label={`Incluir tarjeta ${index + 1}`}
                 onChange={(event) => onChange(card.uid, { include: event.target.checked })}
               />
-              <span className="text-[0.75rem] font-bold text-ink-soft">{index + 1}</span>
+              <span className="text-xs font-semibold text-ink-soft">{index + 1}</span>
               <TypeBadge type={card.type} />
               <span
-                className="min-w-0 flex-1 truncate text-[0.72rem] text-ink-soft"
+                className="min-w-0 flex-1 truncate text-xs text-ink-soft"
                 title={card.source}
               >
                 {card.sourceRef} · {card.source || source?.title || ''}
               </span>
               {weak ? (
                 <span
-                  className="rounded-full bg-coral/10 px-2 py-[0.1rem] text-[0.68rem] font-bold text-coral-deep"
+                  className="rounded-full bg-coral/10 px-2 py-[0.1rem] text-2xs font-semibold text-coral-deep"
                   title="Pocas palabras de la respuesta aparecen en la fuente citada."
                 >
                   Revisar: no aparece en la fuente

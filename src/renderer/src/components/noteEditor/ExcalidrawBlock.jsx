@@ -20,7 +20,7 @@ function ensureExcalidrawAssets() {
 }
 
 const exportItem =
-  'cursor-pointer rounded-[6px] border-0 bg-transparent px-[0.55rem] py-[0.4rem] text-left text-[0.82rem] font-semibold text-ink [font:inherit] hover:bg-black/5'
+  'cursor-pointer rounded-sm border-0 bg-transparent px-[0.55rem] py-[0.4rem] text-left text-sm font-semibold text-ink [font:inherit] hover:bg-black/5'
 
 const excalidrawPreview = 'block max-h-56 w-full bg-white object-contain'
 
@@ -225,9 +225,9 @@ function ExcalidrawModal({ drawingId, onClose, onSaved }) {
       aria-label="Editor Excalidraw"
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ink/10 bg-surface px-[0.85rem] py-[0.55rem]">
-        <div className="font-display font-extrabold text-ink">Dibujo</div>
+        <div className="font-display font-semibold text-ink">Dibujo</div>
         <div className="flex flex-wrap items-center gap-[0.45rem]">
-          {error ? <span className="mr-[0.35rem] text-[0.8rem] text-coral-deep">{error}</span> : null}
+          {error ? <span className="mr-[0.35rem] text-sm text-coral-deep">{error}</span> : null}
           <div className="relative">
             <button
               type="button"
@@ -270,11 +270,11 @@ function ExcalidrawModal({ drawingId, onClose, onSaved }) {
       </div>
       <div className="relative min-h-0 flex-1 [&_.excalidraw]:h-full">
         {loading ? (
-          <div className="flex h-full items-center justify-center text-[0.95rem] text-ink-soft">Cargando lienzo…</div>
+          <div className="flex h-full items-center justify-center text-md text-ink-soft">Cargando lienzo…</div>
         ) : (
           <Suspense
             fallback={
-              <div className="flex h-full items-center justify-center text-[0.95rem] text-ink-soft">
+              <div className="flex h-full items-center justify-center text-md text-ink-soft">
                 Cargando Excalidraw…
               </div>
             }
@@ -328,16 +328,16 @@ export default function ExcalidrawBlock({ nodeKey, drawingId, previewSrc }) {
           {previewSrc ? (
             <img src={previewSrc} alt="Dibujo Excalidraw" className={excalidrawPreview} />
           ) : (
-            <span className="flex min-h-28 items-center justify-center p-4 text-[0.86rem] text-ink-soft">
+            <span className="flex min-h-28 items-center justify-center p-4 text-sm text-ink-soft">
               Lienzo vacío — clic para dibujar
             </span>
           )}
         </button>
-        <div className="flex items-center justify-between gap-2 border-t border-ink/10 bg-surface px-[0.55rem] py-[0.35rem] text-[0.78rem] font-bold text-ink-soft">
+        <div className="flex items-center justify-between gap-2 border-t border-ink/10 bg-surface px-[0.55rem] py-[0.35rem] text-xs font-semibold text-ink-soft">
           <span>Excalidraw</span>
           <button
             type="button"
-            className={cn(btnGhost, 'min-h-[1.6rem] px-[0.55rem] py-[0.15rem] text-[0.75rem]')}
+            className={cn(btnGhost, 'min-h-[1.6rem] px-[0.55rem] py-[0.15rem] text-xs')}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setOpen(true)}
           >

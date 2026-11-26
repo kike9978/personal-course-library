@@ -39,17 +39,27 @@ import {
 } from './utils/courseFilters'
 import { focusSearchOnShortcut } from './utils/focusSearchBar'
 import { cn } from './ui/cn'
-import { btnGhost, btnPrimary, iconBtn, statCard, statLabel, statValue } from './ui/classes'
+import { FileWarning, FileText, FolderOpen, ImageOff, X } from 'lucide-react'
+import {
+  btnCompact,
+  btnGhost,
+  btnPrimary,
+  btnQuiet,
+  iconOnly,
+  notice,
+  sectionMeta,
+  sectionTitle,
+  statCard,
+  statLabel,
+  statValue
+} from './ui/classes'
 
-const sectionHeading = 'mb-[0.85rem] flex items-center gap-[0.65rem]'
-const sectionTitle = 'm-0 font-display text-[1.35rem] font-black tracking-[-0.02em]'
-const sectionMeta = 'text-[0.85rem] font-semibold text-ink-soft'
-const banner =
-  'mb-4 flex flex-wrap items-center justify-between gap-4 rounded-md border border-ink/10 bg-[#fff8ee] px-4 py-[0.85rem] [&_code]:text-[0.85em]'
-const bannerActions = 'flex flex-wrap items-center gap-[0.45rem]'
-const dismissBtn =
-  'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-ink-soft hover:bg-ink/[0.06] hover:text-ink focus-visible:bg-ink/[0.06] focus-visible:text-ink [&_svg]:h-[18px] [&_svg]:w-[18px]'
-const clearBtn = cn(btnGhost, 'ml-auto min-h-8 px-[0.7rem] py-1 text-[0.78rem]')
+const sectionHeading = 'mb-3 flex items-baseline gap-2.5'
+const bannerActions = 'flex flex-wrap items-center gap-1.5'
+const noticeBtn = cn(btnPrimary, btnCompact, 'h-8 px-3')
+const noticeBtnGhost = cn(btnGhost, btnCompact, 'h-8 px-3')
+const noticeIcon = 'size-4 shrink-0 text-warn-text/80'
+const clearBtn = cn(btnQuiet, btnCompact, 'ml-auto h-8 px-3 text-ink')
 const setupShell = 'flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center'
 
 const COVER_BANNER_DISMISS_KEY = 'pcl.banner.dismiss.covers'
@@ -82,17 +92,12 @@ function BannerDismiss({ onClick }) {
   return (
     <button
       type="button"
-      className={dismissBtn}
+      className={cn(iconOnly, 'size-7 text-warn-text/70 enabled:hover:bg-warn-text/10 enabled:hover:text-warn-text')}
       onClick={onClick}
       aria-label="Ocultar aviso"
       title="Ocultar aviso"
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          fill="currentColor"
-          d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
-        />
-      </svg>
+      <X aria-hidden="true" />
     </button>
   )
 }
@@ -105,9 +110,9 @@ function DesktopShellNotice() {
         alt=""
         width={72}
         height={72}
-        className="rounded-lg border border-ink/10 shadow-card"
+        className="rounded-xl shadow-lift ring-1 ring-ink/8"
       />
-      <h1 className="m-0 font-display text-[2rem] font-black">Abre la ventana de la app</h1>
+      <h1 className="m-0 font-display text-3xl font-bold">Abre la ventana de la app</h1>
       <p className="m-0 max-w-[28rem] text-ink-soft">
         Esta página en el navegador no tiene acceso a la biblioteca. Usa la ventana de escritorio
         que abre <strong>bun dev</strong>.
@@ -141,13 +146,19 @@ function LibrarySetup({ onPathSet }) {
         alt=""
         width={72}
         height={72}
-        className="rounded-lg border border-ink/10 shadow-card"
+        className="rounded-xl shadow-lift ring-1 ring-ink/8"
       />
-      <h1 className="m-0 font-display text-[2rem] font-black">Catálogo de cursos</h1>
+      <h1 className="m-0 font-display text-3xl font-bold tracking-tight">Catálogo de cursos</h1>
       <p className="m-0 max-w-[28rem] text-ink-soft">
         Elige la carpeta que contiene tus cursos para empezar.
       </p>
-      <button type="button" className={iconBtn} onClick={handlePick} disabled={isPicking}>
+      <button
+        type="button"
+        className={cn(btnPrimary, 'h-10 px-5')}
+        onClick={handlePick}
+        disabled={isPicking}
+      >
+        <FolderOpen size={16} aria-hidden="true" />
         {isPicking ? 'Abriendo…' : 'Elegir carpeta'}
       </button>
     </div>
@@ -158,14 +169,14 @@ function ContinueHub({ courses, onSelect, onOpenCourse, onOpenModal, onToggleInP
   if (!courses.length) return null
 
   return (
-    <section className="mb-6" aria-label="Continuar aprendiendo">
+    <section className="mb-8" aria-label="Continuar aprendiendo">
       <div className={sectionHeading}>
         <h2 className={sectionTitle}>Continuar aprendiendo</h2>
         <span className={sectionMeta}>
           {courses.length} reciente{courses.length === 1 ? '' : 's'}
         </span>
       </div>
-      <div className="grid auto-cols-[minmax(220px,260px)] grid-flow-col gap-4 overflow-x-auto px-[0.15rem] pt-[0.35rem] pb-4 [scroll-snap-type:x_mandatory] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[rgba(26,20,35,0.25)]">
+      <div className="-mx-1 grid auto-cols-[minmax(220px,260px)] grid-flow-col gap-4 overflow-x-auto px-1 pt-1 pb-4 [scroll-snap-type:x_mandatory] [&>*]:[scroll-snap-align:start]">
         {courses.slice(0, 12).map((course) => (
           <CourseCard
             key={`hub-${course.path}`}
@@ -601,7 +612,7 @@ function FilterableCoursesGrid({
             </div>
           ) : (
             <>
-              <div className="mb-5 flex flex-wrap gap-[0.65rem]">
+              <div className="mb-4 flex flex-wrap gap-3">
                 <div className={statCard}>
                   <div>
                     <div className={statValue}>{courses.length}</div>
@@ -630,58 +641,74 @@ function FilterableCoursesGrid({
                 ) : null}
               </div>
 
-              {missingPropsCourses.length > 0 && !missingPropsOnly ? (
-                <div className={banner}>
-                  <div>
-                    <strong>{missingPropsCourses.length}</strong> curso
-                    {missingPropsCourses.length === 1 ? '' : 's'} sin <code>courseProps.json</code>
-                  </div>
-                  <div className={bannerActions}>
-                    <button
-                      type="button"
-                      className={btnGhost}
-                      onClick={() => setMissingPropsOnly(true)}
-                    >
-                      Verlos
-                    </button>
-                    <button type="button" className={btnPrimary} onClick={handleOpenImportMissing}>
-                      Elegir e importar
-                    </button>
-                  </div>
-                </div>
-              ) : null}
+              {(missingPropsCourses.length > 0 && !missingPropsOnly) ||
+              showCoverBanner ||
+              showDescriptionBanner ? (
+                <div className="mb-8 flex flex-col gap-2">
+                  {missingPropsCourses.length > 0 && !missingPropsOnly ? (
+                    <div className={notice} role="status">
+                      <div className="flex items-center gap-2.5">
+                        <FileWarning className={noticeIcon} aria-hidden="true" />
+                        <span>
+                          <strong>{missingPropsCourses.length}</strong> curso
+                          {missingPropsCourses.length === 1 ? '' : 's'} sin{' '}
+                          <code>courseProps.json</code>
+                        </span>
+                      </div>
+                      <div className={bannerActions}>
+                        <button
+                          type="button"
+                          className={noticeBtnGhost}
+                          onClick={() => setMissingPropsOnly(true)}
+                        >
+                          Verlos
+                        </button>
+                        <button type="button" className={noticeBtn} onClick={handleOpenImportMissing}>
+                          Elegir e importar
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
 
-              {showCoverBanner ? (
-                <div className={banner}>
-                  <div>
-                    <strong>{missingCoverCourses.length}</strong> curso
-                    {missingCoverCourses.length === 1 ? '' : 's'} sin portada
-                  </div>
-                  <div className={bannerActions}>
-                    <button type="button" className={btnPrimary} onClick={handleOpenCoverSearch}>
-                      Buscar portadas
-                    </button>
-                    <BannerDismiss onClick={dismissCoverBanner} />
-                  </div>
-                </div>
-              ) : null}
+                  {showCoverBanner ? (
+                    <div className={notice} role="status">
+                      <div className="flex items-center gap-2.5">
+                        <ImageOff className={noticeIcon} aria-hidden="true" />
+                        <span>
+                          <strong>{missingCoverCourses.length}</strong> curso
+                          {missingCoverCourses.length === 1 ? '' : 's'} sin portada
+                        </span>
+                      </div>
+                      <div className={bannerActions}>
+                        <button type="button" className={noticeBtn} onClick={handleOpenCoverSearch}>
+                          Buscar portadas
+                        </button>
+                        <BannerDismiss onClick={dismissCoverBanner} />
+                      </div>
+                    </div>
+                  ) : null}
 
-              {showDescriptionBanner ? (
-                <div className={banner}>
-                  <div>
-                    <strong>{missingDescriptionCourses.length}</strong> curso
-                    {missingDescriptionCourses.length === 1 ? '' : 's'} sin descripción
-                  </div>
-                  <div className={bannerActions}>
-                    <button
-                      type="button"
-                      className={btnPrimary}
-                      onClick={handleOpenDescriptionBatch}
-                    >
-                      Escribir descripciones
-                    </button>
-                    <BannerDismiss onClick={dismissDescriptionBanner} />
-                  </div>
+                  {showDescriptionBanner ? (
+                    <div className={notice} role="status">
+                      <div className="flex items-center gap-2.5">
+                        <FileText className={noticeIcon} aria-hidden="true" />
+                        <span>
+                          <strong>{missingDescriptionCourses.length}</strong> curso
+                          {missingDescriptionCourses.length === 1 ? '' : 's'} sin descripción
+                        </span>
+                      </div>
+                      <div className={bannerActions}>
+                        <button
+                          type="button"
+                          className={noticeBtn}
+                          onClick={handleOpenDescriptionBatch}
+                        >
+                          Escribir descripciones
+                        </button>
+                        <BannerDismiss onClick={dismissDescriptionBanner} />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -730,9 +757,9 @@ function FilterableCoursesGrid({
               </div>
 
               {missingPropsOnly && missingPropsCourses.length > 0 ? (
-                <div className={cn(banner, 'mb-3 px-[0.85rem] py-[0.65rem]')}>
+                <div className={cn(notice, 'mb-3')}>
                   <span>Elige carpetas y genera propiedades desde el nombre.</span>
-                  <button type="button" className={btnPrimary} onClick={handleOpenImportMissing}>
+                  <button type="button" className={noticeBtn} onClick={handleOpenImportMissing}>
                     Elegir e importar
                   </button>
                 </div>
@@ -1151,15 +1178,21 @@ function App() {
   return (
     <ErrorBoundary>
       <Toaster
-        position="top-right"
+        position="bottom-right"
+        gutter={8}
         toastOptions={{
           style: {
-            border: '3px solid #1a1423',
-            borderRadius: '14px',
-            background: '#fff4e8',
-            color: '#1a1423',
-            fontWeight: 700
-          }
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--color-surface)',
+            color: 'var(--color-ink)',
+            boxShadow: 'var(--shadow-panel)',
+            fontSize: 'var(--text-sm)',
+            fontWeight: 500,
+            padding: '10px 14px'
+          },
+          success: { iconTheme: { primary: 'var(--color-teal)', secondary: '#fff' } },
+          error: { iconTheme: { primary: 'var(--color-coral)', secondary: '#fff' } }
         }}
       />
       {shellMissing ? (

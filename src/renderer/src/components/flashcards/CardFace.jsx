@@ -51,7 +51,7 @@ export function CardText({ text, hide = null, focus = null }) {
       }
       if (focus != null && part.n !== focus) return <Fragment key={index}>{part.text}</Fragment>
       return (
-        <span key={index} className="font-black text-coral-deep">
+        <span key={index} className="font-bold text-coral-deep">
           {part.text}
         </span>
       )
@@ -66,7 +66,7 @@ export function CardText({ text, hide = null, focus = null }) {
         return (
           <code
             key={index}
-            className="my-2 block overflow-x-auto rounded-md bg-ink/[0.05] px-3 py-2 text-left font-mono text-[0.82rem] leading-[1.5] font-medium whitespace-pre"
+            className="my-2 block overflow-x-auto rounded-md bg-ink/[0.05] px-3 py-2 text-left font-mono text-sm leading-[1.5] font-medium whitespace-pre"
           >
             {list}
           </code>

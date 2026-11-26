@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { cn } from '../ui/cn'
 import { absoluteAssetUrl, getInstitutionLogo, hasInstitutionLogo } from '../utils/images'
 
-const institutionName = 'text-xs font-bold text-coral-deep'
+const institutionName = 'text-xs font-semibold text-coral-deep'
 
 export function InstitutionMark({ institution, nameClassName, markClassName, emptyLabel = null }) {
   const specific = hasInstitutionLogo(institution)

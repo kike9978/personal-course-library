@@ -10,12 +10,29 @@ import {
 import { formatTime } from './StudySidePanel'
 import LinkProjectMenu from './LinkProjectMenu'
 import { isTransportStream, transportPlaylistUrl, useTransportStream } from './useTransportStream'
+import {
+  Captions,
+  CircleCheck,
+  Circle,
+  Maximize,
+  Minimize,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  Volume1,
+  Volume2,
+  VolumeX
+} from 'lucide-react'
 import { cn } from '../ui/cn'
 
 const playIconBtn =
-  'cursor-pointer rounded-[8px] border border-white/20 bg-white/6 px-[0.55rem] py-[0.35rem] text-[0.68rem] font-bold whitespace-nowrap text-[#f5f2ee] enabled:hover:border-[rgba(232,69,112,0.55)] enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-35'
+  'inline-flex h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-sm border-0 bg-transparent px-1.5 text-xs font-semibold whitespace-nowrap text-white/85 tabular-nums transition-colors duration-150 enabled:hover:bg-white/12 enabled:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral disabled:cursor-not-allowed disabled:opacity-35 [&_svg]:size-[18px]'
 
-const playIconDone = 'border-[rgba(46,160,140,0.55)] bg-[rgba(46,160,140,0.22)] text-[#d7fff4]'
+const playIconDone = 'text-[#7fe0cc] enabled:hover:text-[#a5f0e0]'
+const playMenuItem =
+  'block w-full cursor-pointer rounded-sm border-0 bg-transparent px-2.5 py-1.5 text-left text-xs font-medium text-white/85 hover:bg-white/10 hover:text-white'
+const playMenuItemOn = 'bg-white/12 text-white'
 
 const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
 const COMPLETE_RATIO = 0.95
@@ -751,7 +768,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
   }
 
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0
-  const volumeLabel = muted || volume === 0 ? 'Mute' : volume < 0.4 ? 'Vol·' : 'Vol'
+  const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.4 ? Volume1 : Volume2
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0c0a10] text-[#f5f2ee]">
@@ -769,7 +786,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           )}
         >
           <h2
-            className="m-0 min-w-0 flex-1 overflow-hidden font-display text-[0.95rem] font-bold text-ellipsis whitespace-nowrap text-[#f5f2ee]"
+            className="m-0 min-w-0 flex-1 overflow-hidden font-display text-md font-semibold text-ellipsis whitespace-nowrap text-[#f5f2ee]"
             title={lesson.relativePath}
           >
             {lesson.title}
@@ -840,15 +857,19 @@ const LessonPlayer = forwardRef(function LessonPlayer(
           ) : null}
         </div>
 
-        <div className="absolute inset-x-0 bottom-0 z-[6] flex flex-nowrap items-center gap-x-2 gap-y-[0.4rem] overflow-visible bg-[linear-gradient(180deg,transparent,rgba(12,10,16,0.94)_28%)] px-[0.85rem] pt-[0.55rem] pb-[0.7rem]">
+        <div className="absolute inset-x-0 bottom-0 z-[6] flex flex-nowrap items-center gap-x-1 overflow-visible bg-[linear-gradient(180deg,transparent,rgba(10,9,12,0.92)_32%)] px-3 pt-6 pb-2.5">
           <button
             type="button"
-            className="h-8 w-8 cursor-pointer rounded-[8px] border border-white/20 bg-white/6 text-[0.7rem] text-[#f5f2ee]"
+            className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-white text-ink transition-transform duration-150 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral [&_svg]:size-4"
             onClick={togglePlay}
             aria-label={playing ? 'Pausar' : 'Reproducir'}
             title={playing ? 'Pausar (Espacio)' : 'Reproducir (Espacio)'}
           >
-            {playing ? '❚❚' : '▶'}
+            {playing ? (
+              <Pause className="fill-current" aria-hidden="true" />
+            ) : (
+              <Play className="ml-0.5 fill-current" aria-hidden="true" />
+            )}
           </button>
           <button
             type="button"
@@ -858,7 +879,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             aria-label="Lección anterior"
             title="Lección anterior ([)"
           >
-            ‹
+            <SkipBack aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -868,16 +889,16 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             aria-label="Lección siguiente"
             title="Lección siguiente (])"
           >
-            ›
+            <SkipForward aria-hidden="true" />
           </button>
 
-          <span className="text-[0.75rem] whitespace-nowrap text-[rgba(245,242,238,0.75)] tabular-nums">
+          <span className="px-1 text-xs whitespace-nowrap text-white/75 tabular-nums">
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
 
           <div
             className={cn(
-              'relative flex h-[1.35rem] min-w-[6rem] flex-1 cursor-pointer touch-none items-center select-none',
+              'group/track relative mx-1 flex h-[1.35rem] min-w-[6rem] flex-1 cursor-pointer touch-none items-center select-none',
               scrubbing && 'cursor-grabbing'
             )}
             ref={trackRef}
@@ -894,14 +915,14 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             onPointerUp={finishScrub}
             onPointerCancel={finishScrub}
           >
-            <span className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/15" />
+            <span className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/20 transition-[height] duration-150 group-hover/track:h-1.5" />
             <div
-              className="absolute top-1/2 left-0 z-[1] h-1 -translate-y-1/2 rounded-full bg-coral"
+              className="absolute top-1/2 left-0 z-[1] h-1 -translate-y-1/2 rounded-full bg-coral transition-[height] duration-150 group-hover/track:h-1.5"
               style={{ width: `${progressPct}%` }}
             />
             <div
               className={cn(
-                'absolute top-1/2 z-[3] -translate-y-1/2 cursor-grab rounded-full bg-white shadow-[0_0_0_2px_rgba(232,69,112,0.45)] after:absolute after:-inset-2 after:content-[\'\']',
+                'absolute top-1/2 z-[3] -translate-y-1/2 cursor-grab rounded-full bg-white shadow-ring-soft after:absolute after:-inset-2 after:content-[\'\']',
                 scrubbing ? 'h-[14px] w-[14px] -ml-[7px] cursor-grabbing' : 'h-3 w-3 -ml-1.5'
               )}
               style={{ left: `${progressPct}%` }}
@@ -933,7 +954,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
 
             {hoverMark ? (
               <div
-                className="pointer-events-none absolute bottom-[calc(100%+6px)] z-[8] flex min-w-[8rem] max-w-[14rem] -translate-x-1/2 flex-col gap-[0.15rem] rounded-[8px] bg-[#1a1423] px-[0.55rem] py-[0.4rem] text-[0.7rem] text-[#fff4e8]"
+                className="pointer-events-none absolute bottom-[calc(100%+6px)] z-[8] flex min-w-[8rem] max-w-[14rem] -translate-x-1/2 flex-col gap-[0.15rem] rounded-sm bg-ink/95 px-2.5 py-1.5 text-2xs text-white shadow-panel"
                 style={{ left: `${hoverMark.pct}%` }}
               >
                 <strong>{formatTime(hoverMark.timeSec)}</strong>
@@ -952,6 +973,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             className={playIconBtn}
             onClick={cycleRate}
             title="Velocidad (, .)"
+            aria-label={`Velocidad ${rate}×`}
           >
             {rate}×
           </button>
@@ -961,8 +983,9 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             onClick={() => onToggleComplete?.(!isCompleted)}
             title={isCompleted ? 'Completada (M)' : 'Marcar completada (M)'}
             aria-pressed={isCompleted}
+            aria-label={isCompleted ? 'Completada' : 'Marcar completada'}
           >
-            {isCompleted ? '✓' : '○'}
+            {isCompleted ? <CircleCheck aria-hidden="true" /> : <Circle aria-hidden="true" />}
           </button>
           {subtitleTracks.length > 0 ? (
             <div className="relative" ref={subsMenuRef}>
@@ -979,13 +1002,14 @@ const LessonPlayer = forwardRef(function LessonPlayer(
                 aria-expanded={subsMenuOpen}
                 aria-haspopup="menu"
               >
+                <Captions aria-hidden="true" />
                 {subPref.enabled && activeSubtitle?.lang
                   ? activeSubtitle.lang.split('-')[0].toUpperCase()
-                  : 'CC'}
+                  : null}
               </button>
               {subsMenuOpen ? (
                 <div
-                  className="absolute right-0 bottom-[calc(100%+0.35rem)] z-[9] max-h-[14rem] min-w-[12rem] max-w-[18rem] overflow-auto rounded-[8px] bg-[#1a1423] p-[0.3rem] shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
+                  className="absolute right-0 bottom-[calc(100%+0.35rem)] z-[9] max-h-[14rem] min-w-[12rem] max-w-[18rem] overflow-auto rounded-md border border-white/10 bg-[#1b1a20]/95 p-1 shadow-panel backdrop-blur-xl"
                   role="menu"
                 >
                   <button
@@ -993,8 +1017,8 @@ const LessonPlayer = forwardRef(function LessonPlayer(
                     role="menuitemradio"
                     aria-checked={!subPref.enabled}
                     className={cn(
-                      'block w-full cursor-pointer rounded-[6px] border-0 bg-transparent px-[0.55rem] py-[0.4rem] text-left text-[0.75rem] font-[650] text-[#fff4e8] hover:bg-[rgba(46,160,140,0.28)] hover:text-[#d7fff4]',
-                      !subPref.enabled && 'bg-[rgba(46,160,140,0.28)] text-[#d7fff4]'
+                      playMenuItem,
+                      !subPref.enabled && playMenuItemOn
                     )}
                     onClick={() => chooseSubtitle(null)}
                   >
@@ -1009,8 +1033,8 @@ const LessonPlayer = forwardRef(function LessonPlayer(
                         role="menuitemradio"
                         aria-checked={selected}
                         className={cn(
-                          'block w-full cursor-pointer rounded-[6px] border-0 bg-transparent px-[0.55rem] py-[0.4rem] text-left text-[0.75rem] font-[650] text-[#fff4e8] hover:bg-[rgba(46,160,140,0.28)] hover:text-[#d7fff4]',
-                          selected && 'bg-[rgba(46,160,140,0.28)] text-[#d7fff4]'
+                          playMenuItem,
+                          selected && playMenuItemOn
                         )}
                         onClick={() => chooseSubtitle(track)}
                       >
@@ -1023,7 +1047,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             </div>
           ) : null}
 
-          <div className="flex min-w-[7.5rem] items-center gap-[0.35rem]">
+          <div className="group/vol flex items-center">
             <button
               type="button"
               className={playIconBtn}
@@ -1035,11 +1059,11 @@ const LessonPlayer = forwardRef(function LessonPlayer(
                   : 'Silenciar (S). Flechas arriba y abajo cambian el volumen'
               }
             >
-              {volumeLabel}
+              <VolumeIcon aria-hidden="true" />
             </button>
             <input
               type="range"
-              className="w-[4.5rem] cursor-pointer accent-coral"
+              className="w-0 cursor-pointer accent-coral opacity-0 transition-[width,opacity] duration-200 group-hover/vol:w-[4.5rem] group-hover/vol:opacity-100 focus:w-[4.5rem] focus:opacity-100"
               min={0}
               max={1}
               step={0.05}
@@ -1056,7 +1080,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
             aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
             title={isFullscreen ? 'Salir de pantalla completa (F o Esc)' : 'Pantalla completa (F)'}
           >
-            {isFullscreen ? 'Salir' : 'Pantalla'}
+            {isFullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}
           </button>
         </div>
       </div>

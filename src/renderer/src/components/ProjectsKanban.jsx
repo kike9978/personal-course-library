@@ -1,21 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { STATUS_OPTIONS, statusLabel } from './ProjectPanel'
-import AppNav from './AppNav'
+import { Search } from 'lucide-react'
+import AppHeader from './AppHeader'
 import CierreComposer, { suggestProjectCierre } from './CierreComposer'
 import { cn } from '../ui/cn'
-import { btnGhost } from '../ui/classes'
-
-const pageWash =
-  'h-screen flex flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(232,69,112,0.05),transparent_40%),radial-gradient(circle_at_88%_8%,rgba(61,122,122,0.05),transparent_38%),var(--color-cream-deep)]'
-const chipSelect =
-  'inline-flex items-center gap-[0.35rem] [&_label]:text-[0.75rem] [&_label]:font-bold [&_label]:uppercase [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_select]:border [&_select]:border-ink/10 [&_select]:rounded-full [&_select]:bg-surface [&_select]:px-3 [&_select]:py-[0.35rem] [&_select]:font-semibold [&_select]:text-[0.82rem] [&_select]:text-ink [&_select]:cursor-pointer [&_select]:shadow-none'
-const searchField =
-  'relative flex-1 min-w-[12rem] max-w-[420px] max-[900px]:min-w-0 [&_input]:w-full [&_input]:border [&_input]:border-ink/10 [&_input]:rounded-full [&_input]:bg-surface [&_input]:py-[0.7rem] [&_input]:pr-4 [&_input]:pl-[2.6rem] [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:transition-[box-shadow,transform] [&_input]:duration-[120ms] [&_input]:focus:shadow-find'
-const cardAction = cn(
+import {
+  btnCompact,
   btnGhost,
-  'rounded-sm px-[0.65rem] py-[0.28rem] text-[0.72rem] font-bold shadow-none'
-)
+  pageShell,
+  searchIcon,
+  searchInput,
+  selectControl
+} from '../ui/classes'
+
+const cardAction = cn(btnGhost, btnCompact)
 
 const COLUMNS = STATUS_OPTIONS.map((opt) => ({
   id: opt.value,
@@ -218,19 +217,31 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
   }
 
   return (
-    <div className={pageWash}>
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 border-b border-ink/10 bg-surface-muted backdrop-blur-[10px]">
-        <div className="flex min-w-0 flex-col gap-[0.2rem]">
-          <h1 className="m-0 font-display text-[1.35rem] font-black tracking-[-0.02em] text-ink">
-            Proyectos
-          </h1>
-          <AppNav active="projects" onSelect={onNavigate} />
-        </div>
-        <div className="ml-auto flex flex-wrap items-center gap-[0.65rem] max-[900px]:ml-0 max-[900px]:w-full">
-          <div className={chipSelect}>
-            <label htmlFor="kanban-course-filter">Curso</label>
+    <div className={pageShell}>
+      <AppHeader
+        active="projects"
+        onNavigate={onNavigate}
+        center={
+          <div className="relative w-full max-w-[22rem]">
+            <Search className={searchIcon} aria-hidden="true" />
+            <input
+              type="search"
+              data-search-field=""
+              className={searchInput}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar proyecto…"
+              aria-label="Buscar proyectos"
+              title="Buscar (Ctrl+F)"
+            />
+          </div>
+        }
+        actions={
+          <label className="inline-flex items-center gap-2 text-xs text-ink-soft" htmlFor="kanban-course-filter">
+            Curso
             <select
               id="kanban-course-filter"
+              className={cn(selectControl, 'max-w-[16rem]')}
               value={courseFilter}
               onChange={(e) => setCourseFilter(e.target.value)}
             >
@@ -241,19 +252,9 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
                 </option>
               ))}
             </select>
-          </div>
-          <div className={searchField}>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar proyecto…"
-              aria-label="Buscar proyectos"
-              title="Buscar (Ctrl+F)"
-            />
-          </div>
-        </div>
-      </header>
+          </label>
+        }
+      />
 
       <div
         className="grid min-h-0 flex-1 grid-cols-3 gap-[0.85rem] overflow-auto px-5 pt-4 pb-5 max-[900px]:grid-cols-1"
@@ -272,26 +273,36 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
               <section
                 key={column.id}
                 className={cn(
-                  'flex min-h-0 min-w-0 flex-col rounded-lg border border-ink/10 bg-[rgba(255,255,255,0.62)] shadow-card transition-[border-color,box-shadow,background-color] duration-150',
-                  dropColumn === column.id &&
-                    'border-coral bg-[rgba(248,238,242,0.92)] shadow-[inset_0_0_0_1px_rgba(232,69,112,0.2),var(--shadow-card)]'
+                  'flex min-h-0 min-w-0 flex-col rounded-lg border border-transparent bg-ink/[0.035] transition-[border-color,background-color] duration-150',
+                  dropColumn === column.id && 'border-coral/40 border-dashed bg-coral-soft/70'
                 )}
                 aria-label={column.title}
                 onDragOver={(e) => handleDragOver(e, column.id)}
                 onDragLeave={(e) => handleDragLeave(e, column.id)}
                 onDrop={(e) => handleDrop(e, column.id)}
               >
-                <header className="flex items-baseline justify-between gap-2 px-[0.95rem] pt-[0.8rem] pb-[0.55rem]">
-                  <h2 className="m-0 font-display text-[0.72rem] font-extrabold tracking-[0.08em] text-ink-soft uppercase">
+                <header className="flex items-center justify-between gap-2 px-3.5 pt-3 pb-2.5">
+                  <h2 className="m-0 flex items-center gap-2 text-sm font-semibold text-ink">
+                    <span
+                      className={cn(
+                        'size-2 rounded-full',
+                        column.id === 'in_progress'
+                          ? 'bg-coral'
+                          : column.id === 'done'
+                            ? 'bg-teal'
+                            : 'bg-ink/25'
+                      )}
+                      aria-hidden="true"
+                    />
                     {column.title}
                   </h2>
-                  <span className="rounded-full border border-ink/10 bg-cream-deep px-[0.45rem] py-[0.12rem] text-[0.72rem] font-bold text-ink-soft">
+                  <span className="rounded-full bg-ink/6 px-2 py-px text-xs font-medium text-ink-soft tabular-nums">
                     {columnItems.length}
                   </span>
                 </header>
-                <div className="flex min-h-[6rem] flex-1 flex-col gap-[0.65rem] overflow-auto px-[0.7rem] pb-[0.85rem]">
+                <div className="flex min-h-[6rem] flex-1 flex-col gap-2 overflow-auto px-2 pb-2">
                   {columnItems.length === 0 ? (
-                    <p className="mx-[0.1rem] my-[0.35rem] rounded-md border border-dashed border-ink/16 bg-white/35 px-[0.85rem] py-[1.35rem] text-center text-[0.8rem] text-ink-soft">
+                    <p className="rounded-md border border-dashed border-ink/14 px-4 py-6 text-center text-sm text-ink-faint">
                       Suelta aquí
                     </p>
                   ) : (
@@ -302,13 +313,12 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
                         <article
                           key={key}
                           className={cn(
-                            'flex cursor-grab flex-col gap-[0.4rem] rounded-md border border-ink/10 border-l-[3px] bg-surface px-[0.9rem] pt-[0.85rem] pb-[0.8rem] text-ink shadow-card select-none transition-[transform,box-shadow,opacity,border-color] duration-150 ease-[cubic-bezier(0.34,1.4,0.64,1),ease,ease,ease] hover:-translate-y-px hover:shadow-lift hover:outline-none focus-visible:-translate-y-px focus-visible:shadow-[0_0_0_2px_rgba(232,69,112,0.35),var(--shadow-lift)] focus-visible:outline-none [&_svg]:size-[0.9rem] [&_svg]:shrink-0',
+                            'flex cursor-grab flex-col gap-1.5 rounded-md border border-ink/8 bg-surface px-3.5 pt-3 pb-3 text-ink shadow-card select-none transition-[transform,box-shadow,opacity,border-color] duration-150 ease-pop hover:-translate-y-px hover:border-ink/12 hover:shadow-lift focus-visible:shadow-[var(--shadow-ring-soft),var(--shadow-lift)] focus-visible:outline-none [&_svg]:size-[0.9rem] [&_svg]:shrink-0',
                             (project.status || 'todo') === 'in_progress'
-                              ? 'border-l-coral [&_svg]:text-coral'
+                              ? '[&_svg]:text-coral'
                               : (project.status || 'todo') === 'done'
-                                ? 'border-l-teal [&_svg]:text-teal'
-                                : 'border-l-ink/28 [&_svg]:text-ink-soft',
-                            project.linkMissing && 'border-coral/45 border-l-coral-deep',
+                                ? '[&_svg]:text-teal'
+                                : '[&_svg]:text-ink-faint',
                             isDragging && 'cursor-grabbing opacity-45'
                           )}
                           draggable
@@ -327,23 +337,27 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
                         >
                           <div className="flex min-w-0 items-center gap-[0.45rem]">
                             <ProjectDiamondIcon />
-                            <span className="min-w-0 flex-1 truncate font-display text-[0.95rem] leading-[1.25] font-extrabold text-ink">
+                            <span className="min-w-0 flex-1 truncate text-base leading-snug font-semibold text-ink">
                               {project.title}
                             </span>
                           </div>
-                          <div className="truncate text-[0.75rem] font-semibold text-ink-soft">
+                          <div className="truncate text-xs text-ink-soft">
                             {titleByPath[project.coursePath] || project.coursePath}
                           </div>
                           {project.notes ? (
-                            <p className="m-0 line-clamp-2 text-[0.8rem] leading-[1.4] font-medium text-ink-soft">
+                            <p className="m-0 line-clamp-2 text-sm leading-relaxed text-ink-soft">
                               {project.notes}
                             </p>
                           ) : null}
-                          <div className="mt-[0.35rem] flex flex-wrap gap-[0.35rem] border-t border-ink/10 pt-[0.55rem]">
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                             {project.linkedFolderPath ? (
                               <button
                                 type="button"
-                                className={cardAction}
+                                className={cn(
+                                  cardAction,
+                                  project.linkMissing &&
+                                    'border-warn-border bg-warn text-warn-text enabled:hover:bg-warn'
+                                )}
                                 onClick={(e) => openFolder(e, project)}
                               >
                                 {project.linkMissing ? 'Vínculo roto' : 'Abrir carpeta'}

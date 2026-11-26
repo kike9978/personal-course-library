@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '../../ui/cn'
 import { lessonsInOrder, subtitleLanguages, subtitlesOf } from './scopeSources'
 
-const small = 'text-[0.72rem] font-bold text-ink-soft'
+const small = 'text-xs font-semibold text-ink-soft'
 
 function TriCheck({ checked, partial, label, onChange, disabled }) {
   const ref = useRef(null)
@@ -35,7 +35,7 @@ function SectionRows({ section, depth, picked, toggle, disabled }) {
   return (
     <li>
       <label
-        className="flex items-center gap-2 py-[0.2rem] text-[0.82rem] font-extrabold"
+        className="flex items-center gap-2 py-[0.2rem] text-sm font-semibold"
         style={{ paddingLeft: `${depth * 0.9}rem` }}
       >
         <TriCheck
@@ -46,7 +46,7 @@ function SectionRows({ section, depth, picked, toggle, disabled }) {
           onChange={() => toggle(paths, count !== paths.length)}
         />
         <span className="truncate">{section.title || 'Lecciones'}</span>
-        <span className="text-[0.7rem] font-bold text-ink-soft">
+        <span className="text-2xs font-semibold text-ink-soft">
           {count}/{paths.length}
         </span>
       </label>
@@ -54,7 +54,7 @@ function SectionRows({ section, depth, picked, toggle, disabled }) {
         {(section.lessons || []).map((lesson) => (
           <li key={lesson.relativePath}>
             <label
-              className="flex items-center gap-2 py-[0.1rem] text-[0.8rem]"
+              className="flex items-center gap-2 py-[0.1rem] text-sm"
               style={{ paddingLeft: `${depth * 0.9 + 1.2}rem` }}
             >
               <input
@@ -67,7 +67,7 @@ function SectionRows({ section, depth, picked, toggle, disabled }) {
               <span className="min-w-0 flex-1 truncate">{lesson.title}</span>
               {subtitlesOf(lesson).length ? (
                 <span
-                  className="rounded border border-ink/15 px-1 text-[0.62rem] font-extrabold text-ink-soft"
+                  className="rounded border border-ink/15 px-1 text-2xs font-semibold text-ink-soft"
                   title="Tiene subtítulos"
                 >
                   CC
@@ -164,7 +164,7 @@ function ScopePicker({ courses, value, onChange, disabled }) {
       <label className="flex flex-col gap-1">
         <span className={small}>Curso</span>
         <select
-          className="rounded-md border border-ink/10 bg-surface px-3 py-[0.5rem] text-[0.88rem]"
+          className="rounded-md border border-ink/10 bg-surface px-3 py-[0.5rem] text-base"
           value={coursePath || ''}
           disabled={disabled}
           onChange={(event) => {
@@ -186,12 +186,12 @@ function ScopePicker({ courses, value, onChange, disabled }) {
         </select>
       </label>
 
-      {loading ? <p className="m-0 text-[0.82rem] text-ink-soft">Leyendo el curso…</p> : null}
-      {error ? <p className="m-0 text-[0.82rem] font-bold text-coral-deep">{error}</p> : null}
+      {loading ? <p className="m-0 text-sm text-ink-soft">Leyendo el curso…</p> : null}
+      {error ? <p className="m-0 text-sm font-semibold text-coral-deep">{error}</p> : null}
 
       {tree && !loading ? (
         <>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.84rem]">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -215,7 +215,7 @@ function ScopePicker({ courses, value, onChange, disabled }) {
             </label>
             {value.useSubtitles && langs.length > 1 ? (
               <select
-                className="rounded-md border border-ink/10 bg-surface px-2 py-1 text-[0.8rem]"
+                className="rounded-md border border-ink/10 bg-surface px-2 py-1 text-sm"
                 value={value.lang}
                 disabled={disabled}
                 onChange={(event) => onChange({ lang: event.target.value })}
@@ -235,7 +235,7 @@ function ScopePicker({ courses, value, onChange, disabled }) {
             </span>
             <button
               type="button"
-              className="cursor-pointer border-0 bg-transparent p-0 text-[0.78rem] font-bold text-coral-deep"
+              className="cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-coral-deep"
               disabled={disabled}
               onClick={() =>
                 onChange({

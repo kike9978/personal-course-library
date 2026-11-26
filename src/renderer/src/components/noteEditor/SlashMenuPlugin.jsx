@@ -25,7 +25,7 @@ import { cn } from '../../ui/cn.js'
 const typeaheadMenu =
   'z-40 flex max-h-56 min-w-48 max-w-72 flex-col gap-[0.1rem] overflow-auto rounded-sm border border-ink/10 bg-surface p-1 shadow-card'
 const typeaheadItem =
-  'm-0 flex w-full cursor-pointer flex-col items-start gap-[0.1rem] rounded-[6px] border-0 bg-transparent px-[0.5rem] py-[0.4rem] text-left text-[0.84rem] font-semibold text-ink [font:inherit] hover:bg-black/6'
+  'm-0 flex w-full cursor-pointer flex-col items-start gap-[0.1rem] rounded-sm border-0 bg-transparent px-[0.5rem] py-[0.4rem] text-left text-sm font-semibold text-ink [font:inherit] hover:bg-black/6'
 
 class SlashOption extends MenuOption {
   constructor(key, title, keywords, onSelect) {

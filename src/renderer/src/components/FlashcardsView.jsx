@@ -1,17 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { Layers, Plus, Settings } from 'lucide-react'
-import AppNav from './AppNav'
+import { Download, Layers, Plus, Send, Settings, Trash2 } from 'lucide-react'
+import AppHeader from './AppHeader'
 import FlashcardBuilder from './FlashcardBuilder'
 import { CardImage, CardText } from './flashcards/CardFace'
 import { CardFields, TypeBadge } from './flashcards/CardReview'
 import { checkCardFields, clozeNumbers, formatClock } from '../../../shared/flashcardCards.js'
 import { askConfirm } from '../utils/askConfirm'
 import { cn } from '../ui/cn'
-import { btnGhost, btnPrimary } from '../ui/classes'
+import {
+  btnCompact,
+  btnGhost,
+  btnPrimary,
+  btnQuiet,
+  card as cardSurface,
+  cardHover,
+  iconOnly,
+  pageShell
+} from '../ui/classes'
 
-const pageWash =
-  'h-screen flex flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(232,69,112,0.05),transparent_40%),radial-gradient(circle_at_88%_8%,rgba(61,122,122,0.05),transparent_38%),var(--color-cream-deep)]'
 
 function formatWhen(ts) {
   if (!ts) return ''
@@ -26,9 +33,9 @@ function formatWhen(ts) {
   }
 }
 
-const smallBtn = 'px-3 py-[0.35rem] text-[0.8rem]'
+const smallBtn = btnCompact
 const ankiField =
-  'w-full rounded-md border border-ink/10 bg-surface px-3 py-[0.5rem] text-[0.85rem] text-ink outline-none focus:shadow-focus'
+  'w-full rounded-md border border-ink/10 bg-surface px-3 py-[0.5rem] text-sm text-ink outline-none focus:shadow-focus'
 
 function syncSummary(result) {
   const parts = []
@@ -79,7 +86,7 @@ function AnkiBar({ status, onRefresh }) {
   return (
     <div className="mx-auto mb-4 flex max-w-[60rem] flex-col gap-2 rounded-lg border border-ink/10 bg-surface px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-[0.85rem]">
+        <span className="flex items-center gap-2 text-sm">
           <span
             className={cn(
               'size-2 rounded-full',
@@ -104,7 +111,7 @@ function AnkiBar({ status, onRefresh }) {
         </div>
       </div>
       {status && !status.ok && !open ? (
-        <p className="m-0 text-[0.78rem] leading-[1.45] text-ink-soft">
+        <p className="m-0 text-xs leading-[1.45] text-ink-soft">
           Abre Anki en el escritorio. Si es la primera vez, instala AnkiConnect en Anki:
           Herramientas → Complementos → Obtener complementos, código <code>2055492159</code>, y
           reinicia Anki. Mientras tanto puedes exportar el mazo a un archivo.
@@ -112,7 +119,7 @@ function AnkiBar({ status, onRefresh }) {
       ) : null}
       {open ? (
         <form className="grid gap-2 sm:grid-cols-3" onSubmit={save}>
-          <label className="flex flex-col gap-1 text-[0.75rem] font-bold text-ink-soft">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-soft">
             Dirección de AnkiConnect
             <input
               className={ankiField}
@@ -121,7 +128,7 @@ function AnkiBar({ status, onRefresh }) {
               onChange={(event) => setForm((current) => ({ ...current, url: event.target.value }))}
             />
           </label>
-          <label className="flex flex-col gap-1 text-[0.75rem] font-bold text-ink-soft">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-soft">
             Clave (si la pusiste)
             <input
               className={ankiField}
@@ -132,7 +139,7 @@ function AnkiBar({ status, onRefresh }) {
               }
             />
           </label>
-          <label className="flex flex-col gap-1 text-[0.75rem] font-bold text-ink-soft">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-soft">
             Mazo principal en Anki
             <input
               className={ankiField}
@@ -173,7 +180,7 @@ function DeckAnkiActions({ deck, ankiReady, busy, onSync, onExport }) {
         Exportar archivo
       </button>
       {deck.ankiSyncedAt ? (
-        <span className="text-[0.72rem] text-ink-soft">
+        <span className="text-xs text-ink-soft">
           En Anki desde {formatWhen(deck.ankiSyncedAt)}
         </span>
       ) : null}
@@ -184,8 +191,8 @@ function DeckAnkiActions({ deck, ankiReady, busy, onSync, onExport }) {
 const cardFace =
   'col-start-1 row-start-1 flex min-h-[14rem] flex-col rounded-lg border border-ink/10 bg-surface px-6 py-8 text-left shadow-card [backface-visibility:hidden]'
 const faceLabel =
-  'mb-3 block text-[0.72rem] font-extrabold tracking-[0.04em] text-ink-soft uppercase'
-const faceText = 'block font-display text-[1.35rem] leading-[1.35] font-black'
+  'mb-3 block text-xs font-semibold tracking-[0.04em] text-ink-soft uppercase'
+const faceText = 'block font-display text-xl leading-[1.35] font-bold'
 
 /**
  * Reverse cards are studied both ways, and a cloze once per blank (as in Anki),
@@ -295,13 +302,13 @@ function StudyCard({ item, flipped, onFlip, typed }) {
           <span className={faceLabel}>{back.label}</span>
           <span className={faceText}>{back.body}</span>
           {back.extra ? (
-            <span className="mt-3 block text-[0.95rem] leading-[1.45] text-ink-soft">
+            <span className="mt-3 block text-md leading-[1.45] text-ink-soft">
               {back.extra}
             </span>
           ) : null}
           <CardImage image={card.image} className="mt-4 self-center" />
           {card.source ? (
-            <span className="mt-auto block pt-4 text-[0.75rem] text-ink-soft">{card.source}</span>
+            <span className="mt-auto block pt-4 text-xs text-ink-soft">{card.source}</span>
           ) : null}
         </span>
       </span>
@@ -318,7 +325,7 @@ function CardEditor({ card, onCancel, onSave }) {
     <div className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-surface p-4 shadow-card">
       <div className="flex items-center gap-2">
         <TypeBadge type={card.type} />
-        <span className="text-[0.78rem] text-ink-soft">Editar tarjeta</span>
+        <span className="text-xs text-ink-soft">Editar tarjeta</span>
       </div>
       <CardFields
         card={draft}
@@ -531,7 +538,7 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
   }
 
   return (
-    <div className={pageWash}>
+    <div className={pageShell}>
       {builder ? (
         <FlashcardBuilder
           courses={courses}
@@ -544,21 +551,19 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
           }}
         />
       ) : null}
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-ink/10 bg-surface-muted px-5 py-4 backdrop-blur-[10px]">
-        <div className="flex min-w-0 flex-col gap-[0.2rem]">
-          <h1 className="m-0 font-display text-[1.35rem] font-black tracking-[-0.02em] text-ink">
-            Tarjetas
-          </h1>
-          <AppNav active="flashcards" onSelect={onNavigate} />
-        </div>
-        <button
-          type="button"
-          className={cn(btnPrimary, 'inline-flex items-center gap-2')}
-          onClick={() => setBuilder({ target: 'new' })}
-        >
-          <Plus size={16} /> Nuevo mazo
-        </button>
-      </header>
+      <AppHeader
+        active="flashcards"
+        onNavigate={onNavigate}
+        actions={
+          <button
+            type="button"
+            className={btnPrimary}
+            onClick={() => setBuilder({ target: 'new' })}
+          >
+            <Plus size={16} aria-hidden="true" /> Nuevo mazo
+          </button>
+        }
+      />
 
       <div className="min-h-0 flex-1 overflow-auto px-5 py-5">
         {loading ? (
@@ -579,7 +584,7 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
                 </button>
                 <button
                   type="button"
-                  className={cn(btnGhost, pendingOnly && 'border-coral text-coral-deep')}
+                  className={cn(btnGhost, pendingOnly && 'border-coral/35 bg-coral-soft text-coral-deep')}
                   aria-pressed={pendingOnly}
                   onClick={() => setPendingOnly((value) => !value)}
                 >
@@ -588,7 +593,7 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <h2 className="m-0 font-display text-[1.4rem] font-black">{deck.title}</h2>
+              <h2 className="m-0 font-display text-xl font-bold">{deck.title}</h2>
               <DeckAnkiActions
                 deck={deck}
                 ankiReady={Boolean(anki?.ok)}
@@ -596,7 +601,7 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
                 onSync={syncDeck}
                 onExport={exportDeck}
               />
-              <p className="mt-1 mb-0 flex items-center gap-2 text-[0.82rem] text-ink-soft">
+              <p className="mt-1 mb-0 flex items-center gap-2 text-sm text-ink-soft">
                 {queue.length
                   ? `${Math.min(index + 1, queue.length)} / ${queue.length}`
                   : 'No quedan pendientes en este mazo.'}
@@ -713,7 +718,7 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
         ) : decks.length === 0 ? (
           <div className="mx-auto flex max-w-[30rem] flex-col items-start gap-3 pt-6">
             <Layers className="size-8 text-coral" />
-            <p className="m-0 text-[0.95rem] leading-[1.45]">
+            <p className="m-0 text-md leading-[1.45]">
               Todavía no hay mazos. Crea uno desde un curso (sus notas y subtítulos), o en
               Anotaciones marca notas sueltas.
             </p>
@@ -742,49 +747,82 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
                 const known = entry.cards.filter((cardItem) => cardItem.known).length
                 return (
                   <li key={entry.id}>
-                    <article className="flex h-full flex-col gap-2 rounded-lg border border-ink/10 bg-surface p-4 shadow-card">
+                    <article className={cn(cardSurface, cardHover, 'flex h-full flex-col overflow-hidden')}>
                       <button
                         type="button"
-                        className="cursor-pointer border-0 bg-transparent p-0 text-left"
+                        className="flex flex-1 cursor-pointer flex-col gap-1 border-0 bg-transparent p-4 text-left focus-visible:outline-none focus-visible:shadow-[inset_var(--shadow-ring-soft)]"
                         onClick={() => setDeckId(entry.id)}
                       >
-                        <strong className="font-display text-[1.05rem]">{entry.title}</strong>
-                        <span className="mt-1 block text-[0.8rem] text-ink-soft">
+                        <span className="flex items-center gap-2">
+                          <Layers className="size-4 shrink-0 text-coral" aria-hidden="true" />
+                          <strong className="truncate font-display text-lg font-bold tracking-tight">
+                            {entry.title}
+                          </strong>
+                        </span>
+                        <span className="text-sm text-ink-soft">
                           {entry.cards.length === 1
                             ? '1 tarjeta'
                             : `${entry.cards.length} tarjetas`}
                           {known ? ` · ${known} aprendidas` : ''}
                         </span>
-                        {entry.updatedAt ? (
-                          <span className="mt-1 block text-[0.75rem] text-ink-soft">
-                            {formatWhen(entry.updatedAt)}
-                          </span>
-                        ) : null}
+                        <span
+                          className="mt-2 block h-1 w-full overflow-hidden rounded-full bg-ink/8"
+                          aria-hidden="true"
+                        >
+                          <span
+                            className="block h-full rounded-full bg-teal"
+                            style={{
+                              width: `${entry.cards.length ? Math.round((known / entry.cards.length) * 100) : 0}%`
+                            }}
+                          />
+                        </span>
+                        <span className="mt-1.5 block text-xs text-ink-faint">
+                          {[
+                            entry.updatedAt ? formatWhen(entry.updatedAt) : null,
+                            entry.ankiSyncedAt ? `En Anki desde ${formatWhen(entry.ankiSyncedAt)}` : null
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
                       </button>
-                      <div className="mt-auto flex flex-col gap-2">
-                        <DeckAnkiActions
-                          deck={entry}
-                          ankiReady={Boolean(anki?.ok)}
-                          busy={syncingId === entry.id}
-                          onSync={syncDeck}
-                          onExport={exportDeck}
-                        />
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            className={cn(btnGhost, smallBtn)}
-                            onClick={() => setBuilder({ target: entry.id })}
-                          >
-                            Añadir tarjetas
-                          </button>
-                          <button
-                            type="button"
-                            className={cn(btnGhost, smallBtn)}
-                            onClick={() => removeDeck(entry)}
-                          >
-                            Borrar
-                          </button>
-                        </div>
+                      <div className="flex items-center gap-0.5 border-t border-ink/6 bg-cream px-2 py-1.5">
+                        <button
+                          type="button"
+                          className={cn(btnQuiet, btnCompact, 'h-8 text-ink')}
+                          onClick={() => setBuilder({ target: entry.id })}
+                        >
+                          <Plus size={14} aria-hidden="true" />
+                          Añadir tarjetas
+                        </button>
+                        <span className="flex-1" />
+                        <button
+                          type="button"
+                          className={iconOnly}
+                          disabled={syncingId === entry.id || !anki?.ok}
+                          title={anki?.ok ? 'Enviar a Anki y sincronizar' : 'Abre Anki para enviar'}
+                          aria-label="Enviar a Anki"
+                          onClick={() => syncDeck(entry)}
+                        >
+                          <Send aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          className={iconOnly}
+                          title="Exportar archivo"
+                          aria-label="Exportar archivo"
+                          onClick={() => exportDeck(entry)}
+                        >
+                          <Download aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          className={cn(iconOnly, 'enabled:hover:bg-danger-soft enabled:hover:text-danger')}
+                          title="Borrar mazo"
+                          aria-label="Borrar mazo"
+                          onClick={() => removeDeck(entry)}
+                        >
+                          <Trash2 aria-hidden="true" />
+                        </button>
                       </div>
                     </article>
                   </li>

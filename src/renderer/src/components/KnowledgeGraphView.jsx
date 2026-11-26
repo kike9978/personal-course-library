@@ -6,9 +6,9 @@ import { cn } from '../ui/cn'
 const graphSvg =
   'absolute inset-0 block h-full w-full cursor-grab touch-none [&:not(.is-detailed)_text]:hidden [&.is-detailed_g_text]:!block [&.is-labels.is-detailed_.kg-edge]:!block [&_g.is-selected_text]:!block [&_g:hover_text]:!block [&:not(.is-labels)_g_text[data-kind]]:!hidden [&:not(.is-labels)_.kg-edge]:!hidden'
 const nodeText =
-  'pointer-events-none font-body text-[11px] fill-ink stroke-white stroke-[3px] [paint-order:stroke]'
+  'pointer-events-none font-body text-2xs fill-ink stroke-white stroke-[3px] [paint-order:stroke]'
 const edgeLabel =
-  'kg-edge pointer-events-none hidden font-body text-[10px] fill-ink-soft stroke-white stroke-[3px] [paint-order:stroke] [text-anchor:middle]'
+  'kg-edge pointer-events-none hidden font-body text-2xs fill-ink-soft stroke-white stroke-[3px] [paint-order:stroke] [text-anchor:middle]'
 
 const FILL = {
   finding: '#e84570',
@@ -595,7 +595,7 @@ function KnowledgeGraphView({
               markerHeight="6"
               orient="auto-start-reverse"
             >
-              <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(42, 36, 56, 0.55)" />
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(23, 21, 28, 0.55)" />
             </marker>
           </defs>
           <g ref={worldRef}>
@@ -633,10 +633,10 @@ function KnowledgeGraphView({
                     data-type={edge.edgeType}
                     markerEnd={arrow ? 'url(#knowledge-graph-arrow)' : undefined}
                     className={cn(
-                      'stroke-[rgba(42,36,56,0.38)] [stroke-width:1.25px]',
+                      'stroke-[rgba(23,21,28,0.38)] [stroke-width:1.25px]',
                       edge.edgeType === 'shared-topic' && '[stroke-dasharray:6_3]',
                       hot
-                        ? 'stroke-[rgba(42,36,56,0.72)] [stroke-width:1.6px]'
+                        ? 'stroke-[rgba(23,21,28,0.72)] [stroke-width:1.6px]'
                         : 'opacity-[0.18]'
                     )}
                   />
@@ -705,7 +705,7 @@ function KnowledgeGraphView({
             const { x, y, k } = cameraRef.current
             return (
               <div
-                className="pointer-events-none absolute z-[2] max-w-[16rem] -translate-x-1/2 -translate-y-[calc(100%+1.1rem)] rounded-sm border border-ink/10 bg-surface px-2 py-[0.35rem] text-ink shadow-card [&_span]:mb-[0.1rem] [&_span]:block [&_span]:text-[0.68rem] [&_span]:text-ink-soft [&_strong]:block [&_strong]:text-[0.78rem] [&_strong]:leading-[1.3] [&_strong]:font-semibold"
+                className="pointer-events-none absolute z-[2] max-w-[16rem] -translate-x-1/2 -translate-y-[calc(100%+1.1rem)] rounded-sm border border-ink/10 bg-surface px-2 py-[0.35rem] text-ink shadow-card [&_span]:mb-[0.1rem] [&_span]:block [&_span]:text-2xs [&_span]:text-ink-soft [&_strong]:block [&_strong]:text-xs [&_strong]:leading-[1.3] [&_strong]:font-semibold"
                 style={{ left: x + point.x * k, top: y + point.y * k }}
               >
                 {node.data?.kindLabel ? <span>{node.data.kindLabel}</span> : null}
@@ -715,7 +715,7 @@ function KnowledgeGraphView({
           })()
         : null}
       {truncated ? (
-        <p className="absolute bottom-[0.4rem] left-3 m-0 text-[0.72rem] text-ink-soft">
+        <p className="absolute bottom-[0.4rem] left-3 m-0 text-xs text-ink-soft">
           Mostrando los vecinos más cercanos.
         </p>
       ) : null}

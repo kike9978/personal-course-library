@@ -1,34 +1,39 @@
+import { BookOpenText, Flag, GalleryVerticalEnd, KanbanSquare, LibraryBig, ListVideo } from 'lucide-react'
 import { cn } from '../ui/cn'
+import { segmented, segmentedItem } from '../ui/classes'
+
+export const NAV_ITEMS = [
+  { id: 'library', label: 'Biblioteca', icon: LibraryBig },
+  { id: 'annotations', label: 'Anotaciones', icon: BookOpenText },
+  { id: 'projects', label: 'Proyectos', icon: KanbanSquare },
+  { id: 'cierres', label: 'Cierres', icon: Flag },
+  { id: 'playlists', label: 'Listas', icon: ListVideo },
+  { id: 'flashcards', label: 'Tarjetas', icon: GalleryVerticalEnd }
+]
 
 /**
  * Top-level destinations (not library filters).
  */
-function AppNav({ active = 'library', onSelect }) {
-  const items = [
-    { id: 'library', label: 'Biblioteca' },
-    { id: 'annotations', label: 'Anotaciones' },
-    { id: 'projects', label: 'Proyectos' },
-    { id: 'cierres', label: 'Cierres' },
-    { id: 'playlists', label: 'Listas' },
-    { id: 'flashcards', label: 'Tarjetas' }
-  ]
-
+function AppNav({ active = 'library', onSelect, className }) {
   return (
-    <nav className="flex flex-wrap items-center gap-[0.15rem]" aria-label="Principal">
-      {items.map((item) => {
+    <nav className={cn(segmented, 'min-w-0', className)} aria-label="Principal">
+      {NAV_ITEMS.map((item) => {
         const isActive = active === item.id
+        const Icon = item.icon
         return (
           <button
             key={item.id}
             type="button"
             className={cn(
-              'm-0 cursor-pointer appearance-none rounded-[6px] border-0 bg-transparent px-[0.45rem] py-[0.15rem] font-body text-[0.78rem] font-[650] text-ink-soft transition-[color,background-color] duration-[120ms] ease-[ease] hover:bg-ink/5 hover:text-ink',
-              isActive && 'font-[750] text-coral-deep hover:text-coral-deep'
+              segmentedItem,
+              'px-2.5 [&_svg]:text-ink-faint aria-[current=page]:[&_svg]:text-coral'
             )}
             aria-current={isActive ? 'page' : undefined}
+            title={item.label}
             onClick={() => onSelect?.(item.id)}
           >
-            {item.label}
+            <Icon aria-hidden="true" />
+            <span className="max-[1180px]:sr-only">{item.label}</span>
           </button>
         )
       })}

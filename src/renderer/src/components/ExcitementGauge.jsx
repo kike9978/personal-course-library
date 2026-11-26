@@ -126,7 +126,7 @@ export default function ExcitementGauge({ coursePath, value = 0, size = 'sm', on
       <button
         type="button"
         className={cn(
-          'grid cursor-pointer place-items-center rounded-sm border-0 bg-transparent p-0 text-ink-soft transition-colors duration-[120ms] ease-pop hover:bg-ink/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+          'grid cursor-pointer place-items-center rounded-sm border-0 bg-transparent p-0 text-ink-soft transition-colors duration-150 ease-pop hover:bg-ink/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
           size === 'md' ? 'h-8 w-8' : 'h-6 w-6',
           emotion?.color
         )}
@@ -160,7 +160,7 @@ export default function ExcitementGauge({ coursePath, value = 0, size = 'sm', on
                     role="menuitemradio"
                     aria-checked={selected}
                     className={cn(
-                      'flex w-full cursor-pointer items-center gap-2 rounded-[8px] border-0 bg-transparent px-2 py-1.5 text-left text-sm font-bold text-ink hover:bg-ink/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+                      'flex w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-2 py-1.5 text-left text-sm font-semibold text-ink hover:bg-ink/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
                       selected && 'bg-ink/5'
                     )}
                     title={selected ? `${item.label}. Clic para quitar` : item.label}

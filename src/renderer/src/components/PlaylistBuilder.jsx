@@ -1,28 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { btnGhost, btnPrimary } from '../ui/classes'
+import { cn } from '../ui/cn'
+import {
+  btnGhost,
+  btnPrimary,
+  dialogShell as dialogBase,
+  dialogBody,
+  dialogLead as sharedDialogLead
+} from '../ui/classes'
 
-const descriptionDialog =
-  'w-[calc(100%-2rem)] max-h-[min(90vh,48rem)] max-w-[40rem] overflow-auto rounded-lg border border-ink/10 bg-cream p-0 text-ink shadow-panel [&:modal]:flex [&:modal]:flex-col [&::backdrop]:bg-[rgba(26,20,35,0.45)] [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55'
-const dialogForm =
-  'flex flex-col gap-[0.85rem] px-[1.15rem] pt-2 pb-[1.15rem] [&_h3]:m-0 [&_h3]:font-display [&_h3]:text-[1.2rem] [&_h3]:font-black'
-const dialogLead = 'mt-[0.35rem] text-[0.85rem] leading-[1.4] text-ink-soft [&_code]:text-[0.8em]'
+const descriptionDialog = cn(
+  dialogBase,
+  'max-h-[min(90vh,48rem)] max-w-[40rem] overflow-auto [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55'
+)
+const dialogForm = cn(dialogBody, '[&_h3]:m-0 [&_h3]:font-display [&_h3]:text-xl [&_h3]:font-bold [&_h3]:tracking-tight')
+const dialogLead = sharedDialogLead
 const actions = 'flex justify-end gap-2 pt-[0.35rem]'
 const actionsSpread = 'flex flex-wrap items-center justify-between gap-3 pt-[0.35rem]'
 const actionsBtns = 'flex gap-2'
 const field =
-  '[&_label]:mb-[0.3rem] [&_label]:block [&_label]:text-[0.78rem] [&_label]:font-extrabold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:px-3 [&_input]:py-[0.65rem] [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-focus [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:border-ink/10 [&_textarea]:bg-surface [&_textarea]:px-3 [&_textarea]:py-[0.65rem] [&_textarea]:text-ink [&_textarea]:outline-none [&_textarea]:focus:shadow-focus'
+  '[&_label]:mb-[0.3rem] [&_label]:block [&_label]:text-xs [&_label]:font-semibold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:px-3 [&_input]:py-[0.65rem] [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-focus [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:border-ink/10 [&_textarea]:bg-surface [&_textarea]:px-3 [&_textarea]:py-[0.65rem] [&_textarea]:text-ink [&_textarea]:outline-none [&_textarea]:focus:shadow-focus'
 const section =
-  'mt-[0.85rem] flex flex-col gap-[0.45rem] [&_h4]:m-0 [&_h4]:font-display [&_h4]:text-[0.95rem]'
+  'mt-[0.85rem] flex flex-col gap-[0.45rem] [&_h4]:m-0 [&_h4]:font-display [&_h4]:text-md'
 const filterPill =
-  'inline-flex cursor-pointer items-center gap-[0.4rem] rounded-full border border-ink/10 bg-surface px-[0.9rem] py-[0.45rem] text-[0.82rem] font-bold text-ink shadow-none aria-pressed:bg-teal aria-pressed:text-white'
-const note = 'text-[0.75rem] text-ink-soft'
-const brief = '!min-h-[8rem] text-[0.78rem] leading-[1.45]'
-const paste = '!min-h-[6.5rem] text-[0.78rem] leading-[1.45]'
+  'inline-flex cursor-pointer items-center gap-[0.4rem] rounded-full border border-ink/10 bg-surface px-[0.9rem] py-[0.45rem] text-sm font-semibold text-ink shadow-none aria-pressed:bg-teal aria-pressed:text-white'
+const note = 'text-xs text-ink-soft'
+const brief = '!min-h-[8rem] text-xs leading-[1.45]'
+const paste = '!min-h-[6.5rem] text-xs leading-[1.45]'
 const segmented =
-  'inline-flex max-w-full flex-wrap gap-[0.2rem] rounded-full border border-ink/10 bg-surface p-1 shadow-none [&_button]:max-w-[16rem] [&_button]:cursor-pointer [&_button]:truncate [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-[0.85rem] [&_button]:py-[0.4rem] [&_button]:text-[0.82rem] [&_button]:font-bold [&_button]:text-ink-soft [&_button[aria-pressed=true]]:bg-coral [&_button[aria-pressed=true]]:text-white'
+  'inline-flex max-w-full flex-wrap gap-[0.2rem] rounded-full border border-ink/10 bg-surface p-1 shadow-none [&_button]:max-w-[16rem] [&_button]:cursor-pointer [&_button]:truncate [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-[0.85rem] [&_button]:py-[0.4rem] [&_button]:text-sm [&_button]:font-semibold [&_button]:text-ink-soft [&_button[aria-pressed=true]]:bg-coral [&_button[aria-pressed=true]]:text-white'
 const review =
-  'flex max-h-[16rem] flex-col gap-[0.45rem] overflow-auto [&_fieldset]:m-0 [&_fieldset]:rounded-sm [&_fieldset]:border [&_fieldset]:border-ink/10 [&_fieldset]:px-[0.6rem] [&_fieldset]:pt-[0.4rem] [&_fieldset]:pb-2 [&_legend]:px-1 [&_legend]:text-[0.75rem] [&_legend]:font-extrabold [&_label]:my-[0.2rem] [&_label]:flex [&_label]:items-start [&_label]:gap-[0.4rem] [&_label]:text-[0.82rem] [&_label>span]:flex [&_label>span]:min-w-0 [&_label>span]:flex-col [&_small]:text-[0.75rem] [&_small]:text-ink-soft'
+  'flex max-h-[16rem] flex-col gap-[0.45rem] overflow-auto [&_fieldset]:m-0 [&_fieldset]:rounded-sm [&_fieldset]:border [&_fieldset]:border-ink/10 [&_fieldset]:px-[0.6rem] [&_fieldset]:pt-[0.4rem] [&_fieldset]:pb-2 [&_legend]:px-1 [&_legend]:text-xs [&_legend]:font-semibold [&_label]:my-[0.2rem] [&_label]:flex [&_label]:items-start [&_label]:gap-[0.4rem] [&_label]:text-sm [&_label>span]:flex [&_label>span]:min-w-0 [&_label>span]:flex-col [&_small]:text-xs [&_small]:text-ink-soft'
 import {
   buildCourseDescriptionBatchBrief,
   coursesForDescriptionBatch,
@@ -517,7 +525,7 @@ function PlaylistBuilder({
             />
           </div>
           {seedCourse ? (
-            <label className="flex items-center gap-[0.4rem] text-[0.82rem]">
+            <label className="flex items-center gap-[0.4rem] text-sm">
               <input
                 type="checkbox"
                 checked={useSeed}
@@ -561,7 +569,7 @@ function PlaylistBuilder({
                 {neighbors.courses.map((course) => (
                   <li
                     key={course.path}
-                    className="flex flex-col gap-[0.05rem] text-[0.82rem] [&_span]:text-[0.75rem] [&_span]:text-ink-soft"
+                    className="flex flex-col gap-[0.05rem] text-sm [&_span]:text-xs [&_span]:text-ink-soft"
                   >
                     <strong>{course.title || course.path}</strong>
                     <span>{course.institution || course.path}</span>
@@ -676,7 +684,7 @@ function PlaylistBuilder({
                 </div>
               ) : null}
               {descSkips.length ? (
-                <ul className="m-0 flex flex-col gap-[0.2rem] pl-[1.1rem] text-[0.78rem] leading-[1.35] text-coral-deep">
+                <ul className="m-0 flex flex-col gap-[0.2rem] pl-[1.1rem] text-xs leading-[1.35] text-coral-deep">
                   {descSkips.map((skip) => (
                     <li key={`${skip.path || skip.title}-${skip.reason}`}>
                       <strong>{skip.title || skip.path || 'Sin nombre'}</strong>
@@ -687,7 +695,7 @@ function PlaylistBuilder({
                 </ul>
               ) : null}
               {descError ? (
-                <p className="m-0 text-[0.82rem] leading-[1.4] text-coral-deep" role="alert">
+                <p className="m-0 text-sm leading-[1.4] text-coral-deep" role="alert">
                   {descError}
                 </p>
               ) : null}
@@ -772,7 +780,7 @@ function PlaylistBuilder({
             </div>
           ) : null}
           {(mode === 'update' && placement?.ok ? placement.skips || [] : skips).length ? (
-            <ul className="m-0 flex flex-col gap-[0.2rem] pl-[1.1rem] text-[0.78rem] leading-[1.35] text-coral-deep">
+            <ul className="m-0 flex flex-col gap-[0.2rem] pl-[1.1rem] text-xs leading-[1.35] text-coral-deep">
               {(mode === 'update' && placement?.ok ? placement.skips || [] : skips).map((skip) => (
                 <li key={`${skip.title}-${skip.reason}`}>
                   <strong>{skip.title || 'Sin nombre'}</strong>
@@ -783,7 +791,7 @@ function PlaylistBuilder({
             </ul>
           ) : null}
           {error ? (
-            <p className="m-0 text-[0.82rem] leading-[1.4] text-coral-deep" role="alert">
+            <p className="m-0 text-sm leading-[1.4] text-coral-deep" role="alert">
               {error}
             </p>
           ) : null}

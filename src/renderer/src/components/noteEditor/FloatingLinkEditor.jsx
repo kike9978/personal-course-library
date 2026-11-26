@@ -11,7 +11,7 @@ import {
 } from 'lexical'
 
 const floatBtn =
-  'shrink-0 cursor-pointer rounded-[4px] border-0 bg-transparent px-[0.35rem] py-[0.2rem] text-[0.75rem] font-bold text-ink [font:inherit] hover:bg-black/6'
+  'shrink-0 cursor-pointer rounded-[4px] border-0 bg-transparent px-[0.35rem] py-[0.2rem] text-xs font-semibold text-ink [font:inherit] hover:bg-black/6'
 
 function normalizeLinkUrl(raw) {
   const url = String(raw || '').trim()
@@ -122,7 +122,7 @@ export default function FloatingLinkEditorPlugin({ anchorElem }) {
         <>
           <input
             ref={inputRef}
-            className="min-w-32 flex-1 rounded-[4px] border border-ink/10 bg-cream px-[0.4rem] py-[0.25rem] text-[0.8rem] [font:inherit]"
+            className="min-w-32 flex-1 rounded-[4px] border border-ink/10 bg-cream px-[0.4rem] py-[0.25rem] text-sm [font:inherit]"
             value={linkUrl}
             onChange={(e) => setLinkUrl(e.target.value)}
             onKeyDown={(e) => {
@@ -144,7 +144,7 @@ export default function FloatingLinkEditorPlugin({ anchorElem }) {
       ) : (
         <>
           <a
-            className="min-w-0 flex-1 overflow-hidden text-[0.78rem] text-ellipsis whitespace-nowrap text-coral-deep underline"
+            className="min-w-0 flex-1 overflow-hidden text-xs text-ellipsis whitespace-nowrap text-coral-deep underline"
             href={linkUrl}
             onClick={(e) => e.preventDefault()}
           >

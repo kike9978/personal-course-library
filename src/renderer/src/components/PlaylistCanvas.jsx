@@ -27,7 +27,7 @@ import {
   useReactFlow
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import AppNav from './AppNav'
+import AppHeader from './AppHeader'
 import CourseDetailPanel from './CourseDetailPanel'
 import CoursePickBox from './CoursePickBox'
 import CourseZipBar from './CourseZipBar'
@@ -39,7 +39,20 @@ import PlaylistBuilder from './PlaylistBuilder'
 import brandMark from '../assets/img/brand-mark.svg'
 import { InstitutionMark } from './InstitutionMark'
 import { cn } from '../ui/cn'
-import { btnGhost, btnPrimary } from '../ui/classes'
+import {
+  btnCompact,
+  btnGhost,
+  btnPrimary,
+  chip,
+  menuDivider,
+  menuItem,
+  popover,
+  searchIcon,
+  searchInput,
+  segmented,
+  segmentedItem
+} from '../ui/classes'
+import { Plus, Search } from 'lucide-react'
 import { MAX_NESTED, settleNesting } from '../../../shared/playlistNest.js'
 import { applyCoursePick, collectExportCoursePaths } from '../../../shared/courseExportSelection.js'
 import { courseCatalog, sameFolder } from '../../../shared/courseFolderMatch.js'
@@ -78,11 +91,11 @@ import {
 const BoardActions = createContext(null)
 
 const frameIcon =
-  'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-sm border border-ink/10 bg-surface p-0 text-ink hover:shadow-lift [&_svg]:transition-transform [&_svg]:duration-[120ms] [&_svg]:ease-pop [&.is-collapsed_svg]:-rotate-90'
+  'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-sm border border-ink/10 bg-surface p-0 text-ink hover:shadow-lift [&_svg]:transition-transform [&_svg]:duration-150 [&_svg]:ease-pop [&.is-collapsed_svg]:-rotate-90'
 const frame =
   'relative flex h-full w-full flex-col rounded-lg border border-ink/10 bg-surface shadow-[inset_3px_0_0_var(--color-coral),var(--shadow-card)]'
 const titlePill =
-  'm-0 ml-[0.4rem] block w-max max-w-[min(64rem,72vw)] cursor-grab overflow-hidden rounded-full border border-ink/10 bg-surface px-[0.6rem] py-[0.16rem] font-display text-[0.9rem] leading-[1.2] font-extrabold text-ellipsis whitespace-nowrap text-ink shadow-lift select-none [field-sizing:content] focus:cursor-text focus:shadow-[0_0_0_2px_var(--color-coral)] focus:outline-none focus:select-text'
+  'm-0 ml-[0.4rem] block w-max max-w-[min(64rem,72vw)] cursor-grab overflow-hidden rounded-full border border-ink/10 bg-surface px-[0.6rem] py-[0.16rem] font-display text-base leading-[1.2] font-semibold text-ellipsis whitespace-nowrap text-ink shadow-lift select-none [field-sizing:content] focus:cursor-text focus:shadow-ring focus:outline-none focus:select-text'
 const courseCard =
   'relative flex h-full items-center gap-2 rounded-md border border-ink/10 bg-surface py-[0.35rem] pr-[0.4rem] pl-2 shadow-card cursor-grab [&>label]:absolute [&>label]:top-[0.35rem] [&>label]:left-[0.35rem] [&>label]:z-[4]'
 const courseCover =
@@ -90,21 +103,15 @@ const courseCover =
 const rowCover =
   'flex size-[42px] shrink-0 items-center justify-center overflow-hidden rounded-sm bg-cream-deep'
 const statusMark =
-  'pointer-events-none absolute z-[2] hidden items-center rounded-full border border-chip-status-border bg-chip-status px-[0.65rem] py-[0.28rem] text-[0.7rem] font-extrabold tracking-[0.03em] text-chip-status-text uppercase'
+  'pointer-events-none absolute z-[2] hidden items-center rounded-full border border-chip-status-border bg-chip-status px-[0.65rem] py-[0.28rem] text-2xs font-semibold tracking-[0.03em] text-chip-status-text uppercase'
 const pickBox =
-  'grid size-[1.45rem] shrink-0 cursor-pointer place-items-center rounded-[0.35rem] border border-ink/10 bg-surface shadow-card [&_input]:m-0 [&_input]:size-[0.95rem] [&_input]:cursor-pointer [&_input]:accent-coral'
-const menuItem =
-  'flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left text-[0.875rem] font-bold text-ink hover:bg-[rgba(42,36,56,0.05)] disabled:cursor-not-allowed disabled:opacity-50'
-const popover =
-  'absolute top-[calc(100%+6px)] right-0 z-[5] min-w-[17rem] rounded-md border border-ink/10 bg-surface p-1.5 shadow-panel'
-const searchBox =
-  'relative min-w-0 max-w-none flex-none [&_input]:h-auto [&_input]:w-full [&_input]:rounded-full [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:py-[0.7rem] [&_input]:pr-4 [&_input]:pl-[2.6rem] [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-find [&_svg]:pointer-events-none [&_svg]:absolute [&_svg]:top-1/2 [&_svg]:left-[0.95rem] [&_svg]:size-4 [&_svg]:-translate-y-1/2 [&_svg]:opacity-55'
+  'grid size-[1.45rem] shrink-0 cursor-pointer place-items-center rounded-sm border border-ink/10 bg-surface shadow-card [&_input]:m-0 [&_input]:size-[0.95rem] [&_input]:cursor-pointer [&_input]:accent-coral'
+const searchBox = 'relative min-w-0 flex-none'
 const chipSelect =
-  'flex min-w-0 [&_select]:min-w-0 [&_select]:flex-1 [&_select]:cursor-pointer [&_select]:rounded-full [&_select]:border [&_select]:border-ink/10 [&_select]:bg-surface [&_select]:px-3 [&_select]:py-[0.35rem] [&_select]:text-[0.82rem] [&_select]:font-semibold [&_select]:text-ink [&_select]:shadow-none'
-const filterPill =
-  'inline-flex cursor-pointer items-center gap-[0.4rem] rounded-full border border-ink/10 bg-surface px-[0.65rem] py-[0.28rem] text-[0.75rem] font-bold text-ink shadow-none aria-pressed:bg-teal aria-pressed:text-white'
+  'grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2 [&_label]:text-xs [&_label]:text-ink-soft [&_select]:h-8 [&_select]:min-w-0 [&_select]:cursor-pointer [&_select]:rounded-sm [&_select]:border [&_select]:border-ink/12 [&_select]:bg-surface [&_select]:px-2 [&_select]:text-sm [&_select]:font-medium [&_select]:text-ink [&_select]:outline-none [&_select:hover]:border-ink/20 [&_select:focus]:border-coral/60 [&_select:focus]:shadow-focus'
+const filterPill = chip
 const board =
-  'flex h-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_12%_0%,rgba(232,69,112,0.05),transparent_40%),radial-gradient(circle_at_88%_8%,rgba(61,122,122,0.05),transparent_38%),var(--color-cream-deep)] [&_.react-flow]:size-full [&_.react-flow]:bg-transparent [&_.react-flow\\_\\_node-playlist]:cursor-default [&_.react-flow\\_\\_node-playlist]:overflow-visible [&_.react-flow\\_\\_node-playlist]:rounded-none [&_.react-flow\\_\\_node-playlist]:border-0 [&_.react-flow\\_\\_node-playlist]:bg-transparent [&_.react-flow\\_\\_node-playlist]:p-0 [&_.react-flow\\_\\_node-playlist]:text-left [&_.react-flow\\_\\_node-playlist]:text-inherit [&_.react-flow\\_\\_node-playlist]:shadow-none [&_.react-flow\\_\\_node-course]:overflow-visible [&_.react-flow\\_\\_node-course]:rounded-none [&_.react-flow\\_\\_node-course]:border-0 [&_.react-flow\\_\\_node-course]:bg-transparent [&_.react-flow\\_\\_node-course]:p-0 [&_.react-flow\\_\\_node-course]:text-left [&_.react-flow\\_\\_node-course]:text-inherit [&_.react-flow\\_\\_node-course]:shadow-none [&_.react-flow\\_\\_node-course.selected_article]:shadow-[0_0_0_2px_var(--color-coral),var(--shadow-card)] [&_.react-flow\\_\\_edge]:pointer-events-none [&_.react-flow\\_\\_controls]:overflow-hidden [&_.react-flow\\_\\_controls]:rounded-md [&_.react-flow\\_\\_controls]:border [&_.react-flow\\_\\_controls]:border-ink/10 [&_.react-flow\\_\\_controls]:shadow-card [&_.react-flow\\_\\_controls-button]:border-b-ink/10 [&_.react-flow\\_\\_controls-button]:bg-surface [&_.react-flow\\_\\_controls-button]:fill-ink [&_.react-flow\\_\\_controls-button:hover]:bg-cream [&_.react-flow\\_\\_minimap]:overflow-hidden [&_.react-flow\\_\\_minimap]:rounded-md [&_.react-flow\\_\\_minimap]:border [&_.react-flow\\_\\_minimap]:border-ink/10 [&_.react-flow\\_\\_minimap]:bg-surface [&_.react-flow\\_\\_minimap]:shadow-card [&_.react-flow\\_\\_attribution]:bg-transparent [&_.react-flow\\_\\_attribution]:text-ink-soft '
+  'flex h-screen flex-col overflow-hidden bg-cream-deep [&_.react-flow]:size-full [&_.react-flow]:bg-transparent [&_.react-flow\\_\\_node-playlist]:cursor-default [&_.react-flow\\_\\_node-playlist]:overflow-visible [&_.react-flow\\_\\_node-playlist]:rounded-none [&_.react-flow\\_\\_node-playlist]:border-0 [&_.react-flow\\_\\_node-playlist]:bg-transparent [&_.react-flow\\_\\_node-playlist]:p-0 [&_.react-flow\\_\\_node-playlist]:text-left [&_.react-flow\\_\\_node-playlist]:text-inherit [&_.react-flow\\_\\_node-playlist]:shadow-none [&_.react-flow\\_\\_node-course]:overflow-visible [&_.react-flow\\_\\_node-course]:rounded-none [&_.react-flow\\_\\_node-course]:border-0 [&_.react-flow\\_\\_node-course]:bg-transparent [&_.react-flow\\_\\_node-course]:p-0 [&_.react-flow\\_\\_node-course]:text-left [&_.react-flow\\_\\_node-course]:text-inherit [&_.react-flow\\_\\_node-course]:shadow-none [&_.react-flow\\_\\_node-course.selected_article]:shadow-[var(--shadow-ring),var(--shadow-card)] [&_.react-flow\\_\\_edge]:pointer-events-none [&_.react-flow\\_\\_controls]:overflow-hidden [&_.react-flow\\_\\_controls]:rounded-md [&_.react-flow\\_\\_controls]:border [&_.react-flow\\_\\_controls]:border-ink/10 [&_.react-flow\\_\\_controls]:shadow-card [&_.react-flow\\_\\_controls-button]:border-b-ink/10 [&_.react-flow\\_\\_controls-button]:bg-surface [&_.react-flow\\_\\_controls-button]:fill-ink [&_.react-flow\\_\\_controls-button:hover]:bg-cream [&_.react-flow\\_\\_minimap]:overflow-hidden [&_.react-flow\\_\\_minimap]:rounded-md [&_.react-flow\\_\\_minimap]:border [&_.react-flow\\_\\_minimap]:border-ink/10 [&_.react-flow\\_\\_minimap]:bg-surface [&_.react-flow\\_\\_minimap]:shadow-card [&_.react-flow\\_\\_attribution]:bg-transparent [&_.react-flow\\_\\_attribution]:text-ink-soft '
 
 function heightToStore(height, count, bigCover) {
   if (!bigCover) return height
@@ -240,7 +247,7 @@ function ListTitle({ id, title }) {
     <>
       <div className="relative flex min-w-0 flex-1 items-center">
         <span
-          className="w-full min-w-0 cursor-grab overflow-hidden border-0 bg-transparent font-display text-[1.5rem] font-extrabold text-ellipsis whitespace-nowrap text-ink select-none outline-none focus:cursor-text focus:shadow-[0_1px_0_var(--color-coral)] focus:select-text"
+          className="w-full min-w-0 cursor-grab overflow-hidden border-0 bg-transparent font-display text-2xl font-semibold text-ellipsis whitespace-nowrap text-ink select-none outline-none focus:cursor-text focus:shadow-[0_1px_0_var(--color-coral)] focus:select-text"
           onDoubleClick={startEditing}
         >
           {draft}
@@ -373,7 +380,7 @@ function PlaylistNode({ id, data }) {
             />
             <button
               type="button"
-              className="min-w-0 flex-1 cursor-pointer overflow-hidden border-0 bg-transparent p-0 text-left font-display text-[0.86rem] font-extrabold text-ellipsis whitespace-nowrap text-ink"
+              className="min-w-0 flex-1 cursor-pointer overflow-hidden border-0 bg-transparent p-0 text-left font-display text-sm font-semibold text-ellipsis whitespace-nowrap text-ink"
               onClick={() => actions?.selectPlaylist(nest.childId)}
             >
               {nest.title}
@@ -399,7 +406,7 @@ function PlaylistNode({ id, data }) {
         </div>
       ))}
       {data.collapsed || data.count > 0 || (data.nests || []).length ? null : (
-        <p className="mx-[0.85rem] mt-[0.35rem] rounded-md border border-dashed border-ink/16 px-3 py-[1.1rem] text-center text-[0.8rem] text-ink-soft">
+        <p className="mx-[0.85rem] mt-[0.35rem] rounded-md border border-dashed border-ink/16 px-3 py-[1.1rem] text-center text-sm text-ink-soft">
           {data.filtered && data.totalCount > 0
             ? 'Ningún curso coincide'
             : 'Arrastra un curso o una lista aquí'}
@@ -508,13 +515,13 @@ function CourseNode({ data }) {
         data.missing && 'bg-cream',
         data.inProcess && 'shadow-[inset_3px_0_0_var(--color-coral),var(--shadow-card)]',
         data.continues &&
-          "after:absolute after:top-full after:left-[1.35rem] after:h-[var(--playlist-gap)] after:w-[1.5px] after:bg-[rgba(42,36,56,0.38)] after:content-['']",
+          "after:absolute after:top-full after:left-[1.35rem] after:h-[var(--playlist-gap)] after:w-[1.5px] after:bg-[rgba(23,21,28,0.38)] after:content-['']",
         data.bigCover && 'flex-col items-stretch gap-0 p-0',
         data.bigCover &&
           data.continues &&
           'after:left-1/2 after:-ml-[0.75px]',
         (actions?.detailPath === data.coursePath || actions?.detailPath === data.libraryPath) &&
-          'shadow-[0_0_0_2px_var(--color-coral),var(--shadow-card)]',
+          'shadow-[var(--shadow-ring),var(--shadow-card)]',
         actions?.isCoursePicked?.(data.coursePath) && 'outline outline-2 outline-offset-1 outline-coral'
       )}
     >
@@ -542,7 +549,7 @@ function CourseNode({ data }) {
       ) : null}
       <div
         className={cn(
-          'min-w-0 flex-1 [&_h3]:m-0 [&_h3]:truncate [&_h3]:font-display [&_h3]:text-[0.9rem] [&_h3]:font-extrabold [&_p]:m-0 [&_p]:mt-[0.1rem] [&_p]:truncate [&_p]:text-[0.72rem] [&_p]:text-ink-soft',
+          'min-w-0 flex-1 [&_h3]:m-0 [&_h3]:truncate [&_h3]:font-display [&_h3]:text-base [&_h3]:font-semibold [&_p]:m-0 [&_p]:mt-[0.1rem] [&_p]:truncate [&_p]:text-xs [&_p]:text-ink-soft',
           data.bigCover && 'flex-none px-[0.6rem] pt-[0.4rem] pb-[0.5rem]'
         )}
       >
@@ -600,7 +607,7 @@ function FrameCount({ count, total }) {
   const narrowed = typeof total === 'number' && total !== count
   return (
     <span
-      className="shrink-0 rounded-full border border-ink/10 bg-cream-deep px-[0.45rem] py-[0.12rem] text-[0.72rem] font-bold text-ink-soft"
+      className="shrink-0 rounded-full border border-ink/10 bg-cream-deep px-[0.45rem] py-[0.12rem] text-xs font-semibold text-ink-soft"
       title={narrowed ? `${count} de ${total} cursos` : undefined}
     >
       {narrowed ? `${count}/${total}` : count}
@@ -2059,12 +2066,12 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
           '--sidebar-w': `${sidebarWidth}px`
         }}
       >
-        <header className="relative z-[6] flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-ink/10 bg-surface-muted px-5 py-4 backdrop-blur-[10px] [&_h1]:m-0 [&_h1]:font-display [&_h1]:text-[1.35rem] [&_h1]:font-black [&_h1]:tracking-[-0.02em]">
-          <div className="flex min-w-0 flex-col gap-[0.2rem]">
-            <h1>Listas</h1>
-            <AppNav active="playlists" onSelect={onNavigate} />
-          </div>
-          <div className="ml-auto flex flex-wrap gap-2">
+        <AppHeader
+          active="playlists"
+          onNavigate={onNavigate}
+          className="z-[6]"
+          actions={
+            <>
             <div className="relative shrink-0" ref={orderMenuRef}>
               <button
                 type="button"
@@ -2080,7 +2087,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                 <div className={popover} role="menu" aria-label="Ordenar listas">
                   <button
                     type="button"
-                    className={cn(menuItem, '[&_small]:text-[0.75rem] [&_small]:font-medium [&_small]:text-ink-soft')}
+                    className={menuItem}
                     role="menuitem"
                     onClick={() => orderBoard('reading')}
                   >
@@ -2089,7 +2096,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   </button>
                   <button
                     type="button"
-                    className={cn(menuItem, '[&_small]:text-[0.75rem] [&_small]:font-medium [&_small]:text-ink-soft')}
+                    className={menuItem}
                     role="menuitem"
                     onClick={() => orderBoard('alpha')}
                   >
@@ -2098,17 +2105,17 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   </button>
                   <button
                     type="button"
-                    className={cn(menuItem, '[&_small]:text-[0.75rem] [&_small]:font-medium [&_small]:text-ink-soft')}
+                    className={menuItem}
                     role="menuitem"
                     onClick={() => orderBoard('topic')}
                   >
                     <span>Por tema</span>
                     <small>Agrupa el tema más común de cada lista</small>
                   </button>
-                  <hr className="mx-1.5 my-1 h-px border-0 bg-ink/10" />
+                  <hr className={menuDivider} />
                   <button
                     type="button"
-                    className={cn(menuItem, '[&_small]:text-[0.75rem] [&_small]:font-medium [&_small]:text-ink-soft')}
+                    className={menuItem}
                     role="menuitem"
                     onClick={() => orderBoard('clean')}
                   >
@@ -2132,60 +2139,56 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
               onClick={createPlaylist}
               disabled={creating}
             >
+              <Plus size={16} aria-hidden="true" />
               Nueva lista
             </button>
-          </div>
-        </header>
+            </>
+          }
+        />
         <div className="flex min-h-0 flex-1 max-[800px]:flex-col" data-playlist-body="">
-          <aside className="relative flex w-[var(--sidebar-w,320px)] shrink-0 flex-col gap-3 min-h-0 border-r border-ink/10 bg-white/45 px-[0.85rem] pt-[0.9rem] pb-4 max-[800px]:max-h-56 max-[800px]:w-full max-[800px]:border-r-0 max-[800px]:border-b">
+          <aside className="relative flex w-[var(--sidebar-w,320px)] shrink-0 flex-col gap-3 min-h-0 border-r border-ink/8 bg-surface px-3.5 pt-4 pb-4 max-[800px]:max-h-56 max-[800px]:w-full max-[800px]:border-r-0 max-[800px]:border-b">
             <div>
               <div className="flex items-center justify-between gap-2">
-                <h2 className="m-0 font-display text-[0.72rem] font-extrabold tracking-[0.08em] text-ink-soft uppercase">
+                <h2 className="m-0 font-display text-xs font-semibold tracking-[0.08em] text-ink-soft uppercase">
                   Cursos
                 </h2>
                 <div
-                  className="inline-flex gap-[0.2rem] rounded-full border border-ink/10 bg-surface p-1 [&_button]:cursor-pointer [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-[0.55rem] [&_button]:py-[0.22rem] [&_button]:text-[0.72rem] [&_button]:font-bold [&_button]:text-ink-soft [&_button[aria-pressed=true]]:bg-coral [&_button[aria-pressed=true]]:text-white"
+                  className={cn(segmented, 'h-7 [&_button]:px-2 [&_button]:text-xs')}
                   role="group"
                   aria-label="Vista de cursos"
                 >
-                  <button type="button" aria-pressed={!bigCover} onClick={() => setBigCover(false)}>
+                  <button type="button" className={segmentedItem} aria-pressed={!bigCover} onClick={() => setBigCover(false)}>
                     Lista
                   </button>
-                  <button type="button" aria-pressed={bigCover} onClick={() => setBigCover(true)}>
+                  <button type="button" className={segmentedItem} aria-pressed={bigCover} onClick={() => setBigCover(true)}>
                     Portadas
                   </button>
                 </div>
               </div>
-              <p className="mt-[0.2rem] text-[0.8rem] text-ink-soft">
+              <p className="mt-[0.2rem] text-sm text-ink-soft">
                 {selectedPlaylist
                   ? `${visibleCourses.length} · añadir a «${selectedPlaylist.title}»`
                   : `${visibleCourses.length} cursos`}
               </p>
               <button
                 type="button"
-                className={cn(btnGhost, 'mt-[0.45rem] px-3 py-[0.35rem] text-[0.82rem] shadow-none')}
+                className={cn(btnGhost, btnCompact, 'mt-2 h-8')}
                 onClick={toggleVisibleCoursePicks}
                 disabled={!visibleCourses.length || zipExport.exporting}
               >
                 {allSidebarPicked ? 'Quitar selección' : 'Seleccionar visibles'}
               </button>
               {selectedPlaylist?.why ? (
-                <p className="m-0 line-clamp-3 text-[0.78rem] leading-[1.35] text-ink-soft">
+                <p className="m-0 line-clamp-3 text-xs leading-[1.35] text-ink-soft">
                   {selectedPlaylist.why}
                 </p>
               ) : null}
             </div>
             <div className={searchBox}>
-              <svg
-                className="pointer-events-none"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-              </svg>
+              <Search className={searchIcon} aria-hidden="true" />
               <input
                 type="search"
+                className={searchInput}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Buscar cursos…"
@@ -2194,7 +2197,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
               />
             </div>
             <div className="flex shrink-0 flex-col gap-[0.4rem]">
-              <div className={cn(chipSelect, '[&_label]:text-[0.75rem] [&_label]:font-bold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase')}>
+              <div className={chipSelect}>
                 <label htmlFor="playlist-institution">Academia</label>
                 <select
                   id="playlist-institution"
@@ -2209,7 +2212,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   ))}
                 </select>
               </div>
-              <div className={cn(chipSelect, '[&_label]:text-[0.75rem] [&_label]:font-bold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase')}>
+              <div className={chipSelect}>
                 <label htmlFor="playlist-program">Programa</label>
                 <select
                   id="playlist-program"
@@ -2224,7 +2227,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   ))}
                 </select>
               </div>
-              <div className={cn(chipSelect, '[&_label]:text-[0.75rem] [&_label]:font-bold [&_label]:tracking-[0.04em] [&_label]:text-ink-soft [&_label]:uppercase')}>
+              <div className={chipSelect}>
                 <label htmlFor="playlist-excitement">Emoción</label>
                 <select
                   id="playlist-excitement"
@@ -2267,7 +2270,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
               role="list"
             >
               {visibleCourses.length === 0 ? (
-                <p className="mx-[0.15rem] my-2 text-[0.85rem] text-ink-soft">Ningún curso coincide.</p>
+                <p className="mx-[0.15rem] my-2 text-sm text-ink-soft">Ningún curso coincide.</p>
               ) : (
                 visibleCourses.map((course) => {
                   const member = inSelected.has(course.path)
@@ -2334,13 +2337,13 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                       >
                         <span
                           className={cn(
-                            'truncate font-display text-[0.86rem] font-extrabold',
+                            'truncate font-display text-sm font-semibold',
                             bigCover && 'line-clamp-2 whitespace-normal'
                           )}
                         >
                           {course.title || course.path}
                         </span>
-                        <span className="truncate text-[0.72rem] text-ink-soft">
+                        <span className="truncate text-xs text-ink-soft">
                           {member ? (
                             'En esta lista'
                           ) : count > 0 ? (
@@ -2356,7 +2359,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                       <button
                         type="button"
                         className={cn(
-                          'shrink-0 cursor-pointer rounded-sm border border-ink/10 bg-cream px-2 py-[0.28rem] text-[0.72rem] font-bold text-ink disabled:cursor-default disabled:opacity-45',
+                          'shrink-0 cursor-pointer rounded-sm border border-ink/10 bg-cream px-2 py-[0.28rem] text-xs font-semibold text-ink disabled:cursor-default disabled:opacity-45',
                           bigCover && 'absolute top-[0.45rem] right-[0.45rem] bg-surface'
                         )}
                         disabled={member}
@@ -2455,24 +2458,26 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
                   variant={BackgroundVariant.Dots}
                   gap={22}
                   size={1.4}
-                  color="rgba(42, 36, 56, 0.18)"
+                  color="rgba(23, 21, 28, 0.18)"
                 />
                 <Controls position="bottom-left" showInteractive={false} />
                 <MiniMap
-                  position="top-right"
+                  position="bottom-right"
                   pannable
                   zoomable
-                  maskColor="rgba(250, 248, 246, 0.72)"
-                  nodeColor={(node) => (node.type === 'playlist' ? '#e84570' : '#ffffff')}
-                  nodeStrokeWidth={2}
+                  className="!m-3 overflow-hidden !rounded-md border border-ink/8 !bg-surface shadow-card"
+                  maskColor="rgba(243, 243, 245, 0.7)"
+                  nodeColor={(node) => (node.type === 'playlist' ? 'rgba(232, 69, 112, 0.6)' : '#ffffff')}
+                  nodeStrokeWidth={0}
+                  nodeBorderRadius={4}
                 />
                 {!loading && playlists.length === 0 ? (
-                  <Panel position="top-center" className="mt-3 rounded-md border border-ink/10 bg-surface px-[0.95rem] py-[0.7rem] text-[0.88rem] text-ink-soft shadow-card">
+                  <Panel position="top-center" className="mt-3 rounded-md border border-ink/8 bg-surface px-4 py-2.5 text-sm text-ink-soft shadow-card">
                     Crea una lista, o usa Armar para agrupar cursos parecidos.
                   </Panel>
                 ) : null}
                 {loading ? (
-                  <Panel position="top-center" className="mt-3 rounded-md border border-ink/10 bg-surface px-[0.95rem] py-[0.7rem] text-[0.88rem] text-ink-soft shadow-card">
+                  <Panel position="top-center" className="mt-3 rounded-md border border-ink/8 bg-surface px-4 py-2.5 text-sm text-ink-soft shadow-card">
                     Cargando listas…
                   </Panel>
                 ) : null}

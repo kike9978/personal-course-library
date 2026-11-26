@@ -47,7 +47,7 @@ export default function CoursesGrid({
   if (!courses.length && isCardLayout) {
     return (
       <div className={cn(cardLg, 'mx-auto my-8 max-w-[420px] px-6 py-8 text-center')}>
-        <h3 className="m-0 mb-[0.35rem] font-display font-black">Ningún curso coincide</h3>
+        <h3 className="m-0 mb-[0.35rem] font-display font-bold">Ningún curso coincide</h3>
         <p className="m-0 text-ink-soft">
           Prueba otra búsqueda, quita filtros o refresca la biblioteca.
         </p>

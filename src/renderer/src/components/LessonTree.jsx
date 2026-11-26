@@ -34,12 +34,12 @@ const focusRing =
 const treeItem =
   'flex min-w-0 cursor-pointer items-start gap-[0.45rem] border-0 bg-transparent text-left text-ink'
 
-const treeLabel = 'min-w-0 flex-1 text-[0.9rem] leading-[1.3] line-clamp-2'
+const treeLabel = 'min-w-0 flex-1 text-base leading-[1.3] line-clamp-2'
 
 const treeBody = 'flex min-w-0 flex-1 flex-col gap-[0.28rem]'
 
 const treeMeta =
-  'inline-flex min-w-0 items-center gap-[0.35rem] text-[0.75rem] font-medium leading-none text-ink-soft'
+  'inline-flex min-w-0 items-center gap-[0.35rem] text-xs font-medium leading-none text-ink-soft'
 
 const treeList = 'm-0 flex list-none flex-col gap-[0.2rem] p-0'
 
@@ -52,9 +52,9 @@ function sectionCopyClass({ dense }) {
 
 function sectionMetaClass({ dense, nested }) {
   return cn(
-    'font-body text-[0.75rem] font-medium normal-case tracking-normal text-ink-soft',
+    'font-body text-xs font-medium normal-case tracking-normal text-ink-soft',
     dense &&
-      'mt-[0.05rem] min-w-[1.15rem] shrink-0 rounded-full bg-cream-deep px-[0.38rem] py-[0.02rem] text-center text-[0.68rem] leading-[1.35] font-bold',
+      'mt-[0.05rem] min-w-[1.15rem] shrink-0 rounded-full bg-cream-deep px-[0.38rem] py-[0.02rem] text-center text-2xs leading-[1.35] font-semibold',
     dense && nested && 'bg-transparent pr-0'
   )
 }
@@ -94,28 +94,28 @@ function sectionHeadClass({ bar, nested }) {
 
 function sectionToggleClass({ nested, dense, bar }) {
   return cn(
-    'flex w-auto min-w-0 flex-1 cursor-pointer items-center gap-[0.28rem] border-0 bg-transparent text-left text-[0.72rem] font-bold uppercase tracking-[0.04em] text-ink-soft',
-    'mb-[0.35rem] rounded-[6px] px-[0.3rem] py-[0.2rem] hover:bg-ink/5 hover:text-ink',
+    'flex w-auto min-w-0 flex-1 cursor-pointer items-center gap-[0.28rem] border-0 bg-transparent text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-soft',
+    'mb-[0.35rem] rounded-sm px-[0.3rem] py-[0.2rem] hover:bg-ink/5 hover:text-ink',
     focusRing,
-    nested && 'mb-[0.2rem] text-[0.68rem] normal-case tracking-[0.02em]',
+    nested && 'mb-[0.2rem] text-2xs normal-case tracking-[0.02em]',
     dense && !nested && !bar &&
-      'mb-0 items-center gap-[var(--ann-chevron-gap)] rounded-md px-[var(--ann-pad-x)] py-[0.22rem] font-display text-[0.84rem] leading-[1.25] font-extrabold tracking-normal text-ink normal-case hover:bg-[rgba(42,36,56,0.05)] hover:text-ink',
+      'mb-0 items-center gap-[var(--ann-chevron-gap)] rounded-md px-[var(--ann-pad-x)] py-[0.22rem] font-display text-sm leading-[1.25] font-semibold tracking-normal text-ink normal-case hover:bg-ink/5 hover:text-ink',
     dense &&
       nested &&
       !bar &&
-      'mb-0 px-[var(--ann-pad-x)] py-[0.16rem] text-[0.75rem] font-[650] tracking-normal text-ink-soft normal-case',
+      'mb-0 px-[var(--ann-pad-x)] py-[0.16rem] text-xs font-semibold tracking-normal text-ink-soft normal-case',
     bar &&
-      'm-0 items-start gap-3 rounded-none bg-ink/5 px-[0.95rem] py-[0.85rem] text-[0.95rem] font-extrabold normal-case tracking-normal text-ink hover:bg-ink/8 hover:text-ink',
+      'm-0 items-start gap-3 rounded-none bg-ink/5 px-[0.95rem] py-[0.85rem] text-md font-semibold normal-case tracking-normal text-ink hover:bg-ink/8 hover:text-ink',
     bar && !nested && 'bg-transparent hover:bg-transparent hover:text-ink',
     bar &&
       nested &&
-      'm-0 bg-transparent px-[0.75rem] pt-[0.65rem] pb-[0.4rem] text-[0.9rem] font-bold hover:bg-ink/5'
+      'm-0 bg-transparent px-[0.75rem] pt-[0.65rem] pb-[0.4rem] text-base font-semibold hover:bg-ink/5'
   )
 }
 
 function sectionChevronClass({ bar, nested, dense, open }) {
   return cn(
-    'shrink-0 transition-transform duration-[120ms] ease-pop',
+    'shrink-0 transition-transform duration-150 ease-pop',
     bar ? 'mt-[0.15rem] h-[1.15rem] w-[1.15rem] text-ink-soft' : 'h-[0.65rem] w-[0.65rem]',
     bar && nested && 'h-[0.95rem] w-[0.95rem]',
     dense && !bar && 'mt-0 size-[var(--ann-chevron)]',
@@ -127,8 +127,8 @@ function sectionTitleClass({ bar, nested }) {
   return cn(
     'min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap',
     bar &&
-      'overflow-visible font-display text-clip font-extrabold leading-[1.25] whitespace-normal',
-    bar && nested && 'font-bold'
+      'overflow-visible font-display text-clip font-semibold leading-[1.25] whitespace-normal',
+    bar && nested && 'font-semibold'
   )
 }
 
@@ -136,7 +136,7 @@ const iconBtnQuiet =
   'inline-flex h-[1.85rem] w-[1.85rem] cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-ink-soft hover:bg-ink/6 hover:text-ink'
 
 const pillBtn =
-  'relative inline-flex max-w-[11rem] cursor-pointer items-center gap-[0.3rem] rounded-full border-[1.5px] border-coral bg-surface px-[0.55rem] py-[0.22rem] text-[0.75rem] leading-none font-bold text-coral-deep hover:bg-coral/10'
+  'relative inline-flex max-w-[11rem] cursor-pointer items-center gap-[0.3rem] rounded-full border-[1.5px] border-coral bg-surface px-[0.55rem] py-[0.22rem] text-xs leading-none font-semibold text-coral-deep hover:bg-coral/10'
 
 const KIND_ICON = {
   doc: FileText,
@@ -325,7 +325,7 @@ function TreeSection({
           <button
             type="button"
             className={cn(
-              'mr-[0.7rem] ml-0 inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[6px] border-0 bg-transparent p-[0.2rem] text-ink-soft',
+              'mr-[0.7rem] ml-0 inline-flex shrink-0 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-[0.2rem] text-ink-soft',
               focusRing
             )}
             aria-expanded={open}
@@ -422,7 +422,7 @@ function ProjectsButton({ projects, selectedProjectId, onSelectProject }) {
             strokeWidth={2}
             aria-hidden="true"
             className={cn(
-              'transition-transform duration-[120ms] ease-pop',
+              'transition-transform duration-150 ease-pop',
               open && 'rotate-180'
             )}
           />
@@ -439,7 +439,7 @@ function ProjectsButton({ projects, selectedProjectId, onSelectProject }) {
                 type="button"
                 role="menuitem"
                 className={cn(
-                  'w-full cursor-pointer rounded-sm border-0 bg-transparent px-[0.55rem] py-[0.4rem] text-left text-[0.82rem] font-semibold text-ink hover:bg-coral/12',
+                  'w-full cursor-pointer rounded-sm border-0 bg-transparent px-[0.55rem] py-[0.4rem] text-left text-sm font-semibold text-ink hover:bg-coral/12',
                   selectedProjectId === project.id && 'bg-coral/12'
                 )}
                 title={project.linkMissing ? 'Sin carpeta vinculada' : project.linkedFolderPath || project.title}
@@ -619,7 +619,7 @@ function LessonTree({
       )
     }
     return (
-      <div className="p-5 text-[0.9rem] text-ink-soft">
+      <div className="p-5 text-base text-ink-soft">
         <p>No hay lecciones ni recursos en esta carpeta.</p>
         <button type="button" className={btnGhost} onClick={() => onAddProject?.()}>
           + Proyecto
@@ -652,7 +652,7 @@ function LessonTree({
         <div className="static z-[1] flex items-center justify-between gap-3 bg-surface px-[0.95rem] pt-[0.9rem] pb-[0.35rem]">
           <div className="min-w-0 flex-1">
             <h2
-              className="m-0 overflow-hidden font-display text-[1.05rem] font-extrabold text-ellipsis whitespace-nowrap"
+              className="m-0 overflow-hidden font-display text-md font-semibold text-ellipsis whitespace-nowrap"
               title={courseTitle}
             >
               {courseTitle}
@@ -661,7 +661,7 @@ function LessonTree({
           <div className="flex shrink-0 items-center gap-[0.15rem]">
             <button
               type="button"
-              className="cursor-pointer rounded-sm border-0 bg-transparent px-[0.35rem] py-[0.3rem] text-[0.78rem] font-bold text-coral-deep hover:bg-coral/8"
+              className="cursor-pointer rounded-sm border-0 bg-transparent px-[0.35rem] py-[0.3rem] text-xs font-semibold text-coral-deep hover:bg-coral/8"
               onClick={() => onAddProject?.()}
               title="Añadir proyecto virtual"
             >
@@ -683,14 +683,14 @@ function LessonTree({
         </div>
         {playableCount > 0 ? (
           <div
-            className="mx-3 mt-[0.35rem] mb-[0.15rem] flex items-center gap-3 rounded-[12px] border border-ink/10 bg-cream px-[0.8rem] py-[0.7rem]"
+            className="mx-3 mt-[0.35rem] mb-[0.15rem] flex items-center gap-3 rounded-md border border-ink/10 bg-cream px-[0.8rem] py-[0.7rem]"
             style={{ '--goal': `${Math.round((completedCount / playableCount) * 100)}%` }}
           >
             <div className="min-w-0 flex-1">
-              <strong className="block text-[0.92rem] font-extrabold">
+              <strong className="block text-base font-semibold">
                 Progreso · {completedCount}/{playableCount}
               </strong>
-              <p className="mt-[0.2rem] text-[0.8rem] leading-[1.35] text-ink-soft">
+              <p className="mt-[0.2rem] text-sm leading-[1.35] text-ink-soft">
                 {completedCount} de {playableCount}{' '}
                 {playableCount === 1 ? 'lección completada' : 'lecciones completadas'}.
               </p>
@@ -860,7 +860,7 @@ function LessonRow({
                   size={14}
                   strokeWidth={2}
                   aria-hidden="true"
-                  className="transition-transform duration-[120ms] ease-pop"
+                  className="transition-transform duration-150 ease-pop"
                 />
               </button>
             ) : null}
