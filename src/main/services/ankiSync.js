@@ -258,7 +258,11 @@ export async function syncDeckToAnki(deckId) {
     await ankiRequest('sync', {}, settings)
     synced = true
   } catch (error) {
-    syncError = error.message
+    syncError = /close editors/i.test(error.message)
+      ? 'Anki tiene abierta una ventana de edición (Examinar, Añadir o Editar). Ciérrala y vuelve a enviar o pulsa Sincronizar en Anki; las tarjetas ya están en Anki.'
+      : /not logged in|login|auth/i.test(error.message)
+        ? 'Anki no tiene sesión en AnkiWeb. Inicia sesión en Anki y sincroniza; las tarjetas ya están en Anki.'
+        : error.message
   }
 
   const saved = markDeckAnkiSynced(deck.id)
