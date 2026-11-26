@@ -64,6 +64,28 @@ function prettyTitle(filename) {
   )
 }
 
+/**
+ * Lessons cut into pieces (`10-1. Blocking out the Face`, `10-2. …`) all
+ * prettify to the same title. Suffix each run of consecutive identical titles
+ * with its part number so the list reads `Blocking out the Face (Parte 1/3)`.
+ */
+function numberSplitParts(lessons) {
+  const key = (lesson) => lesson.title.toLowerCase()
+  let start = 0
+  while (start < lessons.length) {
+    let end = start + 1
+    while (end < lessons.length && key(lessons[end]) === key(lessons[start])) end++
+    const total = end - start
+    if (total > 1) {
+      for (let i = start; i < end; i++) {
+        lessons[i].title = `${lessons[i].title} (Parte ${i - start + 1}/${total})`
+      }
+    }
+    start = end
+  }
+  return lessons
+}
+
 function toPosixRelative(courseRoot, absolutePath) {
   return path.relative(courseRoot, absolutePath).split(path.sep).join('/')
 }
@@ -403,6 +425,7 @@ async function scanFolder(courseRoot, absDir) {
     }
   }
 
+  numberSplitParts(lessons)
   const name = path.basename(absDir)
   return {
     id: sectionId,

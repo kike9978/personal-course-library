@@ -12,6 +12,29 @@ function write(root, relativePath, contents = '') {
 }
 
 describe('scanCourseAt', () => {
+  it('numbers lessons split into parts that share a title', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pcl-outline-'))
+    write(root, 'S/10-1. Blocking out the Face.mp4', 'v')
+    write(root, 'S/10-2. Blocking out the Face.mp4', 'v')
+    write(root, 'S/10-3. Blocking out the Face.mp4', 'v')
+    write(root, 'S/11-1. Polishing the Face.mp4', 'v')
+    write(root, 'S/11-2. Polishing the Face.mp4', 'v')
+    write(root, 'S/14. Finalizing the Hair.mp4', 'v')
+
+    const tree = await scanCourseAt(root, 'Demo')
+    assert.deepEqual(
+      tree.sections[0].lessons.map((lesson) => lesson.title),
+      [
+        'Blocking out the Face (Parte 1/3)',
+        'Blocking out the Face (Parte 2/3)',
+        'Blocking out the Face (Parte 3/3)',
+        'Polishing the Face (Parte 1/2)',
+        'Polishing the Face (Parte 2/2)',
+        'Finalizing the Hair'
+      ]
+    )
+  })
+
   it('keeps each folder that contains lessons as its own section', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pcl-outline-'))
     write(root, 'opening.mp4', 'video')
