@@ -36,6 +36,8 @@ const playMenuItemOn = 'bg-white/12 text-white'
 
 const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2]
 const COMPLETE_RATIO = 0.95
+/** How often a playing lesson saves its position. */
+const PLAYING_SAVE_MS = 5000
 const FRAME_MAX_EDGE = 1600
 const SUBTITLE_PREF_KEY = 'pcl-subtitle-lang'
 
@@ -148,6 +150,7 @@ const LessonPlayer = forwardRef(function LessonPlayer(
   const [subsMenuOpen, setSubsMenuOpen] = useState(false)
   const subsMenuRef = useRef(null)
   const saveTimer = useRef(null)
+  const lastSaveAtRef = useRef(0)
   const restoredFor = useRef(null)
   const autoCompletedFor = useRef(null)
   const seekOverride = useRef(null)
@@ -381,11 +384,40 @@ const LessonPlayer = forwardRef(function LessonPlayer(
       return
     }
 
+    // timeupdate fires every ~250 ms while playing, so a debounce alone never runs mid-play.
+    // Save on a steady beat while playing, plus once shortly after the clock stops moving.
     if (saveTimer.current) clearTimeout(saveTimer.current)
+    const now = Date.now()
+    if (!el.paused && now - lastSaveAtRef.current >= PLAYING_SAVE_MS) {
+      lastSaveAtRef.current = now
+      persist(el.currentTime)
+      return
+    }
     saveTimer.current = setTimeout(() => {
+      lastSaveAtRef.current = Date.now()
       persist(el.currentTime)
     }, 800)
   }, [persist, isCompleted, lesson?.relativePath, onTimeTick])
+
+  useEffect(() => {
+    // Closing or hiding the window does not unmount React, so save the position here too.
+    const saveNow = () => {
+      const el = videoRef.current
+      if (!el || !lesson?.relativePath || !Number.isFinite(el.currentTime)) return
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      lastSaveAtRef.current = Date.now()
+      persist(el.currentTime)
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') saveNow()
+    }
+    window.addEventListener('pagehide', saveNow)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', saveNow)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [lesson?.relativePath, persist])
 
   useEffect(() => {
     return () => {

@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import fs from 'fs'
 import path from 'path'
+import { writeFileAtomicSync } from './atomicFile.js'
 
 const CONFIG_FILE = 'library-config.json'
 
@@ -8,23 +9,32 @@ function getConfigFilePath() {
   return path.join(app.getPath('userData'), CONFIG_FILE)
 }
 
-function readConfig() {
+// The config only changes through this module, so it is read from disk once per session.
+let configCache = null
+const VALID_PATH_TTL_MS = 2000
+let validPathCache = { path: null, valid: false, at: 0 }
+
+function loadConfigFromDisk() {
   try {
     const configPath = getConfigFilePath()
-    if (!fs.existsSync(configPath)) {
-      return {}
-    }
-    const raw = fs.readFileSync(configPath, 'utf8')
-    return JSON.parse(raw)
+    if (!fs.existsSync(configPath)) return {}
+    const data = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    return data && typeof data === 'object' ? data : {}
   } catch {
     return {}
   }
 }
 
+/** A shallow copy: callers change top-level keys and then write it back. */
+function readConfig() {
+  if (!configCache) configCache = loadConfigFromDisk()
+  return { ...configCache }
+}
+
 function writeConfig(config) {
-  const configPath = getConfigFilePath()
-  fs.mkdirSync(path.dirname(configPath), { recursive: true })
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8')
+  writeFileAtomicSync(getConfigFilePath(), JSON.stringify(config, null, 2))
+  configCache = { ...config }
+  validPathCache = { path: null, valid: false, at: 0 }
 }
 
 export function getLibraryPath() {
@@ -85,11 +95,22 @@ export function setNotionConfig(notion) {
   return getNotionConfig()
 }
 
+/**
+ * Whether the folder exists. Checked at most every couple of seconds per path: this runs on
+ * every catalog read and media request, and a drive coming or going shows up on the next check.
+ */
 export function isLibraryPathValid(libraryPath = getLibraryPath()) {
   if (!libraryPath) return false
-  try {
-    return fs.existsSync(libraryPath) && fs.statSync(libraryPath).isDirectory()
-  } catch {
-    return false
+  const now = Date.now()
+  if (validPathCache.path === libraryPath && now - validPathCache.at < VALID_PATH_TTL_MS) {
+    return validPathCache.valid
   }
+  let valid = false
+  try {
+    valid = fs.statSync(libraryPath).isDirectory()
+  } catch {
+    valid = false
+  }
+  validPathCache = { path: libraryPath, valid, at: now }
+  return valid
 }

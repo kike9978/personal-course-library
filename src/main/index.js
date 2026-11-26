@@ -148,6 +148,14 @@ let libraryWatcher = null
 let watchDebounceTimer = null
 let activeCourseZip = null
 const scanCache = new Map()
+// Each entry is a whole course tree. Keep the most recently opened ones only.
+const SCAN_CACHE_LIMIT = 20
+
+function rememberScan(key, tree) {
+  scanCache.delete(key)
+  scanCache.set(key, tree)
+  while (scanCache.size > SCAN_CACHE_LIMIT) scanCache.delete(scanCache.keys().next().value)
+}
 
 function getRendererEntry(hash = '') {
   const suffix = hash ? (hash.startsWith('#') ? hash : `#${hash}`) : ''
@@ -695,14 +703,16 @@ function registerIpcHandlers() {
   ipcMain.handle('scan-course', async (_event, { coursePath, force }) => {
     const key = String(coursePath)
     if (!force && scanCache.has(key)) {
-      return scanCache.get(key)
+      const cached = scanCache.get(key)
+      rememberScan(key, cached)
+      return cached
     }
     const tree = await scanCourse(coursePath)
     const playable = (tree.flatLessons || [])
       .filter((l) => l.kind === 'video' || l.kind === 'audio')
       .map((l) => ({ relativePath: l.relativePath, title: l.title }))
     setCourseCurriculum(coursePath, playable)
-    scanCache.set(key, tree)
+    rememberScan(key, tree)
     return tree
   })
 
@@ -1150,7 +1160,8 @@ app.whenReady().then(() => {
         value: Boolean(data?.isInProcess),
         fullData: data
       }),
-    notifyStatus: (status) => broadcastToWindows('notion-sync', status)
+    notifyStatus: (status) => broadcastToWindows('notion-sync', status),
+    isActive: () => Boolean(BrowserWindow.getFocusedWindow())
   })
   app.on('browser-window-focus', () => {
     pollNotionChanges()
@@ -1169,6 +1180,11 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
+  flushLearningStore()
+})
+
+// Windows send their last playback position while closing, after before-quit has run.
+app.on('will-quit', () => {
   flushLearningStore()
 })
 

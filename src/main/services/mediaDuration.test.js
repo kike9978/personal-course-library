@@ -3,7 +3,12 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import { applyLessonDurations, clearDurationMemoryCache, probeDuration } from './mediaDuration.js'
+import {
+  applyLessonDurations,
+  clearDurationMemoryCache,
+  probeDuration,
+  pruneCourseEntries
+} from './mediaDuration.js'
 
 function box(type, payload) {
   const head = Buffer.alloc(8)
@@ -193,5 +198,20 @@ describe('applyLessonDurations', () => {
     clearDurationMemoryCache()
     await applyLessonDurations(dir, 'Demo', [again], { cacheFile })
     assert.equal(again.durationSec, 42)
+  })
+})
+
+describe('pruneCourseEntries', () => {
+  it('drops this course entries for files it no longer has and keeps other courses', () => {
+    const cache = {
+      files: {
+        'Demo/a.mp4': { d: 1 },
+        'Demo/old.mp4': { d: 2 },
+        'Other/old.mp4': { d: 3 }
+      }
+    }
+    assert.equal(pruneCourseEntries(cache, 'Demo', [{ relativePath: 'a.mp4' }]), true)
+    assert.deepEqual(Object.keys(cache.files).sort(), ['Demo/a.mp4', 'Other/old.mp4'])
+    assert.equal(pruneCourseEntries(cache, 'Demo', [{ relativePath: 'a.mp4' }]), false)
   })
 })

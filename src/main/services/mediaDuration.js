@@ -28,6 +28,12 @@ export async function applyLessonDurations(courseRoot, courseName, lessons, opti
 
   const cache = options.cacheFile ? await loadCache(options.cacheFile) : null
   let dirty = false
+  if (cache) {
+    // Course entries are keyed by folder name, so the library is the course folder's parent.
+    const inLibrary = path.basename(courseRoot) === courseName
+    if (inLibrary && (await pruneMissingCourses(cache, path.dirname(courseRoot)))) dirty = true
+    if (pruneCourseEntries(cache, courseName, targets)) dirty = true
+  }
 
   await mapPool(targets, CONCURRENCY, async (lesson) => {
     const absolute = path.resolve(courseRoot, lesson.relativePath)
@@ -359,8 +365,43 @@ function readUnsigned(buf) {
 }
 
 const memoryCache = new Map()
+const prunedLibraries = new Set()
+
+/** Drop entries for this course's files that are no longer in it (renamed or removed lessons). */
+export function pruneCourseEntries(cache, courseName, lessons) {
+  const prefix = `${courseName}/`
+  const keep = new Set(lessons.map((lesson) => `${prefix}${lesson.relativePath}`))
+  let changed = false
+  for (const key of Object.keys(cache.files)) {
+    if (key.startsWith(prefix) && !keep.has(key)) {
+      delete cache.files[key]
+      changed = true
+    }
+  }
+  return changed
+}
+
+/** Once per session and library: drop entries for course folders that no longer exist. */
+async function pruneMissingCourses(cache, libraryDir) {
+  if (prunedLibraries.has(libraryDir)) return false
+  prunedLibraries.add(libraryDir)
+  const courses = new Set(Object.keys(cache.files).map((key) => key.split('/')[0]))
+  let changed = false
+  for (const name of courses) {
+    try {
+      await fs.access(path.join(libraryDir, name))
+    } catch {
+      for (const key of Object.keys(cache.files)) {
+        if (key.startsWith(`${name}/`)) delete cache.files[key]
+      }
+      changed = true
+    }
+  }
+  return changed
+}
 
 export function clearDurationMemoryCache() {
+  prunedLibraries.clear()
   memoryCache.clear()
 }
 

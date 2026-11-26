@@ -2,6 +2,7 @@ import fs from 'fs/promises'
 import fsSync from 'fs'
 import path from 'path'
 import { shell } from 'electron'
+import { writeFileAtomic } from './atomicFile.js'
 import { getLibraryPath, isLibraryPathValid } from './config.js'
 import { resolveCourseFile } from './courseScan.js'
 import { storedDescription } from '../../shared/courseDescription.js'
@@ -37,6 +38,9 @@ export const THEME_SUGGESTIONS = [
 ]
 
 const courseCache = new Map()
+// Folder name -> { path, at }. Short-lived so a cover dropped in by hand still shows up soon.
+const coverPathCache = new Map()
+const COVER_CACHE_MS = 30000
 let hiddenPathCache = null
 
 function requireLibraryPath() {
@@ -61,14 +65,38 @@ function courseFolderPath(courseDir) {
 let titleMapCache = null
 let titleMapLibrary = ''
 
+/**
+ * Keep the library-wide hidden set and title map in step with one course's props, so an
+ * edit does not force a re-read of every courseProps.json in the library.
+ */
+function rememberProps(courseDir, data) {
+  const name = path.basename(String(courseDir || ''))
+  if (!name || !data) return
+  if (hiddenPathCache) {
+    if (isCourseHidden(data)) hiddenPathCache.add(name)
+    else hiddenPathCache.delete(name)
+  }
+  if (titleMapCache) {
+    const title = String(data.title || '').trim()
+    if (title) titleMapCache[name] = title
+    else delete titleMapCache[name]
+  }
+}
+
+/** One course (props are then passed to rememberProps), or the whole library when called bare. */
 function invalidateCache(courseDir) {
-  hiddenPathCache = null
-  titleMapCache = null
-  titleMapLibrary = ''
+  if (!courseDir) {
+    hiddenPathCache = null
+    titleMapCache = null
+    titleMapLibrary = ''
+  }
   if (courseDir) {
     courseCache.delete(courseDir)
+    courseCache.delete(path.basename(String(courseDir)))
+    coverPathCache.delete(path.basename(String(courseDir)))
   } else {
     courseCache.clear()
+    coverPathCache.clear()
   }
 }
 
@@ -193,15 +221,9 @@ export function hiddenCoursePathSet() {
   }
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
-    try {
-      const raw = fsSync.readFileSync(
-        path.join(libraryPath, entry.name, 'courseProps.json'),
-        'utf8'
-      )
-      if (isCourseHidden(JSON.parse(raw))) hidden.add(entry.name)
-    } catch {
-      // Missing or unreadable props stay in the catalog.
-    }
+    // Missing or unreadable props stay in the catalog.
+    const data = readCoursePropsCached(entry.name)
+    if (data && isCourseHidden(data)) hidden.add(entry.name)
   }
   return hidden
 }
@@ -262,6 +284,27 @@ export async function getCourse(courseDir) {
   }
 }
 
+/**
+ * courseProps.json contents from the shared cache, read from disk only on a miss.
+ * Null when the course has no readable props. Callers must not mutate the result.
+ */
+export function readCoursePropsCached(courseDir) {
+  const name = path.basename(String(courseDir || ''))
+  if (!name) return null
+  if (courseCache.has(name)) return courseCache.get(name)
+  const libraryPath = getLibraryPath()
+  if (!libraryPath) return null
+  try {
+    const data = JSON.parse(
+      fsSync.readFileSync(path.join(libraryPath, name, 'courseProps.json'), 'utf8')
+    )
+    courseCache.set(name, data)
+    return data
+  } catch {
+    return null
+  }
+}
+
 /** Fresh catalog record, including whether a cover file is present. */
 export async function loadCourseRecord(courseDir) {
   const name = path.basename(String(courseDir || '').trim())
@@ -283,6 +326,7 @@ export async function loadCourseRecord(courseDir) {
     try {
       data = await getCourse(name)
       hasProps = true
+      rememberProps(name, data)
     } catch {
       data = buildCoursePropsFromFolderName(name)
     }
@@ -299,8 +343,7 @@ export async function loadCourseRecord(courseDir) {
 export async function listCourses({ includeHidden = false } = {}) {
   const dirs = await listCourseDirs()
   const courses = await mapWithConcurrency(dirs, READ_CONCURRENCY, async (courseDir) => {
-    const times = folderTimesSync(courseDir)
-    const hasCover = Boolean(findCoverImagePathSync(courseDir))
+    const { hasCover, ...times } = await readCourseFolderInfo(courseDir)
     try {
       const data = await getCourse(courseDir)
       return normalizeCourseRecord(courseDir, data, {
@@ -340,6 +383,7 @@ export async function generateCourseProps(courseDir, opts = {}) {
   if (!overwrite && fsSync.existsSync(filePath)) {
     invalidateCache(courseDir)
     const data = await getCourse(courseDir)
+    rememberProps(courseDir, data)
     return normalizeCourseRecord(courseDir, data, {
       folderMtimeMs: folderMtimeMsSync(courseDir),
       hasCover: Boolean(findCoverImagePathSync(courseDir)),
@@ -349,8 +393,9 @@ export async function generateCourseProps(courseDir, opts = {}) {
   }
 
   const data = buildCoursePropsFromFolderName(courseDir)
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8')
+  await writeFileAtomic(filePath, JSON.stringify(data, null, 2))
   invalidateCache(courseDir)
+  rememberProps(courseDir, data)
   return normalizeCourseRecord(courseDir, data, {
     folderMtimeMs: folderMtimeMsSync(courseDir),
     hasCover: Boolean(findCoverImagePathSync(courseDir)),
@@ -391,8 +436,9 @@ export async function repairCourseProps(courseDir) {
   }
   delete data.themes
 
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8')
+  await writeFileAtomic(filePath, JSON.stringify(data, null, 2))
   invalidateCache(courseDir)
+  rememberProps(courseDir, data)
   return normalizeCourseRecord(courseDir, data, {
     folderMtimeMs: folderMtimeMsSync(courseDir),
     hasCover: Boolean(findCoverImagePathSync(courseDir)),
@@ -481,28 +527,20 @@ export async function updateCourse(courseDir, updates) {
   data.description = storedDescription(data.description)
   delete data.themes
 
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8')
+  await writeFileAtomic(filePath, JSON.stringify(data, null, 2))
   invalidateCache(courseDir)
+  rememberProps(courseDir, data)
   return data
 }
 
-function findCoverImagePathSync(courseDir) {
-  try {
-    const libraryPath = getLibraryPath()
-    if (!libraryPath) return null
-
-    const courseFolder = path.join(libraryPath, path.basename(courseDir))
-    if (!fsSync.existsSync(courseFolder)) return null
-
-    for (const format of COVER_FORMATS) {
-      const imagePath = path.join(courseFolder, `cover-image.${format}`)
-      if (fsSync.existsSync(imagePath)) {
-        return imagePath
-      }
-    }
-
-    const entries = fsSync.readdirSync(courseFolder)
-    const match = entries.find((name) => {
+/** Cover file name in a folder listing, or null. Exact `cover-image.<ext>` names win. */
+function pickCoverName(entries) {
+  const names = new Set(entries)
+  for (const format of COVER_FORMATS) {
+    if (names.has(`cover-image.${format}`)) return `cover-image.${format}`
+  }
+  return (
+    entries.find((name) => {
       const lower = name.toLowerCase()
       return (
         COVER_FORMATS.some((ext) => lower === `cover-image.${ext}`) ||
@@ -510,28 +548,78 @@ function findCoverImagePathSync(courseDir) {
         /^cover[-_.]?image\.(png|jpe?g|webp|gif|svg)$/i.test(name) ||
         /^cover\.(png|jpe?g|webp|gif|svg)$/i.test(name)
       )
-    })
+    }) || null
+  )
+}
 
-    if (match) {
-      return path.join(courseFolder, match)
+function rememberCover(name, coverPath) {
+  coverPathCache.set(name, { path: coverPath, at: Date.now() })
+}
+
+function cachedCover(name) {
+  const hit = coverPathCache.get(name)
+  if (!hit || Date.now() - hit.at > COVER_CACHE_MS) return undefined
+  return hit.path
+}
+
+function findCoverImagePathSync(courseDir) {
+  const name = path.basename(String(courseDir || ''))
+  if (!name) return null
+  const cached = cachedCover(name)
+  if (cached !== undefined) return cached
+  let coverPath = null
+  try {
+    const libraryPath = getLibraryPath()
+    if (libraryPath) {
+      const courseFolder = path.join(libraryPath, name)
+      const match = pickCoverName(fsSync.readdirSync(courseFolder))
+      if (match) coverPath = path.join(courseFolder, match)
     }
   } catch {
-    return null
+    coverPath = null
   }
+  rememberCover(name, coverPath)
+  return coverPath
+}
 
-  return null
+/** Folder times and cover in two async calls, so a library scan does not block the main process. */
+async function readCourseFolderInfo(courseDir) {
+  const name = path.basename(String(courseDir || ''))
+  const folder = courseFolderPath(name)
+  const [stat, entries] = await Promise.all([
+    fs.stat(folder).catch(() => null),
+    fs.readdir(folder).catch(() => [])
+  ])
+  const birth = stat?.birthtimeMs
+  const match = pickCoverName(entries)
+  const coverPath = match ? path.join(folder, match) : null
+  rememberCover(name, coverPath)
+  return {
+    folderMtimeMs: stat && Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : null,
+    folderBirthtimeMs: typeof birth === 'number' && birth > 86400000 ? birth : null,
+    hasCover: Boolean(coverPath)
+  }
 }
 
 export function findCoverImagePath(courseDir) {
   return findCoverImagePathSync(courseDir)
 }
 
+/**
+ * The URL carries the file's modified time: it changes when the cover does, and stays the
+ * same otherwise so the browser can reuse its cached copy (the protocol allows an hour).
+ */
 export function getCoverImageUrl(courseDir) {
-  if (!findCoverImagePathSync(courseDir)) {
+  const coverPath = findCoverImagePathSync(courseDir)
+  if (!coverPath) return null
+  let stamp = 0
+  try {
+    stamp = Math.round(fsSync.statSync(coverPath).mtimeMs)
+  } catch {
     return null
   }
   const course = encodeURIComponent(path.basename(courseDir))
-  return `course-media://cover/?course=${course}&t=${Date.now()}`
+  return `course-media://cover/?course=${course}&t=${stamp}`
 }
 
 export async function openCourseFolder(courseDir) {

@@ -467,6 +467,18 @@ async function loadCache(cacheFile) {
       ? parsed
       : { version: CACHE_VERSION, files: {} }
   memoryCache.set(cacheFile, cache)
+  // Indexes are kept by absolute path and hold every segment offset. Drop the ones whose
+  // file is gone, once per session, so the file does not grow with every video ever played.
+  let pruned = false
+  for (const absolutePath of Object.keys(cache.files)) {
+    try {
+      await fs.access(absolutePath)
+    } catch {
+      delete cache.files[absolutePath]
+      pruned = true
+    }
+  }
+  if (pruned) await saveCache(cacheFile, cache).catch(() => {})
   return cache
 }
 

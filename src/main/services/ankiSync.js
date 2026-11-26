@@ -6,6 +6,7 @@
 import fs from 'fs'
 import path from 'path'
 import { app, dialog } from 'electron'
+import { writeFileAtomicSync } from './atomicFile.js'
 import {
   ANKI_CSS,
   ANKI_DEFAULT_URL,
@@ -49,7 +50,7 @@ export function saveAnkiSettings(payload = {}) {
     parent: payload.parent !== undefined ? String(payload.parent).trim() : current.parent
   }
   if (next.url && !/^https?:\/\//i.test(next.url)) next.url = `http://${next.url}`
-  fs.writeFileSync(settingsPath(), JSON.stringify(next, null, 2), 'utf8')
+  writeFileAtomicSync(settingsPath(), JSON.stringify(next, null, 2))
   return getAnkiSettings()
 }
 

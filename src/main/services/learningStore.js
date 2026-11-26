@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
+import { writeFileAtomicSync } from './atomicFile.js'
 import { normalizeChildIds, settleNesting } from '../../shared/playlistNest.js'
 import {
   playlistForDisplay,
@@ -82,6 +83,11 @@ let storeFlushTimer = null
 let storeDirty = false
 let findingById = new Map()
 let findingByPageId = new Map()
+let findingIndexStale = true
+// Bumped on every write. Note lists are cached per version, so the refetch that follows a
+// save (from the notes-changed broadcast) costs a lookup instead of a full sort.
+let storeVersion = 0
+let noteListCache = { version: -1, hiddenKey: '', lists: new Map() }
 
 const STORE_FLUSH_MS = 2000
 
@@ -222,11 +228,37 @@ export function withAddedDates(courses, recentMs = RECENTLY_VIEWED_MS) {
   return next
 }
 
+function anchorCourseName(coursePath) {
+  const parts = String(coursePath || '')
+    .split(/[\\/]/)
+    .filter(Boolean)
+  return parts.pop() || ''
+}
+
+let noteCountCache = { version: -1, counts: new Map() }
+
+/**
+ * Course folder name -> number of notes anchored there, built in one pass and kept until the
+ * next store write. Matches sameCourse: a note counts once per course whatever its anchors.
+ */
+function noteCountsByCourse(store) {
+  if (noteCountCache.version === storeVersion) return noteCountCache.counts
+  const counts = new Map()
+  for (const finding of store.findings || []) {
+    const names = new Set()
+    for (const anchor of finding.anchors || []) {
+      const name = anchorCourseName(anchor?.coursePath)
+      if (name) names.add(name)
+    }
+    for (const name of names) counts.set(name, (counts.get(name) || 0) + 1)
+  }
+  noteCountCache = { version: storeVersion, counts }
+  return counts
+}
+
 function presentCourse(store, key, courseState) {
   const summary = summarizeCourseState(courseState)
-  const noteCount = (store.findings || []).filter((finding) =>
-    (finding.anchors || []).some((anchor) => sameCourse(anchor.coursePath, key))
-  ).length
+  const noteCount = key ? noteCountsByCourse(store).get(anchorCourseName(key)) || 0 : 0
   return { ...summary, noteCount }
 }
 
@@ -265,6 +297,7 @@ function ensureKnowledge(store) {
 }
 
 function reindexFindings(store) {
+  findingIndexStale = false
   findingById = new Map()
   findingByPageId = new Map()
   for (const finding of store?.findings || []) {
@@ -274,22 +307,98 @@ function reindexFindings(store) {
   }
 }
 
+/** The id and page maps are rebuilt on first lookup after a write, not on every write. */
+function ensureFindingIndex() {
+  const store = readStore()
+  if (findingIndexStale) reindexFindings(store)
+}
+
+/** The live stored finding by id, or null. */
+function findingRecord(id) {
+  if (!id) return null
+  ensureFindingIndex()
+  return findingById.get(id) || null
+}
+
+function cachedNoteList(cacheKey, hidden, build) {
+  const hiddenKey = [...hidden].sort().join('\0')
+  if (noteListCache.version !== storeVersion || noteListCache.hiddenKey !== hiddenKey) {
+    noteListCache = { version: storeVersion, hiddenKey, lists: new Map() }
+  }
+  if (!noteListCache.lists.has(cacheKey)) noteListCache.lists.set(cacheKey, build())
+  // Callers send lists over IPC or hand them back to the renderer; copy the array so a
+  // caller that sorts or filters it cannot change the cached one.
+  return [...noteListCache.lists.get(cacheKey)]
+}
+
 function persistStore(store) {
-  const filePath = getStorePath()
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  fs.writeFileSync(filePath, JSON.stringify(store, null, 2), 'utf8')
+  writeFileAtomicSync(getStorePath(), JSON.stringify(store, null, 2))
   storeDirty = false
+}
+
+function lastGoodPath(filePath) {
+  return `${filePath}.last-good`
+}
+
+/** Parsed store, or null when the text is not a store. Read errors (locked file, I/O) throw. */
+function parseStoreFile(filePath) {
+  const raw = fs.readFileSync(filePath, 'utf8')
+  try {
+    const data = JSON.parse(raw)
+    return data && typeof data === 'object' && data.courses && typeof data.courses === 'object'
+      ? data
+      : null
+  } catch {
+    return null
+  }
+}
+
+/** Snapshot of the file as it was when this session opened it. */
+function keepLastGood(filePath) {
+  try {
+    fs.copyFileSync(filePath, lastGoodPath(filePath))
+  } catch (error) {
+    console.warn('Could not keep a copy of the learning store:', error.message)
+  }
+}
+
+/**
+ * The file is there but is not a store (cut short by a crash, edited by hand). Keep it aside
+ * so nothing is lost, then start from the last copy that opened cleanly.
+ */
+function recoverCorruptStore(filePath) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const aside = path.join(path.dirname(filePath), `learning-store.corrupt-${stamp}.json`)
+  try {
+    fs.copyFileSync(filePath, aside)
+    console.error(`learning-store.json could not be read; kept it as ${aside}`)
+  } catch (error) {
+    console.error('learning-store.json could not be read or copied aside:', error.message)
+  }
+  try {
+    const backup = parseStoreFile(lastGoodPath(filePath))
+    if (backup) {
+      console.warn('Restored the learning store from its last good copy')
+      return backup
+    }
+  } catch {
+    // No backup yet.
+  }
+  return emptyStore()
 }
 
 function loadStoreFromDisk() {
   try {
     const filePath = getStorePath()
     if (!fs.existsSync(filePath)) return { store: emptyStore(), ok: true }
-    const raw = fs.readFileSync(filePath, 'utf8')
-    const data = JSON.parse(raw)
-    if (!data || typeof data !== 'object' || !data.courses)
-      return { store: emptyStore(), ok: false }
+    let data = parseStoreFile(filePath)
     let dirty = false
+    if (data) {
+      keepLastGood(filePath)
+    } else {
+      data = recoverCorruptStore(filePath)
+      dirty = true
+    }
     for (const key of ['paths', 'courseBriefs', 'learnerGoals', 'activePathId']) {
       if (Object.prototype.hasOwnProperty.call(data, key)) {
         delete data[key]
@@ -312,12 +421,18 @@ function loadStoreFromDisk() {
     if (ensureKnowledge(data)) dirty = true
     if (clearDefaultNoteTitles(data.findings)) dirty = true
     if (dirty) {
-      storeCache = data
-      reindexFindings(data)
-      persistStore(data)
+      try {
+        persistStore(data)
+      } catch (error) {
+        // The data is good in memory; the next save writes it.
+        storeDirty = true
+        console.error('Could not save the upgraded learning store:', error.message)
+      }
     }
     return { store: data, ok: true }
-  } catch {
+  } catch (error) {
+    // The file exists but could not be read right now (locked, I/O error). It is left alone.
+    console.error('Could not read learning-store.json:', error.message)
     return { store: emptyStore(), ok: false }
   }
 }
@@ -327,14 +442,31 @@ function readStore() {
     const loaded = loadStoreFromDisk()
     if (!loaded.ok) return loaded.store
     storeCache = loaded.store
-    reindexFindings(storeCache)
+    findingIndexStale = true
+    storeVersion += 1
   }
   return storeCache
 }
 
+function flushPending() {
+  if (!storeCache || !storeDirty) return
+  try {
+    persistStore(storeCache)
+  } catch (error) {
+    console.error('Could not save learning-store.json:', error.message)
+  }
+}
+
 function writeStore(store, { debounce = false } = {}) {
+  // An unread store is an empty stand-in. Saving it would overwrite the real file.
+  if (!storeCache) {
+    throw new Error(
+      'No se pudo leer learning-store.json. Los cambios no se guardaron para no perder tus datos.'
+    )
+  }
   storeCache = store
-  reindexFindings(store)
+  findingIndexStale = true
+  storeVersion += 1
   if (!debounce) {
     if (storeFlushTimer) {
       clearTimeout(storeFlushTimer)
@@ -347,8 +479,14 @@ function writeStore(store, { debounce = false } = {}) {
   if (storeFlushTimer) return
   storeFlushTimer = setTimeout(() => {
     storeFlushTimer = null
-    if (storeCache && storeDirty) persistStore(storeCache)
+    flushPending()
   }, STORE_FLUSH_MS)
+}
+
+/** Changes on every store write. Lets readers cache values derived from the store. */
+export function learningStoreVersion() {
+  readStore()
+  return storeVersion
 }
 
 /** Write a pending playback update before quit. */
@@ -357,7 +495,7 @@ export function flushLearningStore() {
     clearTimeout(storeFlushTimer)
     storeFlushTimer = null
   }
-  if (storeCache && storeDirty) persistStore(storeCache)
+  flushPending()
 }
 
 function courseKey(coursePath) {
@@ -653,7 +791,15 @@ export function getAllCourseProgress() {
   const out = {}
   for (const [key, value] of Object.entries(store.courses || {})) {
     if (hidden.has(key)) continue
-    out[key] = presentCourse(store, key, value)
+    // The library needs the summary and the per-lesson map, not the full lesson list,
+    // projects or sync records: those were most of this payload, sent on every library load.
+    // eslint-disable-next-line no-unused-vars
+    const { playableLessons, projects, notion, notes, bookmarks, ...summary } = presentCourse(
+      store,
+      key,
+      value
+    )
+    out[key] = summary
   }
   return out
 }
@@ -665,9 +811,13 @@ function getMutableCourse(store, coursePath) {
   return { key, course }
 }
 
-function decorateFinding(store, finding) {
+function topicIndex(store) {
+  return new Map((store.topics || []).map((topic) => [topic.id, topic]))
+}
+
+function decorateFinding(store, finding, topicsById = topicIndex(store)) {
   const topics = (finding.topicIds || [])
-    .map((id) => store.topics.find((topic) => topic.id === id))
+    .map((id) => topicsById.get(id))
     .filter(Boolean)
     .map((topic) => ({ id: topic.id, title: topic.title }))
   return { ...finding, topics }
@@ -756,14 +906,17 @@ export function listNotes(coursePath) {
   const key = courseKey(coursePath)
   const hidden = hiddenCoursePathSet()
   if (!key || hidden.has(key)) return []
-  return findingsForCourse(store.findings, key)
-    .map((finding) => {
-      const visible = visibleFinding(finding, hidden)
-      if (!visible) return null
-      return decorateFinding(store, projectFinding(visible, key))
-    })
-    .filter(Boolean)
-    .sort(compareStudyItems)
+  return cachedNoteList(`course:${key}`, hidden, () => {
+    const topics = topicIndex(store)
+    return findingsForCourse(store.findings, key)
+      .map((finding) => {
+        const visible = visibleFinding(finding, hidden)
+        if (!visible) return null
+        return decorateFinding(store, projectFinding(visible, key), topics)
+      })
+      .filter(Boolean)
+      .sort(compareStudyItems)
+  })
 }
 
 /**
@@ -861,7 +1014,7 @@ export function upsertNote(coursePath, payload) {
 
   let savedId = payload.id
   if (payload.id) {
-    const finding = store.findings.find((item) => item.id === payload.id)
+    const finding = findingRecord(payload.id)
     if (!finding) throw new Error('Anotación no encontrada')
     if (title !== undefined) finding.title = title
     if (payload.body !== undefined) finding.body = body
@@ -891,7 +1044,9 @@ export function upsertNote(coursePath, payload) {
     savedId = finding.id
   }
 
-  writeStore(store)
+  // Autosave sends this every pause in typing. Batch the disk write like playback progress;
+  // pending writes are flushed on quit.
+  writeStore(store, { debounce: true })
   emitNoteWrite({ op: 'upsert', id: savedId })
   return key ? listNotes(coursePath) : listAllNotes()
 }
@@ -915,24 +1070,24 @@ export function readFindingList() {
 }
 
 export function findFindingRecord(id) {
-  readStore()
+  ensureFindingIndex()
   return findingById.get(id) || null
 }
 
 export function findFindingByPageId(pageId) {
-  readStore()
+  ensureFindingIndex()
   return findingByPageId.get(pageId) || null
 }
 
 export function readFinding(id) {
-  const finding = (readStore().findings || []).find((item) => item.id === id)
+  const finding = findingRecord(id)
   return finding ? structuredClone(finding) : null
 }
 
 /** Apply a mutation to one finding and return the stored copy. Does not enqueue sync. */
 export function mutateFinding(id, mutate) {
   const store = readStore()
-  const finding = (store.findings || []).find((item) => item.id === id)
+  const finding = findingRecord(id)
   if (!finding) return null
   mutate(finding)
   writeStore(store)
@@ -941,7 +1096,7 @@ export function mutateFinding(id, mutate) {
 
 export function forkFinding(sourceId, { title, body } = {}) {
   const store = readStore()
-  const source = (store.findings || []).find((item) => item.id === sourceId)
+  const source = findingRecord(sourceId)
   if (!source) throw new Error('Anotación no encontrada')
   const copy = {
     id: makeId(),
@@ -964,7 +1119,7 @@ export function forkFinding(sourceId, { title, body } = {}) {
 export function restoreFinding(snapshot) {
   if (!snapshot?.id) throw new Error('Anotación no encontrada')
   const store = readStore()
-  const existing = (store.findings || []).find((item) => item.id === snapshot.id)
+  const existing = findingRecord(snapshot.id)
   if (existing) {
     Object.assign(existing, structuredClone(snapshot), { id: snapshot.id })
   } else {
@@ -1054,18 +1209,21 @@ export function deleteBookmark(coursePath, bookmarkId) {
 export function listAllNotes() {
   const store = readStore()
   const hidden = hiddenCoursePathSet()
-  return (store.findings || [])
-    .map((finding) => {
-      const visible = visibleFinding(finding, hidden)
-      if (!visible) return null
-      return decorateFinding(store, projectFinding(visible))
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      const courseCmp = String(a.coursePath || '').localeCompare(String(b.coursePath || ''))
-      if (courseCmp !== 0) return courseCmp
-      return compareStudyItems(a, b)
-    })
+  return cachedNoteList('*', hidden, () => {
+    const topics = topicIndex(store)
+    return (store.findings || [])
+      .map((finding) => {
+        const visible = visibleFinding(finding, hidden)
+        if (!visible) return null
+        return decorateFinding(store, projectFinding(visible), topics)
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
+        const courseCmp = String(a.coursePath || '').localeCompare(String(b.coursePath || ''))
+        if (courseCmp !== 0) return courseCmp
+        return compareStudyItems(a, b)
+      })
+  })
 }
 
 /** @deprecated Bookmarks merged into notes; kept for IPC compat. */
@@ -1094,10 +1252,11 @@ function linkStatus(linkedFolderPath) {
     return { linkOk: false, linkMissing: false, linkIsFile: false }
   }
   try {
-    if (!fs.existsSync(linkedFolderPath)) {
+    // One stat per project: this runs for every project each time the board is listed.
+    const stat = fs.statSync(linkedFolderPath, { throwIfNoEntry: false })
+    if (!stat) {
       return { linkOk: false, linkMissing: true, linkIsFile: false }
     }
-    const stat = fs.statSync(linkedFolderPath)
     if (stat.isDirectory()) {
       return { linkOk: true, linkMissing: false, linkIsFile: false }
     }
@@ -1344,24 +1503,33 @@ export function getProjectLinkedPath(coursePath, projectId) {
 export function getNotesSearchByCourse() {
   const store = readStore()
   const hidden = hiddenCoursePathSet()
-  const map = {}
-  const topicTitle = (id) => store.topics.find((topic) => topic.id === id)?.title || ''
+  const topics = topicIndex(store)
+  // Collect pieces per course and join once. Appending to one string and lowercasing it after
+  // every note made this grow with the square of a course's note text.
+  const parts = new Map()
   for (const key of Object.keys(store.courses || {})) {
-    if (!hidden.has(key)) map[key] = ''
+    if (!hidden.has(key)) parts.set(key, [])
   }
   for (const finding of store.findings || []) {
-    const chunks = [finding.title, finding.body, ...(finding.topicIds || []).map(topicTitle)]
+    const text = [
+      finding.title,
+      finding.body,
+      ...(finding.topicIds || []).map((id) => topics.get(id)?.title || '')
+    ]
       .filter(Boolean)
       .join('\n')
-    const courses = new Set(
-      (finding.anchors || []).map((anchor) => anchor.coursePath).filter(Boolean)
+    if (!text) continue
+    const keys = new Set(
+      (finding.anchors || []).map((anchor) => courseKey(anchor.coursePath)).filter(Boolean)
     )
-    for (const coursePath of courses) {
-      const key = courseKey(coursePath)
-      if (!key || hidden.has(key)) continue
-      map[key] = `${map[key] || ''}\n${chunks}`.trim().toLowerCase()
+    for (const key of keys) {
+      if (hidden.has(key)) continue
+      if (!parts.has(key)) parts.set(key, [])
+      parts.get(key).push(text)
     }
   }
+  const map = {}
+  for (const [key, list] of parts) map[key] = list.join('\n').trim().toLowerCase()
   return map
 }
 

@@ -1,14 +1,21 @@
 import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
+import { writeFileAtomicSync } from './atomicFile.js'
 import { getLibraryPath, getNotionConfig, setNotionConfig } from './config.js'
-import { listCourseDirs, readCourseTitleMap, updateCourse } from './courses.js'
+import {
+  listCourseDirs,
+  readCoursePropsCached,
+  readCourseTitleMap,
+  updateCourse
+} from './courses.js'
 import { createNotionClient } from './notionClient.js'
 import {
   findFindingByPageId,
   findFindingRecord,
   forkFinding,
   readFindingList,
+  learningStoreVersion,
   listCourseProgressRecords,
   listPlaylistRecords,
   listStoredProjects,
@@ -107,9 +114,13 @@ let notionClientKey = ''
 let localDriftGeneration = 0
 let driftedGeneration = -1
 let statusTimer = null
+let syncStateVersion = 0
+// Conflict lists only change when the store or the sync state does; status is sent every 400 ms during a sync.
+let conflictCache = { key: '', value: null }
 let statusPublishedAt = 0
 
 const SAVE_CONFLICT_PASSES = 3
+const NOTE_UPSERT_DELAY_MS = 4000
 
 /** One Notion reader or writer at a time. A poll that rewrites pages while a save is in flight is what triggers Notion's 409. */
 function oneAtATime(task) {
@@ -126,7 +137,10 @@ let hooks = {
   notifyProgress() {},
   notifyProjects() {},
   notifyCourse() {},
-  notifyStatus() {}
+  notifyStatus() {},
+  isActive() {
+    return true
+  }
 }
 
 function statePath() {
@@ -174,10 +188,9 @@ function readState() {
 
 function writeState(state) {
   syncState = state
-  const filePath = statePath()
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  fs.writeFileSync(
-    filePath,
+  syncStateVersion += 1
+  writeFileAtomicSync(
+    statePath(),
     JSON.stringify(
       {
         tombstones: state.tombstones || [],
@@ -194,8 +207,7 @@ function writeState(state) {
       },
       null,
       2
-    ),
-    'utf8'
+    )
   )
 }
 
@@ -401,9 +413,17 @@ function noteConflictView(finding) {
   }
 }
 
-function publicStatus() {
+function conflictLists(config) {
+  const key = `${learningStoreVersion()}|${syncStateVersion}|${config.enabled}`
+  if (conflictCache.key === key) return conflictCache.value
   clearFalseNoteConflicts()
-  const config = getNotionConfig()
+  const value = buildConflictLists(config)
+  // clearFalseNoteConflicts may have written; key on the state after it ran.
+  conflictCache = { key: `${learningStoreVersion()}|${syncStateVersion}|${config.enabled}`, value }
+  return value
+}
+
+function buildConflictLists(config) {
   const conflicts = config.enabled
     ? readFindingList()
         .filter((finding) => finding.notion?.conflict)
@@ -432,18 +452,6 @@ function publicStatus() {
       remoteEditedAt: item.conflict.remoteEditedAt || null
     }))
   return {
-    enabled: config.enabled,
-    hasToken: Boolean(config.token),
-    databaseId: config.databaseId || '',
-    syncing,
-    syncTotal,
-    syncDone,
-    prepareDetail,
-    prepareDone,
-    prepareTotal,
-    lastError,
-    lastErrorCode,
-    queued: jobs.size,
     conflicts,
     deleteConflicts,
     playlistConflicts,
@@ -465,7 +473,27 @@ function publicStatus() {
             ? projectText({ title: item.conflict.remoteTitle, ...parsed })
             : item.conflict.remoteBody || ''
         }
-      }),
+      })
+  }
+}
+
+function publicStatus() {
+  const config = getNotionConfig()
+  return {
+    enabled: config.enabled,
+    hasToken: Boolean(config.token),
+    databaseId: config.databaseId || '',
+    syncing,
+    syncTotal,
+    syncDone,
+    prepareDetail,
+    prepareDone,
+    prepareTotal,
+    lastError,
+    lastErrorCode,
+    queued: jobs.size,
+    ...conflictLists(config),
+    // Reads course props, which change outside the store, so it is not cached.
     progressConflicts: listProgressConflicts(),
     migrating: Boolean(migrating) || (rowWrites && !readState().rowSchema)
   }
@@ -2655,9 +2683,15 @@ async function queueRowPoll(client) {
     queueLocalRowDrift()
     driftedGeneration = localDriftGeneration
   }
+  // The watermark moves every pass; on disk it only saves re-reading a little after a restart.
+  // Write when the parked rows change, or every few minutes, not on every 15 s pass.
+  const parkedChanged = JSON.stringify(parked) !== JSON.stringify(state.parked || [])
   state.pollWatermark = startedAt
   state.parked = parked
-  writeState(state)
+  if (parkedChanged || Date.now() - pollStateWrittenAt >= POLL_STATE_WRITE_MS) {
+    pollStateWrittenAt = Date.now()
+    writeState(state)
+  }
 }
 
 async function queuePending() {
@@ -2748,9 +2782,13 @@ async function queuePending() {
     }
   }
   const rowIds = new Set((remotePages || []).map((page) => page.pageId))
+  // One lookup per note instead of a scan of every remote page per note.
+  const remoteByPageId = new Map((remotePages || []).map((page) => [page.pageId, page]))
   for (const finding of findings) {
+    // Parked notes are skipped below; skip them before the parent lookups, which hit the network.
+    if (saveConflictParked(finding.id)) continue
     const localHash = wireHash(noteWire(finding).title, finding.body)
-    const row = (remotePages || []).find((page) => page.pageId === finding.notion?.pageId)
+    const row = finding.notion?.pageId ? remoteByPageId.get(finding.notion.pageId) : undefined
     const remote =
       row ||
       recentById.get(notionPageKey(finding.notion?.pageId)) ||
@@ -2771,7 +2809,6 @@ async function queuePending() {
       Boolean(finding.notion?.pageId) &&
       !row &&
       !(await pageBelongsToRows(client, finding.notion.pageId, rowIds))
-    if (saveConflictParked(finding.id)) continue
     if (localChanged || timeChanged || remoteChanged || needsPlace || missingHere) {
       const pending = jobs.get(finding.id)
       jobs.set(finding.id, { op: 'upsert', attempts: pending?.attempts || 0 })
@@ -3198,28 +3235,13 @@ function coursePropsFile(coursePath) {
 }
 
 function readInProcess(coursePath, course) {
-  const file = coursePropsFile(coursePath)
-  if (file && fs.existsSync(file)) {
-    try {
-      return Boolean(JSON.parse(fs.readFileSync(file, 'utf8')).isInProcess)
-    } catch {
-      return Boolean(course?.inProcess)
-    }
-  }
-  return Boolean(course?.inProcess)
+  const props = readCoursePropsCached(coursePath)
+  return props ? Boolean(props.isInProcess) : Boolean(course?.inProcess)
 }
 
 function courseTitle(coursePath) {
-  const file = coursePropsFile(coursePath)
-  if (file && fs.existsSync(file)) {
-    try {
-      const title = JSON.parse(fs.readFileSync(file, 'utf8')).title
-      if (String(title || '').trim()) return String(title).trim()
-    } catch {
-      // The folder name is the page title when the catalog file cannot be read.
-    }
-  }
-  return path.basename(String(coursePath || '')) || 'Curso'
+  const title = String(readCoursePropsCached(coursePath)?.title || '').trim()
+  return title || path.basename(String(coursePath || '')) || 'Curso'
 }
 
 function localProgress(coursePath) {
@@ -3543,6 +3565,10 @@ async function paintIcons(client, rows) {
 }
 
 const REMOTE_POLL_MS = 15000
+const BACKGROUND_POLL_MS = 60000
+const POLL_STATE_WRITE_MS = 5 * 60 * 1000
+let lastPollAt = 0
+let pollStateWrittenAt = 0
 
 function setRemoteWatch(active) {
   if (!active) {
@@ -3552,6 +3578,8 @@ function setRemoteWatch(active) {
   }
   if (pollTimer) return
   pollTimer = setInterval(() => {
+    // In the background, check once a minute instead of every 15 s. Focusing a window polls at once.
+    if (!hooks.isActive() && Date.now() - lastPollAt < BACKGROUND_POLL_MS) return
     pollNotionChanges()
   }, REMOTE_POLL_MS)
 }
@@ -3560,6 +3588,7 @@ function setRemoteWatch(active) {
 export function pollNotionChanges() {
   if (!getNotionConfig().enabled) return null
   if (remoteCheck) return remoteCheck
+  lastPollAt = Date.now()
   remoteCheck = oneAtATime(() => queuePending()).finally(() => {
     remoteCheck = null
     if (jobs.size) schedule(0)
@@ -3574,7 +3603,8 @@ export function startNotionSync(nextHooks = {}) {
     notifyProgress: nextHooks.notifyProgress || (() => {}),
     notifyProjects: nextHooks.notifyProjects || (() => {}),
     notifyCourse: nextHooks.notifyCourse || (() => {}),
-    notifyStatus: nextHooks.notifyStatus || (() => {})
+    notifyStatus: nextHooks.notifyStatus || (() => {}),
+    isActive: nextHooks.isActive || (() => true)
   }
   const enabled = getNotionConfig().enabled
   setRemoteWatch(enabled)
@@ -3590,7 +3620,8 @@ export function enqueueNotionUpsert(id) {
   const pending = jobs.get(id)
   jobs.set(id, { op: 'upsert', remote: Boolean(pending?.remote), attempts: pending?.attempts || 0 })
   bumpLocalDrift()
-  schedule(1200)
+  // Each autosave resets this, so a note being typed reaches Notion once the typing settles.
+  schedule(NOTE_UPSERT_DELAY_MS)
 }
 
 export function enqueueNotionDelete(finding) {
@@ -3627,6 +3658,8 @@ export function localProgressTrack(coursePath) {
 }
 
 export function localProgressSyncKey(coursePath) {
+  // Callers compare keys to decide whether to queue a sync; with sync off there is nothing to queue.
+  if (!getNotionConfig().enabled) return ''
   return progressSyncKey(localProgress(coursePath))
 }
 

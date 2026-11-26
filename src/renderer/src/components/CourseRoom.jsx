@@ -114,7 +114,14 @@ function CourseRoom({
     },
     []
   )
-  currentTimeRef.current = currentTimeSec
+  // The player reports time about 4 times a second. Everything shown here is in whole
+  // seconds, so re-render the room only when the second changes. Code that needs the exact
+  // time asks the player (playerRef) or reads currentTimeRef.
+  const handleTimeTick = useCallback((timeSec) => {
+    const previous = currentTimeRef.current
+    currentTimeRef.current = timeSec
+    if (Math.floor(timeSec) !== Math.floor(previous)) setCurrentTimeSec(timeSec)
+  }, [])
   const noteEditorApiRef = useRef(null)
   const capturingFrameRef = useRef(false)
   const [capturingFrame, setCapturingFrame] = useState(false)
@@ -1486,7 +1493,7 @@ function CourseRoom({
                 initialPositionSec={initialPositionSec}
                 isCompleted={selectedCompleted}
                 timelineMarks={timelineMarks}
-                onTimeTick={setCurrentTimeSec}
+                onTimeTick={handleTimeTick}
                 onMarkClick={(mark) => {
                   setStudyOpen(true)
                   if (mark.noteId) flashNote(mark.noteId)

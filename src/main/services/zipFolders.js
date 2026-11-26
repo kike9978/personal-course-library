@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { rm } from 'fs/promises'
+import { readdir, rm, stat } from 'fs/promises'
 import { Transform } from 'stream'
 import archiver from 'archiver'
 
@@ -11,13 +11,12 @@ function canceledError() {
 }
 
 /**
- * List regular files and their total size. Yields so a cancel can land
- * while a large library is being measured. Symlinks are skipped.
+ * List regular files and their total size. The reads are async, so the main process stays
+ * responsive and a cancel can land while a large library is being measured. Symlinks are skipped.
  */
 async function collectFiles(folders, isCanceled) {
   const files = []
   let plannedBytes = 0
-  let seen = 0
 
   for (const entry of folders) {
     const stack = [entry.folder]
@@ -26,7 +25,7 @@ async function collectFiles(folders, isCanceled) {
       const current = stack.pop()
       let dirents = []
       try {
-        dirents = fs.readdirSync(current, { withFileTypes: true })
+        dirents = await readdir(current, { withFileTypes: true })
       } catch {
         continue
       }
@@ -40,7 +39,7 @@ async function collectFiles(folders, isCanceled) {
         if (!dirent.isFile()) continue
         let size = 0
         try {
-          size = fs.statSync(full).size
+          size = (await stat(full)).size
         } catch {
           continue
         }
@@ -51,8 +50,6 @@ async function collectFiles(folders, isCanceled) {
           size
         })
         plannedBytes += size
-        seen += 1
-        if (seen % 40 === 0) await new Promise((resolve) => setImmediate(resolve))
       }
     }
   }
