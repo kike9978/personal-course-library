@@ -364,3 +364,84 @@ describe('opt-in Instagram session', () => {
     assert.equal(instagramSessionMayLoad('http://www.instagram.com/reel/x/'), false)
   })
 })
+
+describe('Phase 3 helpers', async () => {
+  const { cleanReadable } = await import('./readable.js')
+  const { cueIndexAt, parseJson3, pickCaptionTrack, timedtextInfo } = await import('./captions.js')
+  const { linkCheckState } = await import('./sources.js')
+  const words = (n) => Array.from({ length: n }, (_, i) => `palabra${i}`).join(' ')
+
+  it('keeps readable blocks and drops labels', () => {
+    const copy = cleanReadable(
+      {
+        title: 'Artículo',
+        blocks: [
+          { type: 'heading', level: 1, text: 'Título' },
+          { type: 'paragraph', text: 'Compartir' },
+          { type: 'paragraph', text: words(50) + '.' },
+          { type: 'script', text: 'alert(1)' },
+          { type: 'item', text: 'Un punto de la lista' }
+        ]
+      },
+      { url: 'https://example.com/a', capturedAt: 1 }
+    )
+    assert.deepEqual(
+      copy.blocks.map((block) => block.type),
+      ['heading', 'paragraph', 'item']
+    )
+    assert.equal(copy.capturedAt, 1)
+    assert.equal(cleanReadable({ blocks: [{ type: 'paragraph', text: 'Muy corto aquí.' }] }), null)
+  })
+
+  it('reads json3 captions, merging word-by-word events', () => {
+    const cues = parseJson3(
+      JSON.stringify({
+        events: [
+          { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: 'Hola' }, { utf8: ' mundo' }] },
+          { tStartMs: 0, dDurationMs: 1500, segs: [{ utf8: 'qué tal' }] },
+          { tStartMs: 1500, segs: [{ utf8: '\n' }] },
+          { tStartMs: 2000, dDurationMs: 500, segs: [{ utf8: 'Segunda' }] }
+        ]
+      })
+    )
+    assert.deepEqual(cues, [
+      { start: 0, end: 1.5, text: 'Hola mundo qué tal' },
+      { start: 2, end: 2.5, text: 'Segunda' }
+    ])
+    assert.equal(cueIndexAt(cues, 1.9), 0)
+    assert.equal(cueIndexAt(cues, 2.1), 1)
+    assert.equal(cueIndexAt(cues, -1), -1)
+    assert.deepEqual(parseJson3('not json'), [])
+  })
+
+  it('reads timedtext urls and picks a track', () => {
+    assert.deepEqual(
+      timedtextInfo(
+        'https://www.youtube-nocookie.com/api/timedtext?v=abc&lang=en&kind=asr&fmt=json3'
+      ),
+      { videoId: 'abc', lang: 'en', auto: true }
+    )
+    assert.equal(timedtextInfo('https://www.youtube-nocookie.com/embed/abc'), null)
+    assert.equal(
+      timedtextInfo('https://www.youtube-nocookie.com/api/timedtext?v=abc&lang=es&caps=asr').auto,
+      false
+    )
+    const tracks = [
+      { languageCode: 'en', kind: 'asr' },
+      { languageCode: 'en', kind: '' },
+      { languageCode: 'es-419', kind: '' }
+    ]
+    assert.equal(pickCaptionTrack(tracks).languageCode, 'es-419')
+    assert.equal(pickCaptionTrack(tracks.slice(0, 2)).kind, '')
+    assert.equal(pickCaptionTrack([]), null)
+  })
+
+  it('only calls 404 and 410 gone', () => {
+    assert.equal(linkCheckState(404), 'gone')
+    assert.equal(linkCheckState(410), 'gone')
+    assert.equal(linkCheckState(200), 'ok')
+    assert.equal(linkCheckState(301), 'ok')
+    assert.equal(linkCheckState(403), 'unknown')
+    assert.equal(linkCheckState(null), 'unknown')
+  })
+})

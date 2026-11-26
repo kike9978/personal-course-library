@@ -22,7 +22,12 @@ import {
 import { cn } from '../ui/cn'
 import CardReview from './flashcards/CardReview'
 import ScopePicker from './flashcards/ScopePicker'
-import { loadScopeSources, notesSources } from './flashcards/scopeSources'
+import {
+  loadLinkScopeSources,
+  loadScopeSources,
+  loadTopicScopeSources,
+  notesSources
+} from './flashcards/scopeSources'
 
 const dialogShell = cn(dialogBase, 'max-h-[min(92vh,60rem)] max-w-[52rem] overflow-auto [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-55')
 const sectionBox = 'flex flex-col gap-3 rounded-lg border border-ink/10 bg-surface-muted p-4'
@@ -169,16 +174,38 @@ function FlashcardBuilder({
     setPrepared(null)
   }
 
+  const scopeKind = scope.scopeKind || 'course'
+  const scopeReady =
+    scopeKind === 'source'
+      ? Boolean(scope.sourceId)
+      : scopeKind === 'topic'
+        ? Boolean(scope.topicId)
+        : Boolean(scope.coursePath && scope.tree && scope.lessonPaths.size)
+
   const prepare = async () => {
-    if (!scope.coursePath || !scope.tree || !scope.lessonPaths.size) return
-    if (!scope.useNotes && !scope.useSubtitles) {
-      setError('Elige notas, subtítulos o ambos.')
+    if (!scopeReady) return
+    if (scopeKind !== 'topic' && !scope.useNotes && !scope.useSubtitles) {
+      setError(
+        scopeKind === 'source'
+          ? 'Elige notas, transcripción o ambas.'
+          : 'Elige notas, subtítulos o ambos.'
+      )
       return
     }
     setPreparing(true)
     setError('')
     try {
-      const result = await loadScopeSources(scope)
+      const result =
+        scopeKind === 'source'
+          ? await loadLinkScopeSources({
+              sourceId: scope.sourceId,
+              sourceTitle: scope.sourceTitle,
+              useNotes: scope.useNotes,
+              useTranscript: scope.useSubtitles
+            })
+          : scopeKind === 'topic'
+            ? await loadTopicScopeSources({ topicId: scope.topicId, courses })
+            : await loadScopeSources(scope)
       if (!alive.current) return
       setPrepared(result)
       if (!result.sources.length) setError('No hay texto en lo que elegiste.')
@@ -461,12 +488,12 @@ function FlashcardBuilder({
                 onChange={updateScope}
                 disabled={locked}
               />
-              {scope.tree ? (
+              {scope.tree || (scopeKind !== 'course' && scopeReady) ? (
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     className={cn(btnGhost, small)}
-                    disabled={locked || preparing || !scope.lessonPaths.size}
+                    disabled={locked || preparing || !scopeReady}
                     onClick={prepare}
                   >
                     {preparing ? 'Leyendo…' : prepared ? 'Volver a leer' : 'Leer fuentes'}

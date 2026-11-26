@@ -6,6 +6,7 @@ import {
   viewerMayLoad
 } from '../../shared/sources.js'
 import { getInstagramViewerConfig, setInstagramViewerConfig } from './config.js'
+import { parseJson3, timedtextInfo } from '../../shared/captions.js'
 
 /**
  * Remote content for Fuentes runs in a <webview> on its own in-memory session:
@@ -184,6 +185,15 @@ export function installSourceViewerGuards() {
     contents.once('did-start-navigation', (details) => {
       homeUrl = details?.url || contents.getURL()
     })
+    // The YouTube player in the public viewer: listen for its captions once the page is up.
+    contents.once('dom-ready', () => {
+      if (
+        !signedInView &&
+        /^https:\/\/www\.youtube-nocookie\.com\/embed\//.test(contents.getURL())
+      ) {
+        tapYouTubeCaptions(contents)
+      }
+    })
     // New windows and links to other sites open in the system browser.
     contents.setWindowOpenHandler(({ url }) => {
       openOutside(url)
@@ -217,6 +227,50 @@ export function installSourceViewerGuards() {
       }
       contents.on('did-navigate', verify)
       contents.on('did-navigate-in-page', verify)
+    }
+  })
+}
+
+/**
+ * Read the captions the embedded YouTube player fetches for itself. Only /api/timedtext
+ * responses of YouTube viewers are read; the lines go to the window that shows the viewer.
+ */
+function tapYouTubeCaptions(contents) {
+  const dbg = contents.debugger
+  try {
+    dbg.attach('1.3')
+  } catch {
+    return
+  }
+  const pending = new Map()
+  dbg.on('message', async (_event, method, params) => {
+    if (method === 'Network.responseReceived') {
+      const info = timedtextInfo(params?.response?.url)
+      if (info && params.response.status === 200) pending.set(params.requestId, info)
+      return
+    }
+    if (method !== 'Network.loadingFinished' || !pending.has(params?.requestId)) return
+    const info = pending.get(params.requestId)
+    pending.delete(params.requestId)
+    try {
+      const result = await dbg.sendCommand('Network.getResponseBody', {
+        requestId: params.requestId
+      })
+      const body = result.base64Encoded
+        ? Buffer.from(result.body, 'base64').toString('utf8')
+        : result.body
+      const cues = parseJson3(body)
+      if (cues.length) contents.hostWebContents?.send('source-captions', { ...info, cues })
+    } catch {
+      // The player may drop a response before it is read; it asks again.
+    }
+  })
+  dbg.sendCommand('Network.enable').catch(() => {})
+  contents.once('destroyed', () => {
+    try {
+      dbg.detach()
+    } catch {
+      // Already gone with the page.
     }
   })
 }

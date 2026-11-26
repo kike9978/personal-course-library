@@ -107,6 +107,13 @@ import {
   upsertSource
 } from './services/learningStore.js'
 import {
+  deleteSourceCopy,
+  readSourceCaptions,
+  readSourceCopy,
+  saveSourceCaptions,
+  saveSourceCopy
+} from './services/sourceCopy.js'
+import {
   installSourceViewerGuards,
   instagramSessionStatus,
   signInToInstagram,
@@ -151,6 +158,7 @@ import {
 import { canonicalSourceUrl } from '../shared/sources.js'
 import {
   cacheSourceThumbnail,
+  checkSourceLink,
   removeSourceThumbnail,
   saveSourceCapture,
   sourceCapturePath,
@@ -921,6 +929,7 @@ function registerIpcHandlers() {
   ipcMain.handle('delete-source', async (_event, id) => {
     const result = deleteSource(id)
     if (result.removed?.thumbnailFile) await removeSourceThumbnail(result.removed.thumbnailFile)
+    if (result.removed) await deleteSourceCopy(id)
     for (const capture of result.removed?.captures || []) {
       const target = sourceCapturePath(capture.file)
       if (target) await fsPromises.rm(target, { force: true }).catch(() => {})
@@ -928,6 +937,49 @@ function registerIpcHandlers() {
     broadcastToWindows('sources-changed', { id })
     if (result.noteCount) broadcastToWindows('notes-changed', {})
     return { noteCount: result.noteCount, removed: Boolean(result.removed) }
+  })
+  ipcMain.handle('save-source-copy', async (_event, id) => {
+    const source = readSource(id)
+    if (!source) throw new Error('Fuente no encontrada')
+    const snapshot = await saveSourceCopy(source)
+    const saved = upsertSource({ id, snapshot })
+    broadcastToWindows('sources-changed', { id })
+    return saved
+  })
+  ipcMain.handle('read-source-copy', (_event, id) => readSourceCopy(id))
+  ipcMain.handle('read-source-captions', (_event, id) => readSourceCaptions(id))
+  ipcMain.handle('save-source-captions', async (_event, { id, captions } = {}) => {
+    if (!readSource(id)) throw new Error('Fuente no encontrada')
+    return saveSourceCaptions(id, captions || {})
+  })
+  // Check every saved link (or the given ids), three at a time. Nothing is deleted.
+  ipcMain.handle('check-source-links', async (_event, ids = null) => {
+    const wanted = Array.isArray(ids) && ids.length ? new Set(ids) : null
+    const queue = listSources().filter((source) => !wanted || wanted.has(source.id))
+    const summary = { checked: 0, gone: 0, unknown: 0, skipped: 0 }
+    const worker = async () => {
+      while (queue.length) {
+        const source = queue.shift()
+        const linkCheck = await checkSourceLink(source)
+        if (linkCheck.skipped) {
+          summary.skipped += 1
+          continue
+        }
+        summary.checked += 1
+        if (linkCheck.state === 'gone') summary.gone += 1
+        if (linkCheck.state === 'unknown') summary.unknown += 1
+        upsertSource({ id: source.id, linkCheck })
+      }
+    }
+    await Promise.all([worker(), worker(), worker()])
+    broadcastToWindows('sources-changed', {})
+    return summary
+  })
+  ipcMain.handle('delete-source-copy', async (_event, id) => {
+    await deleteSourceCopy(id)
+    const saved = upsertSource({ id, snapshot: null })
+    broadcastToWindows('sources-changed', { id })
+    return saved
   })
   ipcMain.handle('instagram-session-status', () => instagramSessionStatus())
   ipcMain.handle('instagram-sign-in', async () => {

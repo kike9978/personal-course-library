@@ -2,7 +2,7 @@
 
 **App:** Catálogo de cursos (personal-course-library)  
 **Date:** 2026-11-26  
-**Status:** Phases 1, 2, 2b and 2c built (2026-11-26). Phase 2c checked against a live Notion database. Phase 2b checked up to Instagram's login page; a real sign-in is left to the user. Phases 3–6 proposed.  
+**Status:** Phases 1, 2, 2b, 2c and 3 built (2026-11-26). Phase 2c checked against a live Notion database. Phase 2b checked up to Instagram's login page; a real sign-in is left to the user. Phases 4–6 proposed.  
 **Goal:** Let a YouTube video, an article, or an Instagram post become a place in the knowledge base, the same way a lesson is. Notes taken on a link are ordinary findings. They carry topics, show up in Anotaciones and the graph, sync to Notion, and feed flashcards.
 
 ---
@@ -335,6 +335,25 @@ Two fixes came out of it:
 - Instagram: **Adjuntar captura** stores an image with the source using the existing note attachment storage.
 - Flashcards: sources appear in the scope picker. A card made from a timestamped finding links back to that moment.
 - A link-check action marks sources whose URL now returns 404 or 410, without deleting them.
+
+**As built (2026-11-26)**
+
+- **Saved copy.** **Guardar copia** in the viewer footer opens the page in a hidden window on the public `sources` session, so no cookies are kept. A script in the page picks the main text from the real DOM, so pages built with JavaScript work too. The result is stored as `source-copies/<id>.json`, apart from the learning store.
+  - Only text is kept: headings, paragraphs, lists, quotes, code. Images are left out, so reading a copy never touches the network.
+  - Articles with a copy open on it, with a **Copia guardada / Página en vivo** switch.
+- **Link check.** **Comprobar enlaces** in the Fuentes toolbar checks every link, three at a time. YouTube goes through oEmbed, other pages directly.
+  - Only 404 and 410 count as gone. They show **Enlace roto** on the card and a notice in the viewer that points to the copy.
+  - Instagram is skipped, because anonymous requests always get a login page.
+  - Nothing is deleted.
+- **YouTube transcript.** The timedtext URLs listed in the watch page return empty bodies without a token only YouTube's own player can make.
+  - Instead, **Traer transcripción** turns captions on in the embedded player through its own API. It picks Spanish, then English, preferring human-made tracks.
+  - The main process reads that one response (`/api/timedtext` only) through the webview's debugger and saves it as `source-copies/<id>.captions.json`.
+  - A side pane lists the lines with search, highlights the current one, and seeks when one is chosen.
+- **Flashcards.** The deck picker has **Curso / Fuente / Tema**.
+  - **Fuente** uses a link's notes. For a video with a saved transcript, it also adds the transcript around each timed note, or the whole transcript if chosen.
+  - **Tema** uses every note with that topic, from courses and links.
+  - A card made from a link note keeps its note id. Opening it goes to the note in Anotaciones, and from there to the moment.
+- **Not done:** copies and transcripts are not uploaded to Notion. Uploading Instagram captures to Notion also comes later.
 
 **Done when**
 

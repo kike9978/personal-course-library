@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { app, net } from 'electron'
 import {
+  linkCheckState,
   canonicalSourceUrl,
   splitInstagramTitle,
   fallbackSourceTitle,
@@ -205,4 +206,35 @@ export async function saveSourceCapture(sourceId, filePath) {
   await fs.promises.mkdir(sourceCaptureDir(), { recursive: true })
   await fs.promises.copyFile(filePath, path.join(sourceCaptureDir(), name))
   return name
+}
+
+/**
+ * Does the page behind a link still exist? YouTube is asked through oEmbed (404 for a removed
+ * or private video), other pages directly. Instagram answers anonymous requests with a login
+ * page whatever the post's state, so it is not checked.
+ */
+export async function checkSourceLink(source) {
+  const checkedAt = Date.now()
+  if (source?.kind === 'instagram')
+    return { state: 'unknown', code: null, checkedAt, skipped: true }
+  let target = String(source?.url || '')
+  if (!/^https?:\/\//i.test(target)) return { state: 'unknown', code: null, checkedAt }
+  if (source.kind === 'youtube') {
+    const endpoint = new URL('https://www.youtube.com/oembed')
+    endpoint.searchParams.set('url', target)
+    endpoint.searchParams.set('format', 'json')
+    target = endpoint.href
+  }
+  try {
+    const response = await fetchWithTimeout(target, { accept: 'text/html,application/json,*/*' })
+    response.body?.cancel?.().catch?.(() => {})
+    // oEmbed answers 401/403 for videos that exist but cannot be embedded.
+    const code =
+      source.kind === 'youtube' && (response.status === 401 || response.status === 403)
+        ? 200
+        : response.status
+    return { state: linkCheckState(code), code, checkedAt }
+  } catch {
+    return { state: 'unknown', code: null, checkedAt }
+  }
 }

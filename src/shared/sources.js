@@ -188,6 +188,8 @@ export function normalizeSource(input = {}, existing = null) {
         ? pick('lastPositionSec')
         : null,
     lastOpenedAt: Number(pick('lastOpenedAt')) || null,
+    // Last link check: { state: 'ok' | 'gone' | 'unknown', code, checkedAt }. Per computer.
+    linkCheck: pick('linkCheck') ?? null,
     captures: Array.isArray(pick('captures'))
       ? pick('captures')
           .filter((item) => item && typeof item.file === 'string')
@@ -366,4 +368,14 @@ export function splitInstagramTitle(title) {
     .trim()
   const short = caption.length > 120 ? `${caption.slice(0, 119)}…` : caption
   return { author, title: short || `Publicación de ${author}` }
+}
+
+/**
+ * What a link check found. Only 404 and 410 mean the page is gone; anything else (a timeout,
+ * a 403 from a site that blocks scripts, a server error) says nothing about the page itself.
+ */
+export function linkCheckState(code) {
+  if (code === 404 || code === 410) return 'gone'
+  if (typeof code === 'number' && code >= 200 && code < 400) return 'ok'
+  return 'unknown'
 }

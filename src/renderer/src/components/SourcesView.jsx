@@ -13,6 +13,7 @@ import {
   Link2,
   Loader2,
   LogOut,
+  ShieldCheck,
   Pencil,
   RefreshCw,
   Search,
@@ -30,6 +31,7 @@ import { formatNoteTimestamp, noteTextTitle } from '../../../shared/knowledgeGra
 import { cn } from '../ui/cn'
 import {
   badgeNeutral,
+  badgeWarn,
   btnCompact,
   btnDanger,
   btnGhost,
@@ -125,6 +127,12 @@ function SourceCard({ source, selected, highlighted, onSelect }) {
           {source.title}
         </p>
         <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
+          {source.linkCheck?.state === 'gone' ? (
+            <span className={badgeWarn} title={`El enlace respondió ${source.linkCheck.code}`}>
+              Enlace roto
+            </span>
+          ) : null}
+          {source.snapshot ? <span className={badgeNeutral}>Copia</span> : null}
           {source.noteCount ? (
             <span className={badgeNeutral}>
               {source.noteCount} {source.noteCount === 1 ? 'nota' : 'notas'}
@@ -628,6 +636,22 @@ function SourcesView({ onNavigate, openTarget }) {
     window.api.instagramSessionStatus?.().then((status) => status && setInstagram(status))
     return window.api.onInstagramSessionChanged?.((status) => status && setInstagram(status))
   }, [])
+  const [checkingLinks, setCheckingLinks] = useState(false)
+  const checkLinks = async () => {
+    setCheckingLinks(true)
+    try {
+      const result = await window.api.checkSourceLinks()
+      const parts = [`${result.checked} comprobados`]
+      if (result.gone) parts.push(`${result.gone} ya no existen`)
+      if (result.unknown) parts.push(`${result.unknown} sin respuesta clara`)
+      if (result.skipped) parts.push(`${result.skipped} de Instagram sin comprobar`)
+      ;(result.gone ? toast : toast.success)(parts.join(' · '))
+    } catch (error) {
+      toast.error(error?.message || 'No se pudieron comprobar los enlaces')
+    } finally {
+      setCheckingLinks(false)
+    }
+  }
   const signOutOfInstagram = async () => {
     const ok = await askConfirm({
       title: 'Cerrar sesión de Instagram',
@@ -888,6 +912,20 @@ function SourcesView({ onNavigate, openTarget }) {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
+        <button
+          type="button"
+          className={cn(btnQuiet, btnCompact, 'shrink-0')}
+          disabled={checkingLinks || !sources.length}
+          title="Pregunta a cada página si sigue existiendo. No borra nada."
+          onClick={checkLinks}
+        >
+          {checkingLinks ? (
+            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+          ) : (
+            <ShieldCheck aria-hidden="true" className="size-3.5" />
+          )}
+          Comprobar enlaces
+        </button>
         {instagram.signedIn ? (
           <button
             type="button"

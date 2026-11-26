@@ -230,3 +230,73 @@ export async function notesSources(notes) {
   }
   return { sources: numberWithWindows(list), outline: '', emptyNotes: prepared.empty, windows }
 }
+
+const LINK_COURSE = 'Fuentes'
+
+/** A note on a saved link, shaped like a lesson note: "Fuentes" is the course, the link the lesson. */
+function linkNote(note, sourceTitle) {
+  return {
+    ...note,
+    coursePath: null,
+    lessonRelativePath: null,
+    courseTitle: LINK_COURSE,
+    lessonTitle: note.sourceTitle || sourceTitle || 'Enlace'
+  }
+}
+
+/**
+ * A deck from one saved link (Fuentes): its notes, and its saved YouTube transcript when
+ * there is one — whole, or only around timed notes when the notes lead.
+ */
+export async function loadLinkScopeSources({ sourceId, sourceTitle, useNotes, useTranscript }) {
+  const notes = useNotes ? (await window.api.listSourceNotes(sourceId)) || [] : []
+  const fromNotes = sourcesFromNotes(notes.map((note) => linkNote(note, sourceTitle)))
+  const captions = (await window.api.readSourceCaptions?.(sourceId)) || null
+  const cues = captions?.cues || []
+  const transcript = (chunks) =>
+    sourcesFromLesson({ course: LINK_COURSE, lesson: sourceTitle, chunks })
+
+  const raw = []
+  let windows = 0
+  for (const source of fromNotes.sources) {
+    raw.push(source)
+    if (useTranscript || !cues.length || typeof source.timeSec !== 'number') continue
+    const around = cues.filter(
+      (cue) =>
+        cue.end >= source.timeSec - WINDOW_BEFORE && cue.start <= source.timeSec + WINDOW_AFTER
+    )
+    if (!around.length) continue
+    const [windowSource] = transcript(transcriptChunks(around, { maxChars: 4000 }).slice(0, 1))
+    if (windowSource) {
+      raw.push({ ...windowSource, aroundNoteId: source.noteId })
+      windows += 1
+    }
+  }
+  if (useTranscript && cues.length) {
+    raw.push(...transcript(transcriptChunks(cues, { maxChars: CHUNK_CHARS })))
+  }
+  return {
+    windows,
+    sources: numberWithWindows(raw),
+    outline: '',
+    emptyNotes: fromNotes.empty,
+    missingSubtitles: useTranscript && !cues.length ? 1 : 0
+  }
+}
+
+/**
+ * A deck from one topic: every note that carries it, from courses and saved links alike.
+ * This is the one place courses and links meet, because a deck is made of notes.
+ */
+export async function loadTopicScopeSources({ topicId, courses = [] }) {
+  const titles = new Map((courses || []).map((course) => [course.path, course.title]))
+  const all = (await window.api.listAllNotes()) || []
+  const notes = all
+    .filter((note) => (note.topicIds || []).includes(topicId))
+    .map((note) =>
+      note.sourceId
+        ? linkNote(note, note.sourceTitle)
+        : { ...note, courseTitle: note.courseTitle || titles.get(note.coursePath) || '' }
+    )
+  return notesSources(notes)
+}

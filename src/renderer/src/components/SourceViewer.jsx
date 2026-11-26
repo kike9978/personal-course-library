@@ -1,9 +1,24 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { ExternalLink, ImagePlus, Loader2, LogIn, RotateCw, Trash2 } from 'lucide-react'
-import { instagramSessionViewer, sourceViewer } from '../../../shared/sources.js'
+import {
+  BookOpen,
+  Captions,
+  Download,
+  ExternalLink,
+  Globe,
+  ImagePlus,
+  Loader2,
+  LogIn,
+  RotateCw,
+  Trash2
+} from 'lucide-react'
+import { instagramSessionViewer, sourceViewer, youTubeVideoId } from '../../../shared/sources.js'
+import { cueIndexAt, pickCaptionTrack } from '../../../shared/captions.js'
+import { formatNoteTimestamp } from '../../../shared/knowledgeGraph.js'
 import { askConfirm } from '../utils/askConfirm'
 import { cn } from '../ui/cn'
+import { searchIcon, searchInput, segmented, segmentedItem } from '../ui/classes'
+import { Search } from 'lucide-react'
 import { btnCompact, btnGhost, btnQuiet, iconOnly, notice } from '../ui/classes'
 
 const POLL_MS = 1000
@@ -65,6 +80,180 @@ function withStart(src, sec, autoplay) {
   return url.href
 }
 
+function formatDate(value) {
+  try {
+    return new Date(value).toLocaleDateString('es', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    })
+  } catch {
+    return ''
+  }
+}
+
+/** A saved copy, read from disk and drawn with the app's own type. Nothing is fetched. */
+function ReaderView({ source }) {
+  const [copy, setCopy] = useState(undefined)
+  useEffect(() => {
+    let cancelled = false
+    window.api.readSourceCopy(source.id).then((data) => !cancelled && setCopy(data || null))
+    return () => {
+      cancelled = true
+    }
+  }, [source.id, source.snapshot?.capturedAt])
+  if (copy === undefined) {
+    return (
+      <div className="grid h-full place-items-center text-ink-faint">
+        <Loader2 aria-hidden="true" className="size-6 animate-spin" />
+      </div>
+    )
+  }
+  if (!copy) {
+    return (
+      <p className="m-0 p-6 text-center text-sm text-ink-soft">
+        No se encontró la copia guardada. Vuelve a guardarla desde la página en vivo.
+      </p>
+    )
+  }
+  return (
+    <article
+      lang={copy.lang || undefined}
+      className="mx-auto max-w-[42rem] px-6 py-8 text-base leading-relaxed text-ink"
+    >
+      <p className="m-0 mb-4 text-xs text-ink-faint">
+        Copia guardada el {formatDate(copy.capturedAt)} · {copy.wordCount} palabras · solo texto
+      </p>
+      <h1 className="m-0 mb-1 font-display text-2xl font-bold tracking-tight">
+        {copy.title || source.title}
+      </h1>
+      {copy.byline ? (
+        <p className="m-0 mb-6 text-sm text-ink-soft">{copy.byline}</p>
+      ) : (
+        <div className="mb-6" />
+      )}
+      {copy.blocks.map((block, index) => {
+        if (block.type === 'heading') {
+          const Tag = block.level <= 2 ? 'h2' : 'h3'
+          return (
+            <Tag
+              key={index}
+              className={cn(
+                'mt-7 mb-2 font-display font-semibold',
+                Tag === 'h2' ? 'text-xl' : 'text-lg'
+              )}
+            >
+              {block.text}
+            </Tag>
+          )
+        }
+        if (block.type === 'item') {
+          return (
+            <p
+              key={index}
+              className="my-1 pl-5 before:-ml-4 before:inline-block before:w-4 before:content-['•']"
+            >
+              {block.text}
+            </p>
+          )
+        }
+        if (block.type === 'quote') {
+          return (
+            <blockquote
+              key={index}
+              className="my-4 border-l-2 border-ink/15 pl-4 text-ink-soft italic"
+            >
+              {block.text}
+            </blockquote>
+          )
+        }
+        if (block.type === 'code') {
+          return (
+            <pre
+              key={index}
+              className="my-4 overflow-auto rounded-sm bg-ink/5 p-3 text-sm whitespace-pre-wrap"
+            >
+              {block.text}
+            </pre>
+          )
+        }
+        return (
+          <p key={index} className="my-3">
+            {block.text}
+          </p>
+        )
+      })}
+    </article>
+  )
+}
+
+/** Timed lines of a video. Choosing one seeks the player. */
+function Transcript({ captions, currentTime, onSeek }) {
+  const [query, setQuery] = useState('')
+  const listRef = useRef(null)
+  const cues = captions?.cues || []
+  const q = query.trim().toLowerCase()
+  const current = cueIndexAt(cues, currentTime)
+  const shown = q
+    ? cues
+        .map((cue, index) => ({ cue, index }))
+        .filter(({ cue }) => cue.text.toLowerCase().includes(q))
+    : cues.map((cue, index) => ({ cue, index }))
+
+  useEffect(() => {
+    if (q || current < 0) return
+    listRef.current
+      ?.querySelector(`[data-cue="${current}"]`)
+      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [current, q])
+
+  return (
+    <aside
+      aria-label="Transcripción"
+      className="flex w-[20rem] shrink-0 flex-col border-l border-ink/8 bg-surface max-[1100px]:w-[16rem]"
+    >
+      <div className="border-b border-ink/8 p-2">
+        <div className="relative">
+          <Search className={searchIcon} aria-hidden="true" />
+          <input
+            className={searchInput}
+            value={query}
+            placeholder="Buscar en la transcripción"
+            aria-label="Buscar en la transcripción"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+        <p className="m-0 mt-1.5 text-2xs text-ink-faint">
+          {captions.lang ? `${captions.lang}${captions.auto ? ' · automática' : ''} · ` : ''}
+          {cues.length} líneas · guardada en este equipo
+        </p>
+      </div>
+      <ol ref={listRef} className="m-0 min-h-0 flex-1 list-none overflow-auto p-1">
+        {shown.map(({ cue, index }) => (
+          <li key={index} data-cue={index}>
+            <button
+              type="button"
+              onClick={() => onSeek(cue.start)}
+              className={cn(
+                'flex w-full cursor-pointer gap-2 rounded-sm border-0 bg-transparent px-2 py-1 text-left text-sm text-ink hover:bg-cream',
+                index === current && !q && 'bg-coral-soft text-coral-deep hover:bg-coral-soft'
+              )}
+            >
+              <span className="shrink-0 pt-px text-2xs text-ink-faint tabular-nums">
+                {formatNoteTimestamp(cue.start)}
+              </span>
+              <span>{cue.text}</span>
+            </button>
+          </li>
+        ))}
+        {!shown.length ? (
+          <li className="px-2 py-3 text-sm text-ink-soft">Nada coincide con «{query}».</li>
+        ) : null}
+      </ol>
+    </aside>
+  )
+}
+
 function Captures({ source }) {
   const captures = source.captures || []
   if (!captures.length) return null
@@ -109,6 +298,33 @@ const SourceViewer = forwardRef(function SourceViewer(
   const sessionPlan = instagram?.signedIn ? instagramSessionViewer(source) : null
   const plan = sessionPlan || sourceViewer(source)
   const [expired, setExpired] = useState(false)
+  // Articles with a saved copy open on the copy; the live page is one click away.
+  const canCopy = plan.mode === 'page'
+  const gone = source.linkCheck?.state === 'gone'
+  const [reader, setReader] = useState(() => canCopy && Boolean(source.snapshot))
+  const [copying, setCopying] = useState(false)
+  const saveCopy = async () => {
+    setCopying(true)
+    try {
+      await window.api.saveSourceCopy(source.id)
+      setReader(true)
+      toast.success('Copia guardada')
+    } catch (error) {
+      toast.error(error?.message || 'No se pudo guardar la copia')
+    } finally {
+      setCopying(false)
+    }
+  }
+  const dropCopy = async () => {
+    const ok = await askConfirm({
+      title: 'Borrar copia',
+      message: 'Se borra el texto guardado de esta página. El enlace y sus notas se quedan.',
+      confirmLabel: 'Borrar'
+    })
+    if (!ok) return
+    await window.api.deleteSourceCopy(source.id)
+    setReader(false)
+  }
   const webviewRef = useRef(null)
   const [state, setState] = useState('loading')
   const [loginWall, setLoginWall] = useState(false)
@@ -118,6 +334,31 @@ const SourceViewer = forwardRef(function SourceViewer(
   )
   const lastSaved = useRef({ at: 0, time: null })
   const timeRef = useRef(startSec || 0)
+
+  // Transcript of a YouTube video: saved on disk once fetched, so it opens without the network.
+  const videoId = plan.mode === 'youtube' ? youTubeVideoId(source.url) : null
+  const [captions, setCaptions] = useState(null)
+  const [showTranscript, setShowTranscript] = useState(false)
+  const [captionsBusy, setCaptionsBusy] = useState(false)
+  const [currentTime, setCurrentTime] = useState(startSec || 0)
+  const captionsWaiter = useRef(null)
+  useEffect(() => {
+    if (!videoId) return undefined
+    let cancelled = false
+    window.api.readSourceCaptions(source.id).then((data) => {
+      if (!cancelled && data?.cues?.length) setCaptions(data)
+    })
+    const stop = window.api.onSourceCaptions?.((data) => {
+      if (data?.videoId !== videoId || !data.cues?.length) return
+      setCaptions(data)
+      window.api.saveSourceCaptions(source.id, data).catch(() => {})
+      captionsWaiter.current?.(data)
+    })
+    return () => {
+      cancelled = true
+      stop?.()
+    }
+  }, [videoId, source.id])
 
   const run = useCallback(async (script) => {
     const view = webviewRef.current
@@ -205,6 +446,7 @@ const SourceViewer = forwardRef(function SourceViewer(
       const info = await run(READ_VIDEO)
       if (cancelled || !info || info.ready === 0) return
       timeRef.current = info.time
+      setCurrentTime(info.time)
       onTime?.(info.time)
       const now = Date.now()
       const moved = Math.abs((lastSaved.current.time ?? -10) - info.time) >= 2
@@ -225,6 +467,54 @@ const SourceViewer = forwardRef(function SourceViewer(
       }
     }
   }, [plan.mode, state, run, onTime, source.id])
+
+  // Ask the player for captions; the main process reads the lines it fetches.
+  const requestCaptions = async () => {
+    if (captions) {
+      setShowTranscript((open) => !open)
+      return
+    }
+    setCaptionsBusy(true)
+    try {
+      let tracks = []
+      for (let attempt = 0; attempt < 8 && !tracks.length; attempt += 1) {
+        const result = await run(`(() => {
+          const p = document.getElementById('movie_player')
+          if (!p || !p.loadModule) return null
+          ${attempt === 2 ? 'p.playVideo && p.playVideo()' : ''}
+          p.loadModule('captions')
+          return (p.getOption('captions', 'tracklist') || []).map((t) => ({ languageCode: t.languageCode, kind: t.kind || '' }))
+        })()`)
+        tracks = Array.isArray(result) ? result : []
+        if (!tracks.length) await new Promise((resolve) => setTimeout(resolve, 800))
+      }
+      const track = pickCaptionTrack(tracks)
+      if (!track) {
+        toast('Este video no tiene subtítulos')
+        return
+      }
+      const arrived = new Promise((resolve) => {
+        captionsWaiter.current = resolve
+        setTimeout(() => resolve(null), 10000)
+      })
+      await run(`(() => {
+        const p = document.getElementById('movie_player')
+        p.setOption('captions', 'track', ${JSON.stringify(track)})
+        return true
+      })()`)
+      const data = await arrived
+      captionsWaiter.current = null
+      if (!data) {
+        toast.error('YouTube no envió los subtítulos. Dale a reproducir y vuelve a intentarlo.')
+        return
+      }
+      setShowTranscript(true)
+      // The lines are in the pane now; take them off the video.
+      run(`document.getElementById('movie_player')?.unloadModule?.('captions')`)
+    } finally {
+      setCaptionsBusy(false)
+    }
+  }
 
   const addCapture = async () => {
     try {
@@ -267,6 +557,75 @@ const SourceViewer = forwardRef(function SourceViewer(
           Reintentar
         </button>
       ) : null}
+      {videoId ? (
+        <button
+          type="button"
+          className={cn(btnQuiet, btnCompact)}
+          aria-pressed={showTranscript}
+          disabled={captionsBusy || (!captions && state !== 'ready')}
+          onClick={requestCaptions}
+        >
+          {captionsBusy ? (
+            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+          ) : (
+            <Captions aria-hidden="true" className="size-3.5" />
+          )}
+          {captions
+            ? showTranscript
+              ? 'Ocultar transcripción'
+              : 'Transcripción'
+            : 'Traer transcripción'}
+        </button>
+      ) : null}
+      {canCopy && source.snapshot ? (
+        <div className={cn(segmented, 'h-7')} role="group" aria-label="Qué mostrar">
+          <button
+            type="button"
+            className={cn(segmentedItem, 'text-xs')}
+            aria-pressed={reader}
+            onClick={() => setReader(true)}
+          >
+            <BookOpen aria-hidden="true" />
+            Copia guardada
+          </button>
+          <button
+            type="button"
+            className={cn(segmentedItem, 'text-xs')}
+            aria-pressed={!reader}
+            onClick={() => setReader(false)}
+          >
+            <Globe aria-hidden="true" />
+            Página en vivo
+          </button>
+        </div>
+      ) : null}
+      {canCopy ? (
+        <button
+          type="button"
+          className={cn(btnQuiet, btnCompact)}
+          onClick={saveCopy}
+          disabled={copying}
+          title="Guarda el texto de la página para leerlo aunque el enlace deje de funcionar"
+        >
+          {copying ? (
+            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+          ) : (
+            <Download aria-hidden="true" className="size-3.5" />
+          )}
+          {source.snapshot ? 'Actualizar copia' : 'Guardar copia'}
+        </button>
+      ) : null}
+      {canCopy && source.snapshot ? (
+        <button
+          type="button"
+          className={cn(btnQuiet, btnCompact)}
+          onClick={dropCopy}
+          aria-label="Borrar copia"
+          title="Borrar copia"
+        >
+          <Trash2 aria-hidden="true" className="size-3.5" />
+        </button>
+      ) : null}
       {source.kind === 'instagram' ? (
         <button type="button" className={cn(btnQuiet, btnCompact)} onClick={addCapture}>
           <ImagePlus aria-hidden="true" className="size-3.5" />
@@ -282,6 +641,29 @@ const SourceViewer = forwardRef(function SourceViewer(
       </span>
     </div>
   )
+
+  const goneNotice = gone ? (
+    <div className={cn(notice, 'rounded-none border-x-0 border-t-0')}>
+      <p className="m-0 text-sm">
+        Este enlace ya no existe (respondió {source.linkCheck.code}).{' '}
+        {source.snapshot
+          ? 'Lo que ves es la copia guardada.'
+          : 'No hay copia guardada; tus notas y capturas siguen aquí.'}
+      </p>
+    </div>
+  ) : null
+
+  if (canCopy && reader && source.snapshot) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        {goneNotice}
+        <div className="min-h-0 flex-1 overflow-auto bg-surface">
+          <ReaderView source={source} />
+        </div>
+        {footer}
+      </div>
+    )
+  }
 
   if (blocked) {
     return (
@@ -322,45 +704,59 @@ const SourceViewer = forwardRef(function SourceViewer(
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div
-        className={cn(
-          'relative min-h-0 flex-1',
-          plan.mode === 'instagram' || plan.mode === 'instagram-session'
-            ? 'bg-cream-deep'
-            : 'bg-ink/90'
-        )}
-      >
-        {/* Instagram's embed is laid out for about 540px; wider, it only gets blurrier. */}
+      {goneNotice}
+      <div className="flex min-h-0 flex-1">
         <div
           className={cn(
-            'absolute inset-y-0',
-            plan.mode === 'instagram'
-              ? 'left-1/2 w-full max-w-[34rem] -translate-x-1/2'
-              : 'inset-x-0'
+            'relative min-h-0 min-w-0 flex-1',
+            plan.mode === 'instagram' || plan.mode === 'instagram-session'
+              ? 'bg-cream-deep'
+              : 'bg-ink/90'
           )}
         >
-          <webview
-            key={`${src}-${reloadKey}`}
-            ref={webviewRef}
-            src={src}
-            // eslint-disable-next-line react/no-unknown-property -- Electron <webview> attribute
-            partition={plan.partition || 'sources'}
-            {...(plan.referrer ? { httpreferrer: plan.referrer } : {})}
-            className="absolute inset-0 h-full w-full"
-            style={{ display: 'flex' }}
-          />
+          {/* Instagram's embed is laid out for about 540px; wider, it only gets blurrier. */}
+          <div
+            className={cn(
+              'absolute inset-y-0',
+              plan.mode === 'instagram'
+                ? 'left-1/2 w-full max-w-[34rem] -translate-x-1/2'
+                : 'inset-x-0'
+            )}
+          >
+            <webview
+              key={`${src}-${reloadKey}`}
+              ref={webviewRef}
+              src={src}
+              // eslint-disable-next-line react/no-unknown-property -- Electron <webview> attribute
+              partition={plan.partition || 'sources'}
+              {...(plan.referrer ? { httpreferrer: plan.referrer } : {})}
+              className="absolute inset-0 h-full w-full"
+              style={{ display: 'flex' }}
+            />
+          </div>
+          {state === 'loading' ? (
+            <div className="pointer-events-none absolute inset-0 grid place-items-center text-white/80">
+              <Loader2 aria-hidden="true" className="size-6 animate-spin" />
+            </div>
+          ) : null}
+          {state === 'failed' ? (
+            <div className="absolute inset-0 grid place-items-center bg-cream-deep p-6">
+              <p className="m-0 max-w-[28rem] text-center text-sm text-ink-soft">
+                No se pudo cargar aquí. Reintenta o abre el enlace en el navegador.
+              </p>
+            </div>
+          ) : null}
         </div>
-        {state === 'loading' ? (
-          <div className="pointer-events-none absolute inset-0 grid place-items-center text-white/80">
-            <Loader2 aria-hidden="true" className="size-6 animate-spin" />
-          </div>
-        ) : null}
-        {state === 'failed' ? (
-          <div className="absolute inset-0 grid place-items-center bg-cream-deep p-6">
-            <p className="m-0 max-w-[28rem] text-center text-sm text-ink-soft">
-              No se pudo cargar aquí. Reintenta o abre el enlace en el navegador.
-            </p>
-          </div>
+        {showTranscript && captions ? (
+          <Transcript
+            captions={captions}
+            currentTime={currentTime}
+            onSeek={async (sec) => {
+              const done = await run(seekScript(sec))
+              if (!done) setSrc(withStart(plan.src, sec, true))
+              setCurrentTime(sec)
+            }}
+          />
         ) : null}
       </div>
       {noInlineVideo ? (

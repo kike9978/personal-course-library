@@ -91,11 +91,152 @@ function SectionRows({ section, depth, picked, toggle, disabled }) {
   )
 }
 
+const KINDS = [
+  { id: 'course', label: 'Curso' },
+  { id: 'source', label: 'Fuente' },
+  { id: 'topic', label: 'Tema' }
+]
+
+/** A saved link (Fuentes) as the deck's source: its notes and, for videos, its transcript. */
+function LinkScope({ value, onChange, disabled }) {
+  const [sources, setSources] = useState([])
+  const [hasTranscript, setHasTranscript] = useState(false)
+  useEffect(() => {
+    window.api.listSources?.().then((list) => setSources(list || []))
+  }, [])
+  useEffect(() => {
+    if (!value.sourceId) return setHasTranscript(false)
+    let cancelled = false
+    window.api.readSourceCaptions?.(value.sourceId).then((data) => {
+      if (!cancelled) setHasTranscript(Boolean(data?.cues?.length))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [value.sourceId])
+  const usable = sources.filter((source) => source.noteCount || source.kind === 'youtube')
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="flex flex-col gap-1">
+        <span className={small}>Fuente</span>
+        <select
+          className="rounded-md border border-ink/10 bg-surface px-3 py-[0.5rem] text-base"
+          value={value.sourceId || ''}
+          disabled={disabled}
+          onChange={(event) => {
+            const source = sources.find((item) => item.id === event.target.value)
+            onChange({ sourceId: event.target.value, sourceTitle: source?.title || '' })
+          }}
+        >
+          <option value="">Elige una fuente…</option>
+          {usable.map((source) => (
+            <option key={source.id} value={source.id}>
+              {source.title}
+              {source.noteCount ? ` · ${source.noteCount} notas` : ''}
+            </option>
+          ))}
+        </select>
+      </label>
+      {value.sourceId ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              className="accent-coral"
+              checked={value.useNotes}
+              disabled={disabled}
+              onChange={(event) => onChange({ useNotes: event.target.checked })}
+            />
+            Mis notas
+          </label>
+          <label className={cn('flex items-center gap-2', !hasTranscript && 'opacity-50')}>
+            <input
+              type="checkbox"
+              className="accent-coral"
+              checked={value.useSubtitles && hasTranscript}
+              disabled={disabled || !hasTranscript}
+              onChange={(event) => onChange({ useSubtitles: event.target.checked })}
+            />
+            Transcripción completa
+            {!hasTranscript ? ' (tráela desde el video en Fuentes)' : ''}
+          </label>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/** A topic as the deck's source: every note with it, from courses and links. */
+function TopicScope({ value, onChange, disabled }) {
+  const [topics, setTopics] = useState([])
+  useEffect(() => {
+    window.api.listTopics?.().then((list) => setTopics(list || []))
+  }, [])
+  return (
+    <label className="flex flex-col gap-1">
+      <span className={small}>Tema</span>
+      <select
+        className="rounded-md border border-ink/10 bg-surface px-3 py-[0.5rem] text-base"
+        value={value.topicId || ''}
+        disabled={disabled}
+        onChange={(event) => {
+          const topic = topics.find((item) => item.id === event.target.value)
+          onChange({ topicId: event.target.value, topicTitle: topic?.title || '' })
+        }}
+      >
+        <option value="">Elige un tema…</option>
+        {topics.map((topic) => (
+          <option key={topic.id} value={topic.id}>
+            {topic.title}
+          </option>
+        ))}
+      </select>
+      <span className="text-xs text-ink-soft">
+        Entran las notas con este tema, de cursos y de fuentes.
+      </span>
+    </label>
+  )
+}
+
 /**
  * Choose what a deck is made from: a course, its sections or lessons,
- * and whether to use the notes, the subtitles, or both.
+ * and whether to use the notes, the subtitles, or both. Or a saved link, or a topic.
  */
-function ScopePicker({ courses, value, onChange, disabled }) {
+function ScopePicker(props) {
+  const { value, onChange, disabled } = props
+  const kind = value.scopeKind || 'course'
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        className="inline-flex gap-1 self-start rounded-md border border-ink/10 bg-surface p-1"
+        role="group"
+        aria-label="De dónde salen las tarjetas"
+      >
+        {KINDS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            disabled={disabled}
+            aria-pressed={kind === item.id}
+            className="cursor-pointer rounded-sm border-0 bg-transparent px-3 py-1 text-sm font-medium text-ink-soft aria-pressed:bg-coral-soft aria-pressed:text-coral-deep"
+            onClick={() => onChange({ scopeKind: item.id })}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {kind === 'source' ? (
+        <LinkScope value={value} onChange={onChange} disabled={disabled} />
+      ) : kind === 'topic' ? (
+        <TopicScope value={value} onChange={onChange} disabled={disabled} />
+      ) : (
+        <CourseScope {...props} />
+      )}
+    </div>
+  )
+}
+
+function CourseScope({ courses, value, onChange, disabled }) {
   const [tree, setTree] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')

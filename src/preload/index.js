@@ -57,6 +57,18 @@ const api = {
   refreshSource: (id) => ipcRenderer.invoke('refresh-source', id),
   deleteSource: (id) => ipcRenderer.invoke('delete-source', id),
   openSourceUrl: (id) => ipcRenderer.invoke('open-source-url', id),
+  saveSourceCopy: (id) => ipcRenderer.invoke('save-source-copy', id),
+  checkSourceLinks: (ids) => ipcRenderer.invoke('check-source-links', ids || null),
+  readSourceCaptions: (id) => ipcRenderer.invoke('read-source-captions', id),
+  saveSourceCaptions: (id, captions) =>
+    ipcRenderer.invoke('save-source-captions', { id, captions }),
+  onSourceCaptions: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('source-captions', listener)
+    return () => ipcRenderer.removeListener('source-captions', listener)
+  },
+  readSourceCopy: (id) => ipcRenderer.invoke('read-source-copy', id),
+  deleteSourceCopy: (id) => ipcRenderer.invoke('delete-source-copy', id),
   instagramSessionStatus: () => ipcRenderer.invoke('instagram-session-status'),
   instagramSignIn: () => ipcRenderer.invoke('instagram-sign-in'),
   instagramSignOut: () => ipcRenderer.invoke('instagram-sign-out'),
