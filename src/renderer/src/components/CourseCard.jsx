@@ -283,12 +283,12 @@ function CourseCard({
             onError={onError}
           />
           {showLearningMeta &&
-          typeof course.learning?.percent === 'number' &&
+          course.learning?.percent > 0 &&
           course.learning.playableCount > 0 ? (
             <span className="ml-auto text-xs font-semibold text-teal tabular-nums">{course.learning.percent}%</span>
           ) : null}
         </div>
-        {showLearningMeta && course.learning?.playableCount > 0 ? (
+        {showLearningMeta && course.learning?.playableCount > 0 && course.learning.percent > 0 ? (
           <div className="h-1 overflow-hidden rounded-full bg-ink/8" aria-hidden="true">
             <div
               className="h-full rounded-[inherit] bg-teal"

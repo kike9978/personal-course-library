@@ -1,3 +1,26 @@
+import {
+  Bold as BoldIcon,
+  Check as CheckIcon,
+  Code as CodeIcon,
+  Heading2 as Heading2Icon,
+  Heading3 as Heading3Icon,
+  ImagePlus as ImagePlusIcon,
+  Italic as ItalicIcon,
+  Link as LinkIcon,
+  List as ListIcon,
+  ListChecks as ListChecksIcon,
+  ListOrdered as ListOrderedIcon,
+  Minus as MinusIcon,
+  PenTool as PenToolIcon,
+  Quote as QuoteIcon,
+  SquareCode as SquareCodeIcon,
+  Strikethrough as StrikethroughIcon,
+  Table2 as Table2Icon,
+  Type as TypeIcon,
+  Underline as UnderlineIcon,
+  Unlink as UnlinkIcon,
+  X as XIcon,
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin'
@@ -188,16 +211,15 @@ const theme = {
 }
 
 const toolbarBtn =
-  'h-7 min-w-7 cursor-pointer rounded-sm border border-transparent bg-transparent px-[0.4rem] text-xs font-semibold text-ink-soft hover:border-ink/10 hover:text-ink'
-const toolbarBtnOn =
-  'border-coral bg-coral/8 text-coral-deep hover:border-coral hover:text-coral-deep'
+  'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-xs border-0 bg-transparent p-0 text-ink-soft transition-colors duration-150 hover:bg-ink/6 hover:text-ink [&_svg]:size-4'
+const toolbarBtnOn = 'bg-coral-soft text-coral-deep hover:bg-coral-soft hover:text-coral-deep'
 
 function toolBtn(active) {
   return cn(toolbarBtn, active && toolbarBtnOn)
 }
 
 const linkInputClass =
-  'h-7 min-w-0 flex-1 rounded-sm border border-ink/10 bg-cream px-[0.45rem] text-xs font-medium text-ink outline-none focus:border-coral'
+  'h-7 min-w-0 flex-1 rounded-xs border border-ink/12 bg-surface px-2 text-xs text-ink outline-none focus:border-coral/60 focus:shadow-focus'
 
 const editorNodes = [
   HeadingNode,
@@ -673,7 +695,7 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
   return (
     <div
       className={cn(
-        'flex flex-wrap gap-[0.2rem] border-b border-ink/10 bg-surface px-[0.4rem] py-[0.35rem]',
+        'flex flex-wrap items-center gap-0.5 border-b border-ink/8 bg-surface px-1.5 py-1',
         variant === 'document' && 'mb-2 bg-transparent',
         compact && !toolsOpen && 'justify-end px-[0.3rem] py-[0.2rem]'
       )}
@@ -690,7 +712,7 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
           aria-expanded={toolsOpen}
           aria-label="Mostrar formato"
         >
-          Aa
+          <TypeIcon aria-hidden="true" />
         </button>
       ) : null}
       {compact && !toolsOpen ? null : (
@@ -701,9 +723,10 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => formatText('bold')}
         title="Negrita"
+        aria-label="Negrita"
         aria-pressed={formats.bold}
       >
-        B
+        <BoldIcon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -711,9 +734,10 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => formatText('italic')}
         title="Cursiva"
+        aria-label="Cursiva"
         aria-pressed={formats.italic}
       >
-        I
+        <ItalicIcon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -721,9 +745,10 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => formatText('underline')}
         title="Subrayado"
+        aria-label="Subrayado"
         aria-pressed={formats.underline}
       >
-        U
+        <UnderlineIcon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -731,9 +756,10 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => formatText('strikethrough')}
         title="Tachado"
+        aria-label="Tachado"
         aria-pressed={formats.strikethrough}
       >
-        S
+        <StrikethroughIcon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -741,20 +767,22 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => formatText('code')}
         title="Código en línea"
+        aria-label="Código en línea"
         aria-pressed={formats.code}
       >
-        {'</>'}
+        <CodeIcon aria-hidden="true" />
       </button>
-      <span className="mx-[0.2rem] w-px self-stretch bg-ink/10" aria-hidden="true" />
+      <span className="mx-1 h-4 w-px bg-ink/10" aria-hidden="true" />
       <button
         type="button"
         className={toolBtn(formats.block === 'h2')}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setBlock('h2')}
         title="Título"
+        aria-label="Título"
         aria-pressed={formats.block === 'h2'}
       >
-        H2
+        <Heading2Icon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -762,9 +790,10 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setBlock('h3')}
         title="Subtítulo"
+        aria-label="Subtítulo"
         aria-pressed={formats.block === 'h3'}
       >
-        H3
+        <Heading3Icon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -772,9 +801,10 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setBlock('quote')}
         title="Cita"
+        aria-label="Cita"
         aria-pressed={formats.block === 'quote'}
       >
-        “ ”
+        <QuoteIcon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -782,20 +812,22 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setBlock('code')}
         title="Bloque de código"
+        aria-label="Bloque de código"
         aria-pressed={formats.block === 'code'}
       >
-        Código
+        <SquareCodeIcon aria-hidden="true" />
       </button>
-      <span className="mx-[0.2rem] w-px self-stretch bg-ink/10" aria-hidden="true" />
+      <span className="mx-1 h-4 w-px bg-ink/10" aria-hidden="true" />
       <button
         type="button"
         className={toolBtn(formats.block === 'ul')}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => toggleList('ul')}
         title="Lista"
+        aria-label="Lista"
         aria-pressed={formats.block === 'ul'}
       >
-        •
+        <ListIcon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -803,9 +835,10 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => toggleList('ol')}
         title="Lista numerada"
+        aria-label="Lista numerada"
         aria-pressed={formats.block === 'ol'}
       >
-        1.
+        <ListOrderedIcon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -813,19 +846,21 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => toggleList('check')}
         title="Lista de tareas"
+        aria-label="Lista de tareas"
         aria-pressed={formats.block === 'check'}
       >
-        ☐
+        <ListChecksIcon aria-hidden="true" />
       </button>
-      <span className="mx-[0.2rem] w-px self-stretch bg-ink/10" aria-hidden="true" />
+      <span className="mx-1 h-4 w-px bg-ink/10" aria-hidden="true" />
       <button
         type="button"
         className={toolBtn(false)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={insertHr}
         title="Separador"
+        aria-label="Separador"
       >
-        ―
+        <MinusIcon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -833,9 +868,10 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => (linkOpen ? setLinkOpen(false) : openLinkEditor())}
         title="Enlace"
+        aria-label="Enlace"
         aria-pressed={formats.link || linkOpen}
       >
-        Enlace
+        <LinkIcon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -843,8 +879,9 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={insertImage}
         title="Adjuntar imagen"
+        aria-label="Adjuntar imagen"
       >
-        Imagen
+        <ImagePlusIcon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -852,8 +889,9 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={insertExcalidraw}
         title="Dibujo Excalidraw"
+        aria-label="Dibujo Excalidraw"
       >
-        Dibujo
+        <PenToolIcon aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -861,8 +899,9 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={insertTable}
         title="Insertar tabla"
+        aria-label="Insertar tabla"
       >
-        Tabla
+        <Table2Icon aria-hidden="true" />
       </button>
         </>
       )}
@@ -886,15 +925,15 @@ function ToolbarPlugin({ compact = false, variant = 'compact' }) {
             aria-label="URL del enlace"
           />
           <button type="submit" className={toolBtn(false)} title="Aplicar enlace">
-            OK
+            <CheckIcon aria-hidden="true" />
           </button>
           {formats.link ? (
             <button type="button" className={toolBtn(false)} onClick={removeLink} title="Quitar enlace">
-              Quitar
+              <UnlinkIcon aria-hidden="true" />
             </button>
           ) : null}
           <button type="button" className={toolBtn(false)} onClick={() => setLinkOpen(false)} title="Cancelar">
-            ✕
+            <XIcon aria-hidden="true" />
           </button>
         </form>
       ) : null}

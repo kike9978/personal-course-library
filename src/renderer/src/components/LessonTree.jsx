@@ -12,6 +12,7 @@ import {
   Image,
   Music,
   PanelLeftOpen,
+  Plus,
   Play,
   X
 } from 'lucide-react'
@@ -26,7 +27,7 @@ import {
 } from '../../../shared/courseTree.js'
 import { statusLabel } from './ProjectPanel'
 import { cn } from '../ui/cn'
-import { btnGhost } from '../ui/classes'
+import { btnCompact, btnGhost, btnQuiet } from '../ui/classes'
 
 const focusRing =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral'
@@ -71,7 +72,7 @@ function sectionClass({ nested, dense, bar, open, className }) {
     dense &&
       !nested &&
       !bar &&
-      'm-0 rounded-md border border-ink/10 bg-surface px-[0.15rem] pt-[0.12rem] pb-[0.2rem]',
+      'm-0 border-b border-ink/6 px-0.5 pt-1 pb-1.5 last:border-b-0',
     dense &&
       nested &&
       !bar &&
@@ -81,14 +82,14 @@ function sectionClass({ nested, dense, bar, open, className }) {
       'mt-0 mr-0 mb-0 ml-[0.8rem] border-b-0 border-l-2 border-ink/18 bg-surface pl-0',
     bar && '[&>div>ul]:gap-0',
     className,
-    loose && 'border-dashed bg-transparent'
+    loose && 'bg-transparent'
   )
 }
 
 function sectionHeadClass({ bar, nested }) {
   return cn(
     'm-0 flex min-w-0 items-center',
-    bar && !nested && 'bg-ink/5 hover:bg-ink/8'
+    bar && !nested && 'border-t border-ink/6 bg-surface hover:bg-ink/[0.025]'
   )
 }
 
@@ -105,7 +106,7 @@ function sectionToggleClass({ nested, dense, bar }) {
       !bar &&
       'mb-0 px-[var(--ann-pad-x)] py-[0.16rem] text-xs font-semibold tracking-normal text-ink-soft normal-case',
     bar &&
-      'm-0 items-start gap-3 rounded-none bg-ink/5 px-[0.95rem] py-[0.85rem] text-md font-semibold normal-case tracking-normal text-ink hover:bg-ink/8 hover:text-ink',
+      'm-0 items-start gap-3 rounded-none bg-transparent px-4 py-3 text-sm font-semibold normal-case tracking-normal text-ink hover:bg-ink/[0.025] hover:text-ink',
     bar && !nested && 'bg-transparent hover:bg-transparent hover:text-ink',
     bar &&
       nested &&
@@ -116,7 +117,7 @@ function sectionToggleClass({ nested, dense, bar }) {
 function sectionChevronClass({ bar, nested, dense, open }) {
   return cn(
     'shrink-0 transition-transform duration-150 ease-pop',
-    bar ? 'mt-[0.15rem] h-[1.15rem] w-[1.15rem] text-ink-soft' : 'h-[0.65rem] w-[0.65rem]',
+    bar ? 'mt-0.5 size-4 text-ink-faint' : 'h-[0.65rem] w-[0.65rem]',
     bar && nested && 'h-[0.95rem] w-[0.95rem]',
     dense && !bar && 'mt-0 size-[var(--ann-chevron)]',
     open && (bar ? 'rotate-180' : 'rotate-90')
@@ -136,7 +137,7 @@ const iconBtnQuiet =
   'inline-flex h-[1.85rem] w-[1.85rem] cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-ink-soft hover:bg-ink/6 hover:text-ink'
 
 const pillBtn =
-  'relative inline-flex max-w-[11rem] cursor-pointer items-center gap-[0.3rem] rounded-full border-[1.5px] border-coral bg-surface px-[0.55rem] py-[0.22rem] text-xs leading-none font-semibold text-coral-deep hover:bg-coral/10'
+  'relative inline-flex max-w-[11rem] cursor-pointer items-center gap-1 rounded-full border border-coral/40 bg-surface px-2 py-1 text-xs leading-none font-medium text-coral-deep hover:bg-coral/10'
 
 const KIND_ICON = {
   doc: FileText,
@@ -648,8 +649,8 @@ function LessonTree({
       hidden={collapsed}
       ref={treeRef}
     >
-      <div className="sticky top-0 z-[2] bg-surface pb-[0.35rem]">
-        <div className="static z-[1] flex items-center justify-between gap-3 bg-surface px-[0.95rem] pt-[0.9rem] pb-[0.35rem]">
+      <div className="sticky top-0 z-[2] bg-surface pb-3">
+        <div className="static z-[1] flex items-center justify-between gap-3 bg-surface px-4 pt-3.5 pb-2">
           <div className="min-w-0 flex-1">
             <h2
               className="m-0 overflow-hidden font-display text-md font-semibold text-ellipsis whitespace-nowrap"
@@ -661,11 +662,12 @@ function LessonTree({
           <div className="flex shrink-0 items-center gap-[0.15rem]">
             <button
               type="button"
-              className="cursor-pointer rounded-sm border-0 bg-transparent px-[0.35rem] py-[0.3rem] text-xs font-semibold text-coral-deep hover:bg-coral/8"
+              className={cn(btnQuiet, btnCompact, 'h-7 px-2 text-coral-deep enabled:hover:bg-coral-soft enabled:hover:text-coral-deep')}
               onClick={() => onAddProject?.()}
               title="Añadir proyecto virtual"
             >
-              + Proyecto
+              <Plus size={14} aria-hidden="true" />
+              Proyecto
             </button>
             {onToggleCollapsed ? (
               <button
@@ -682,24 +684,26 @@ function LessonTree({
           </div>
         </div>
         {playableCount > 0 ? (
-          <div
-            className="mx-3 mt-[0.35rem] mb-[0.15rem] flex items-center gap-3 rounded-md border border-ink/10 bg-cream px-[0.8rem] py-[0.7rem]"
-            style={{ '--goal': `${Math.round((completedCount / playableCount) * 100)}%` }}
-          >
-            <div className="min-w-0 flex-1">
-              <strong className="block text-base font-semibold">
-                Progreso · {completedCount}/{playableCount}
-              </strong>
-              <p className="mt-[0.2rem] text-sm leading-[1.35] text-ink-soft">
-                {completedCount} de {playableCount}{' '}
-                {playableCount === 1 ? 'lección completada' : 'lecciones completadas'}.
-              </p>
+          <div className="mx-4 mt-1 mb-1 flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between gap-2 text-xs">
+              <span className="font-medium text-ink-soft">Progreso</span>
+              <span className="text-ink-soft tabular-nums">
+                <strong className="font-semibold text-ink">{completedCount}</strong> /{' '}
+                {playableCount} lecciones
+              </span>
             </div>
             <div
-              className="grid size-[2.35rem] shrink-0 place-items-center rounded-full bg-[conic-gradient(var(--color-teal)_var(--goal,0%),rgba(61,122,122,0.18)_0)]"
-              aria-hidden="true"
+              className="h-1.5 overflow-hidden rounded-full bg-ink/8"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={playableCount}
+              aria-valuenow={completedCount}
+              aria-label="Lecciones completadas"
             >
-              <span className="size-[1.65rem] rounded-full bg-cream" />
+              <div
+                className="h-full rounded-full bg-teal transition-[width] duration-300 ease-pop"
+                style={{ width: `${Math.round((completedCount / playableCount) * 100)}%` }}
+              />
             </div>
           </div>
         ) : null}
@@ -796,11 +800,12 @@ function LessonRow({
     <li className="flex flex-col gap-[0.15rem]">
       <div
         className={cn(
-          'relative grid items-start gap-x-[0.65rem] px-[0.9rem] py-[0.7rem] hover:bg-ink/4',
+          'relative grid items-start gap-x-2.5 px-4 py-2.5 transition-colors duration-100 hover:bg-ink/[0.03]',
           linked.length > 0 || sidecars.length > 0
             ? 'grid-cols-[auto_minmax(0,1fr)_auto]'
             : 'grid-cols-[auto_minmax(0,1fr)]',
-          isActive && 'is-active bg-coral/10 hover:bg-coral/10'
+          isActive &&
+            'is-active bg-coral-soft shadow-[inset_3px_0_0_var(--color-coral)] hover:bg-coral-soft'
         )}
       >
         <CheckControl

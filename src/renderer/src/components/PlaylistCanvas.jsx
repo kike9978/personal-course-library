@@ -52,7 +52,7 @@ import {
   segmented,
   segmentedItem
 } from '../ui/classes'
-import { Plus, Search } from 'lucide-react'
+import { ArrowUpRight, ChevronDown, Play, Plus, Search, X } from 'lucide-react'
 import { MAX_NESTED, settleNesting } from '../../../shared/playlistNest.js'
 import { applyCoursePick, collectExportCoursePaths } from '../../../shared/courseExportSelection.js'
 import { courseCatalog, sameFolder } from '../../../shared/courseFolderMatch.js'
@@ -91,13 +91,13 @@ import {
 const BoardActions = createContext(null)
 
 const frameIcon =
-  'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-sm border border-ink/10 bg-surface p-0 text-ink hover:shadow-lift [&_svg]:transition-transform [&_svg]:duration-150 [&_svg]:ease-pop [&.is-collapsed_svg]:-rotate-90'
+  'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-ink-soft transition-colors duration-150 hover:bg-ink/6 hover:text-ink [&_svg]:size-4 [&_svg]:transition-transform [&_svg]:duration-150 [&_svg]:ease-pop [&.is-collapsed_svg]:-rotate-90'
 const frame =
-  'relative flex h-full w-full flex-col rounded-lg border border-ink/10 bg-surface shadow-[inset_3px_0_0_var(--color-coral),var(--shadow-card)]'
+  'relative flex h-full w-full flex-col rounded-lg border border-ink/8 bg-surface/95 shadow-card backdrop-blur-sm'
 const titlePill =
   'm-0 ml-[0.4rem] block w-max max-w-[min(64rem,72vw)] cursor-grab overflow-hidden rounded-full border border-ink/10 bg-surface px-[0.6rem] py-[0.16rem] font-display text-base leading-[1.2] font-semibold text-ellipsis whitespace-nowrap text-ink shadow-lift select-none [field-sizing:content] focus:cursor-text focus:shadow-ring focus:outline-none focus:select-text'
 const courseCard =
-  'relative flex h-full items-center gap-2 rounded-md border border-ink/10 bg-surface py-[0.35rem] pr-[0.4rem] pl-2 shadow-card cursor-grab [&>label]:absolute [&>label]:top-[0.35rem] [&>label]:left-[0.35rem] [&>label]:z-[4]'
+  'group/course relative flex h-full items-center gap-2.5 rounded-md border border-ink/8 bg-surface py-1.5 pr-1.5 pl-2 shadow-card cursor-grab transition-[box-shadow,border-color] duration-150 hover:border-ink/12 hover:shadow-lift [&>label]:absolute [&>label]:top-[0.35rem] [&>label]:left-[0.35rem] [&>label]:z-[4]'
 const courseCover =
   'flex size-[52px] shrink-0 items-center justify-center overflow-hidden rounded-sm bg-cream-deep'
 const rowCover =
@@ -247,7 +247,7 @@ function ListTitle({ id, title }) {
     <>
       <div className="relative flex min-w-0 flex-1 items-center">
         <span
-          className="w-full min-w-0 cursor-grab overflow-hidden border-0 bg-transparent font-display text-2xl font-semibold text-ellipsis whitespace-nowrap text-ink select-none outline-none focus:cursor-text focus:shadow-[0_1px_0_var(--color-coral)] focus:select-text"
+          className="w-full min-w-0 cursor-grab overflow-hidden border-0 bg-transparent font-display text-lg font-bold tracking-tight text-ellipsis whitespace-nowrap text-ink select-none outline-none focus:cursor-text focus:shadow-[0_1px_0_var(--color-coral)] focus:select-text"
           onDoubleClick={startEditing}
         >
           {draft}
@@ -299,10 +299,8 @@ function PlaylistNode({ id, data }) {
     <div
       className={cn(
         frame,
-        current &&
-          'shadow-[inset_3px_0_0_var(--color-coral),0_0_0_2px_rgba(232,69,112,0.35),var(--shadow-card)]',
-        dropHere &&
-          'shadow-[inset_3px_0_0_var(--color-coral),0_0_0_2px_var(--color-coral),var(--shadow-lift)]',
+        current && 'shadow-[var(--shadow-ring-soft),var(--shadow-lift)]',
+        dropHere && 'bg-coral-soft/80 shadow-[var(--shadow-ring),var(--shadow-lift)]',
         actions?.isListPicked?.(id) && 'outline outline-2 outline-offset-2 outline-coral'
       )}
       data-playlist-id={id}
@@ -312,11 +310,11 @@ function PlaylistNode({ id, data }) {
         maxWidth={PLAYLIST_MAX_W}
         minHeight={data.minHeight}
         maxHeight={data.minHeight}
-        color="#e84570"
+        color="rgba(232, 69, 112, 0.45)"
         lineClassName=""
-        handleClassName="size-2 rounded-[2px] border border-coral bg-surface"
+        handleClassName="size-2 rounded-full border border-coral bg-surface"
       />
-      <header className="flex h-14 cursor-grab items-center gap-[0.4rem] pr-[0.65rem] pl-[0.4rem]" data-playlist-drag="" title={data.why || undefined}>
+      <header className="flex h-14 cursor-grab items-center gap-1.5 pr-2 pl-2" data-playlist-drag="" title={data.why || undefined}>
         <button
           type="button"
           className={cn(frameIcon, 'nodrag nopan', data.collapsed && 'is-collapsed')}
@@ -324,9 +322,7 @@ function PlaylistNode({ id, data }) {
           aria-label={data.collapsed ? `Expandir ${data.title}` : `Contraer ${data.title}`}
           onClick={() => actions?.toggleCollapsed(id)}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
-          </svg>
+          <ChevronDown aria-hidden="true" />
         </button>
         <CoursePickBox
           className={cn(pickBox, 'nodrag nopan')}
@@ -342,15 +338,13 @@ function PlaylistNode({ id, data }) {
           aria-label={`Quitar lista ${data.title}`}
           onClick={() => actions?.deletePlaylist(id)}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-          </svg>
+          <X aria-hidden="true" />
         </button>
       </header>
       {(data.nests || []).map((nest) => (
         <div
           key={nest.childId}
-          className="nodrag nopan pointer-events-none absolute z-[1] box-content flex flex-col rounded-md border border-ink/10 bg-cream shadow-[inset_3px_0_0_var(--color-teal)]"
+          className="nodrag nopan pointer-events-none absolute z-[1] box-content flex flex-col rounded-md border border-ink/8 bg-cream"
           style={{ top: nest.y, height: nest.height, left: NEST_FRAME_X, right: NEST_FRAME_X }}
           title={nest.why || undefined}
         >
@@ -362,15 +356,7 @@ function PlaylistNode({ id, data }) {
               aria-label={nest.collapsed ? `Expandir ${nest.title}` : `Contraer ${nest.title}`}
               onClick={() => actions?.toggleCollapsed(nest.childId)}
             >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
-              </svg>
+              <ChevronDown aria-hidden="true" />
             </button>
             <CoursePickBox
               className={pickBox}
@@ -392,21 +378,13 @@ function PlaylistNode({ id, data }) {
               aria-label={`Sacar ${nest.title}`}
               onClick={() => actions?.unnestPlaylist(nest.childId)}
             >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM5 5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6H5V5z" />
-              </svg>
+              <ArrowUpRight aria-hidden="true" />
             </button>
           </div>
         </div>
       ))}
       {data.collapsed || data.count > 0 || (data.nests || []).length ? null : (
-        <p className="mx-[0.85rem] mt-[0.35rem] rounded-md border border-dashed border-ink/16 px-3 py-[1.1rem] text-center text-sm text-ink-soft">
+        <p className="mx-3 mt-1 rounded-md border border-dashed border-ink/14 px-3 py-4 text-center text-sm text-ink-faint">
           {data.filtered && data.totalCount > 0
             ? 'Ningún curso coincide'
             : 'Arrastra un curso o una lista aquí'}
@@ -549,7 +527,7 @@ function CourseNode({ data }) {
       ) : null}
       <div
         className={cn(
-          'min-w-0 flex-1 [&_h3]:m-0 [&_h3]:truncate [&_h3]:font-display [&_h3]:text-base [&_h3]:font-semibold [&_p]:m-0 [&_p]:mt-[0.1rem] [&_p]:truncate [&_p]:text-xs [&_p]:text-ink-soft',
+          'min-w-0 flex-1 [&_h3]:m-0 [&_h3]:truncate [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-ink [&_p]:m-0 [&_p]:mt-[0.1rem] [&_p]:truncate [&_p]:text-xs [&_p]:text-ink-soft',
           data.bigCover && 'flex-none px-[0.6rem] pt-[0.4rem] pb-[0.5rem]'
         )}
       >
@@ -568,35 +546,31 @@ function CourseNode({ data }) {
       </div>
       <div
         className={cn(
-          'nodrag nopan flex flex-col gap-[0.2rem]',
-          data.bigCover && 'absolute top-[0.4rem] right-[0.4rem] flex-row'
+          'nodrag nopan flex flex-col gap-0.5 opacity-0 transition-opacity duration-150 group-hover/course:opacity-100 group-focus-within/course:opacity-100',
+          data.bigCover && 'absolute top-1.5 right-1.5 flex-row'
         )}
       >
         <button
           type="button"
-          className={cn(frameIcon, data.bigCover && 'bg-surface')}
+          className={cn(frameIcon, data.bigCover && 'bg-white/90 shadow-card backdrop-blur-md')}
           aria-label={`Abrir ${data.title}`}
           onClick={(event) => {
             event.stopPropagation()
             actions?.openCourse(data.coursePath)
           }}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M8 5v14l11-7z" />
-          </svg>
+          <Play className="fill-current" aria-hidden="true" />
         </button>
         <button
           type="button"
-          className={cn(frameIcon, data.bigCover && 'bg-surface')}
+          className={cn(frameIcon, data.bigCover && 'bg-white/90 shadow-card backdrop-blur-md')}
           aria-label={`Quitar ${data.title} de la lista`}
           onClick={(event) => {
             event.stopPropagation()
             actions?.removeCourse(data.playlistId, data.coursePath, data.title)
           }}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-          </svg>
+          <X aria-hidden="true" />
         </button>
       </div>
     </article>
@@ -607,7 +581,7 @@ function FrameCount({ count, total }) {
   const narrowed = typeof total === 'number' && total !== count
   return (
     <span
-      className="shrink-0 rounded-full border border-ink/10 bg-cream-deep px-[0.45rem] py-[0.12rem] text-xs font-semibold text-ink-soft"
+      className="shrink-0 rounded-full bg-ink/6 px-2 py-px text-xs font-medium text-ink-soft tabular-nums"
       title={narrowed ? `${count} de ${total} cursos` : undefined}
     >
       {narrowed ? `${count}/${total}` : count}

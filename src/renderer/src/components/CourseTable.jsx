@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, CircleCheck, FolderOpen, Pencil, Play } from 'lucide-react'
 import { getCoverFallback, absoluteAssetUrl } from '../utils/images'
 import { InstitutionMark } from './InstitutionMark'
 import CoursePickBox from './CoursePickBox'
@@ -8,27 +8,26 @@ import ExcitementGauge, { EXCITEMENT_LEVELS } from './ExcitementGauge'
 import brandMark from '../assets/img/brand-mark.svg'
 import { courseViewedAt, formatCourseDate } from '../utils/courseTable'
 import { cn } from '../ui/cn'
-import { cardLg } from '../ui/classes'
+import { badgeAccent, badgeSuccess, badgeTheme, badgeWarn, cardLg, iconOnly } from '../ui/classes'
 
-const badge = 'rounded-full border px-[0.55rem] py-[0.18rem] text-2xs font-semibold'
-const badgeNew = cn(badge, 'border-chip-status-border bg-chip-status text-chip-status-text')
-const badgeWarn = cn(badge, 'border-warn-border bg-warn text-warn-text')
-const badgePrograms = cn(
-  badge,
-  'border-chip-programs-border bg-chip-programs text-chip-programs-text'
+const badgeNew = badgeSuccess
+const badgeDone = badgeSuccess
+const badgePrograms = badgeAccent
+const ribbon = cn(badgeSuccess, 'uppercase tracking-[0.04em]')
+const ribbonRecent = 'border-transparent bg-ink/70 text-white'
+const cell = 'border-b border-ink/6 px-3 py-2 text-left align-middle whitespace-nowrap'
+const headCell = cn(
+  cell,
+  'sticky top-0 z-[2] border-ink/10 bg-surface/95 pt-2.5 pb-2 align-top backdrop-blur-md'
 )
-const badgeTheme = cn(badge, 'border-chip-theme-border bg-chip-theme text-chip-theme-text')
-const badgeDone = cn(badge, 'border-chip-status-border bg-chip-status text-chip-status-text')
-const ribbon =
-  'static rounded-full border border-chip-status-border bg-chip-status px-[0.65rem] py-[0.28rem] text-2xs font-semibold tracking-[0.03em] text-chip-status-text uppercase'
-const ribbonRecent = 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
-const cell =
-  'border-b border-ink/10 px-[0.55rem] py-[0.45rem] text-left align-middle whitespace-nowrap'
-const headCell = cn(cell, 'sticky top-0 z-[2] bg-cream align-top')
 const filterControl =
-  'w-full min-w-0 rounded-sm border border-ink/10 bg-surface px-[0.4rem] py-[0.22rem] text-xs text-ink focus:shadow-ring-soft focus:outline-none'
-const cardAction =
-  'grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-ink/10 bg-surface shadow-card hover:bg-coral hover:text-white'
+  'h-7 w-full min-w-0 rounded-xs border border-ink/10 bg-cream px-2 text-xs text-ink outline-none placeholder:text-ink-faint hover:border-ink/20 focus:border-coral/60 focus:bg-surface focus:shadow-focus'
+const rowAction = cn(iconOnly, 'size-7 [&_svg]:size-4')
+const EMPTY = (
+  <span className="text-ink-faint/70" aria-label="Sin dato">
+    –
+  </span>
+)
 
 const COLUMNS = [
   { key: 'cover', label: '', filter: null },
@@ -124,7 +123,7 @@ function Thumb({ coursePath, hasCover }) {
 function SortButton({ column, columnSort, onColumnSort }) {
   if (!column.kind)
     return (
-      <span className="text-2xs font-semibold tracking-[0.04em] text-ink-soft uppercase">
+      <span className="text-2xs font-semibold tracking-[0.06em] text-ink-soft uppercase">
         {column.label}
       </span>
     )
@@ -134,8 +133,8 @@ function SortButton({ column, columnSort, onColumnSort }) {
     <button
       type="button"
       className={cn(
-        'cursor-pointer border-0 bg-transparent p-0 text-left text-2xs font-semibold tracking-[0.04em] text-ink-soft uppercase',
-        active && 'text-coral-deep'
+        'cursor-pointer border-0 bg-transparent p-0 text-left text-2xs font-semibold tracking-[0.06em] text-ink-soft uppercase hover:text-ink',
+        active && 'text-ink'
       )}
       onClick={() => onColumnSort(column.key, column.kind)}
     >
@@ -378,7 +377,7 @@ function StatusCell({ course }) {
 
 function ChipList({ items, className }) {
   const list = items || []
-  if (!list.length) return '—'
+  if (!list.length) return EMPTY
   const shown = list.slice(0, 2)
   const extra = list.length - shown.length
   return (
@@ -394,7 +393,12 @@ function ChipList({ items, className }) {
 }
 
 function DateCell({ ms }) {
-  return <time dateTime={ms ? new Date(ms).toISOString() : undefined}>{formatCourseDate(ms)}</time>
+  if (!ms) return EMPTY
+  return (
+    <time className="text-ink-soft" dateTime={new Date(ms).toISOString()}>
+      {formatCourseDate(ms)}
+    </time>
+  )
 }
 
 function TableRow({
@@ -441,8 +445,9 @@ function TableRow({
   return (
     <tr
       className={cn(
-        'cursor-pointer hover:bg-coral-soft/60 focus-visible:bg-coral-soft/60',
-        isSelected && 'bg-coral-soft/60 shadow-[inset_3px_0_0_var(--color-coral)]',
+        'group/row cursor-pointer transition-colors duration-100 hover:bg-ink/[0.025] focus-visible:bg-ink/[0.025] focus-visible:outline-none',
+        isSelected &&
+          'bg-coral-soft/60 hover:bg-coral-soft/70 [&>td:first-child]:shadow-[inset_3px_0_0_var(--color-coral)]',
         isPicked && 'outline outline-2 outline-offset-1 outline-coral'
       )}
       data-course-path={course.path}
@@ -476,21 +481,21 @@ function TableRow({
         />
       </td>
       <td className={cell}>
-        <div className="h-10 w-16 overflow-hidden rounded-sm border border-ink/10 bg-cream-deep">
+        <div className="h-9 w-14 overflow-hidden rounded-xs bg-cream-deep ring-1 ring-ink/8">
           <Thumb coursePath={course.path} hasCover={course.hasCover} />
         </div>
       </td>
       <td className={cell}>
-        <div className="max-w-[18rem] truncate font-display font-semibold" title={course.title}>
+        <div className="max-w-[20rem] truncate font-medium text-ink" title={course.title}>
           {course.title}
         </div>
       </td>
       <td className={cell}>
         <div className="flex max-w-[10rem] items-center gap-[0.35rem] [&_span]:min-w-0 [&_span]:truncate">
-          <InstitutionMark institution={course.institution} emptyLabel="—" />
+          <InstitutionMark institution={course.institution} emptyLabel="–" />
         </div>
       </td>
-      <td className={cell}>{course.instructor || '—'}</td>
+      <td className={cn(cell, 'text-ink-soft')}>{course.instructor || EMPTY}</td>
       <td className={cell}>
         <ChipList items={course.programs} className={badgePrograms} />
       </td>
@@ -499,11 +504,11 @@ function TableRow({
       </td>
       <td className={cn(cell, 'tabular-nums')}>
         {course.rate > 0 ? (
-          <span className="text-xs tracking-[0.05em] text-coral-deep">
+          <span className="text-xs tracking-[0.05em] text-coral" title={`${course.rate}/5`}>
             {'★'.repeat(course.rate)}
           </span>
         ) : (
-          '—'
+          EMPTY
         )}
       </td>
       <td className={cell}>
@@ -515,10 +520,19 @@ function TableRow({
       </td>
       <td className={cn(cell, 'tabular-nums')}>
         {percent == null ? (
-          '—'
+          EMPTY
         ) : (
-          <span className="font-semibold text-teal" title={course.learning?.lastLessonTitle || ''}>
-            {percent}%
+          <span
+            className="flex items-center gap-2"
+            title={course.learning?.lastLessonTitle || ''}
+          >
+            <span className="block h-1 w-12 overflow-hidden rounded-full bg-ink/8" aria-hidden="true">
+              <span
+                className="block h-full rounded-full bg-teal"
+                style={{ width: `${Math.min(100, percent)}%` }}
+              />
+            </span>
+            <span className="text-xs font-medium text-ink-soft">{percent}%</span>
           </span>
         )}
       </td>
@@ -535,21 +549,19 @@ function TableRow({
         <DateCell ms={viewedAt} />
       </td>
       <td className={cell}>
-        <div className="flex gap-[0.35rem]">
+        <div className="flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-within/row:opacity-100">
           <button
             type="button"
-            className={cardAction}
+            className={cn(rowAction, isInProcess && 'text-teal')}
             title={isInProcess ? 'Quitar de en curso' : 'Marcar en curso'}
             onMouseDown={stopRowEvent}
             onClick={toggleInProcess}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-            </svg>
+            <CircleCheck aria-hidden="true" />
           </button>
           <button
             type="button"
-            className={cardAction}
+            className={rowAction}
             title="Abrir curso"
             onMouseDown={stopRowEvent}
             onClick={(event) => {
@@ -557,24 +569,20 @@ function TableRow({
               onOpenCourse?.(course)
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+            <Play aria-hidden="true" />
           </button>
           <button
             type="button"
-            className={cardAction}
+            className={rowAction}
             title="Abrir en explorador"
             onMouseDown={stopRowEvent}
             onClick={openFolder}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
-            </svg>
+            <FolderOpen aria-hidden="true" />
           </button>
           <button
             type="button"
-            className={cardAction}
+            className={rowAction}
             title="Editar"
             onMouseDown={stopRowEvent}
             onClick={(event) => {
@@ -582,9 +590,7 @@ function TableRow({
               onOpenModal?.(course)
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" />
-            </svg>
+            <Pencil aria-hidden="true" />
           </button>
         </div>
       </td>
@@ -675,7 +681,7 @@ export default function CourseTable({
               <td
                 className={cn(
                   cell,
-                  'px-[0.8rem] py-[1.4rem] text-center whitespace-normal text-ink-soft'
+                  'px-4 py-10 text-center whitespace-normal text-ink-soft'
                 )}
                 colSpan={COLUMNS.length + 1}
               >

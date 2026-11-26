@@ -1,12 +1,35 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { flattenOutline } from '../../../shared/cierres.js'
-import { Plus, Search, Star } from 'lucide-react'
+import {
+  ExternalLink,
+  Flag,
+  FolderOpen,
+  MessageSquare,
+  Pencil,
+  Plus,
+  Search,
+  Star,
+  Trash2,
+  X
+} from 'lucide-react'
 import AppHeader from './AppHeader'
 import CierreComposer from './CierreComposer'
 import { askConfirm } from '../utils/askConfirm'
 import { cn } from '../ui/cn'
-import { btnGhost, btnOn, btnPrimary, pageShell, searchIcon, searchInput } from '../ui/classes'
+import {
+  btnCompact,
+  btnGhost,
+  btnOn,
+  btnPrimary,
+  cardLg,
+  eyebrow,
+  fieldControl,
+  iconOnly,
+  pageShell,
+  searchIcon,
+  searchInput
+} from '../ui/classes'
 
 
 function formatWhen(ts) {
@@ -254,8 +277,9 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
         }
       />
 
-      <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)] max-[900px]:grid-cols-1">
-        <aside className="flex min-h-0 flex-col gap-1 overflow-auto border-r border-ink/10 px-3 py-4 max-[900px]:border-r-0 max-[900px]:border-b">
+      <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)] max-[900px]:grid-cols-1">
+        <aside className="flex min-h-0 flex-col gap-0.5 overflow-auto border-r border-ink/8 bg-surface px-3 py-4 max-[900px]:border-r-0 max-[900px]:border-b">
+          <p className={cn(eyebrow, 'mb-1.5 px-2.5')}>Cursos</p>
           <RailButton
             active={!coursePath && !favoritesOnly}
             label="Todos"
@@ -301,112 +325,173 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
           })}
         </aside>
 
-        <div className="min-h-0 overflow-auto px-5 py-4">
+        <div className="min-h-0 overflow-auto px-6 py-6">
           {loading ? (
             <p className="mt-12 text-center text-ink-soft">Cargando…</p>
-          ) : sectionEmpty ? (
-            <p className="mt-12 text-center text-ink-soft">
-              {selectedSection.title} todavía no tiene un cierre.
-            </p>
-          ) : filtered.length === 0 ? (
-            <p className="mx-auto mt-12 max-w-[36rem] text-center text-ink-soft">
-              {items.length === 0
-                ? 'Cuando marques un proyecto como hecho o completes una lección, puedes publicar qué entregaste y qué aprendiste.'
-                : 'Nada coincide con este filtro.'}
-            </p>
+          ) : sectionEmpty || filtered.length === 0 ? (
+            <div className="mx-auto mt-16 flex max-w-[26rem] flex-col items-center gap-3 text-center">
+              <span className="grid size-12 place-items-center rounded-full bg-coral-soft text-coral">
+                <Flag className="size-5" aria-hidden="true" />
+              </span>
+              <p className="m-0 font-display text-lg font-semibold">
+                {sectionEmpty
+                  ? `${selectedSection.title} todavía no tiene un cierre`
+                  : items.length === 0
+                    ? 'Aún no hay cierres'
+                    : 'Nada coincide con este filtro'}
+              </p>
+              {items.length === 0 && !sectionEmpty ? (
+                <p className="m-0 text-sm leading-relaxed text-ink-soft">
+                  Cuando marques un proyecto como hecho o completes una lección, puedes publicar qué
+                  entregaste y qué aprendiste.
+                </p>
+              ) : null}
+              <button
+                type="button"
+                className={cn(btnPrimary, 'mt-1')}
+                onClick={() => setComposer({ picker: true })}
+              >
+                <Plus size={16} aria-hidden="true" />
+                Publicar cierre
+              </button>
+            </div>
           ) : (
-            <div className="mx-auto flex max-w-[720px] flex-col gap-4">
+            <div className="mx-auto flex max-w-[680px] flex-col gap-4">
               {filtered.map((item) => {
                 const comments = item.comments || []
                 const threadOpen = openThread === item.id
                 return (
                   <article
                     key={item.id}
-                    className="flex flex-col gap-3 rounded-lg border border-ink/10 bg-surface p-4 shadow-card"
+                    className={cn(cardLg, 'group/post flex flex-col overflow-hidden')}
                   >
-                    <header className="flex items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="m-0 text-xs font-semibold tracking-[0.03em] text-ink-soft uppercase">
-                          {titleByPath[item.coursePath] || item.coursePath}
-                          {item.sectionTitle ? ` · ${item.sectionTitle}` : ''}
-                          {formatWhen(item.publishedAt) ? ` · ${formatWhen(item.publishedAt)}` : ''}
-                        </p>
-                        <h2 className="m-0 mt-1 font-display text-lg font-bold tracking-[-0.02em]">
-                          {item.title}
-                        </h2>
-                      </div>
-                      <button
-                        type="button"
-                        className={cn(
-                          'inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-ink/10 bg-cream',
-                          item.favorite ? 'text-coral' : 'text-ink-soft'
-                        )}
-                        aria-pressed={item.favorite}
-                        aria-label={item.favorite ? 'Quitar de favoritos' : 'Marcar favorito'}
-                        onClick={() => void toggleFavorite(item)}
-                      >
-                        <StarIcon filled={item.favorite} />
-                      </button>
-                    </header>
                     {item.coverUrl ? (
                       <img
                         src={item.coverUrl}
                         alt=""
-                        className="max-h-[280px] w-full rounded-md border border-ink/10 object-cover"
+                        className="max-h-[300px] w-full border-b border-ink/8 object-cover"
                       />
                     ) : null}
-                    <p className="m-0 whitespace-pre-wrap leading-relaxed">{item.learned}</p>
-                    {item.differently ? (
-                      <p className="m-0 whitespace-pre-wrap leading-relaxed text-ink-soft">
-                        <span className="font-semibold text-ink">Qué haría distinto. </span>
-                        {item.differently}
-                      </p>
-                    ) : null}
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className={btnGhost} onClick={() => openSubject(item)}>
-                        {item.projectId ? 'Abrir proyecto' : 'Abrir lección'}
-                      </button>
-                      {item.projectId ? (
+                    <div className="flex flex-col gap-3 px-5 pt-4 pb-4">
+                      <header className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="m-0 flex min-w-0 items-center gap-1.5 text-xs text-ink-soft">
+                            <span className="truncate font-medium text-ink">
+                              {titleByPath[item.coursePath] || item.coursePath}
+                            </span>
+                            {item.sectionTitle ? (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="truncate">{item.sectionTitle}</span>
+                              </>
+                            ) : null}
+                            {formatWhen(item.publishedAt) ? (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="shrink-0">{formatWhen(item.publishedAt)}</span>
+                              </>
+                            ) : null}
+                          </p>
+                          <h2 className="m-0 mt-1 font-display text-xl font-bold tracking-tight">
+                            {item.title}
+                          </h2>
+                        </div>
                         <button
                           type="button"
-                          className={btnGhost}
-                          onClick={() => void openFolder(item)}
+                          className={cn(iconOnly, item.favorite && 'text-coral enabled:hover:text-coral')}
+                          aria-pressed={item.favorite}
+                          aria-label={item.favorite ? 'Quitar de favoritos' : 'Marcar favorito'}
+                          title={item.favorite ? 'Quitar de favoritos' : 'Marcar favorito'}
+                          onClick={() => void toggleFavorite(item)}
                         >
-                          Abrir carpeta
+                          <StarIcon filled={item.favorite} />
                         </button>
+                      </header>
+                      <p className="m-0 text-md leading-relaxed whitespace-pre-wrap">{item.learned}</p>
+                      {item.differently ? (
+                        <div className="rounded-md border-l-2 border-teal bg-teal-tint/60 px-3.5 py-2.5">
+                          <p className={cn(eyebrow, 'mb-1 text-teal')}>Qué haría distinto</p>
+                          <p className="m-0 text-base leading-relaxed whitespace-pre-wrap text-ink">
+                            {item.differently}
+                          </p>
+                        </div>
                       ) : null}
-                      <button type="button" className={btnGhost} onClick={() => setComposer(item)}>
-                        Editar
-                      </button>
-                      <button type="button" className={btnGhost} onClick={() => void remove(item)}>
-                        Quitar
-                      </button>
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        <button
+                          type="button"
+                          className={cn(btnGhost, btnCompact, 'h-8')}
+                          onClick={() => openSubject(item)}
+                        >
+                          <ExternalLink size={14} aria-hidden="true" />
+                          {item.projectId ? 'Abrir proyecto' : 'Abrir lección'}
+                        </button>
+                        {item.projectId ? (
+                          <button
+                            type="button"
+                            className={cn(btnGhost, btnCompact, 'h-8')}
+                            onClick={() => void openFolder(item)}
+                          >
+                            <FolderOpen size={14} aria-hidden="true" />
+                            Abrir carpeta
+                          </button>
+                        ) : null}
+                        <span className="flex-1" />
+                        <button
+                          type="button"
+                          className={iconOnly}
+                          title="Editar"
+                          aria-label="Editar cierre"
+                          onClick={() => setComposer(item)}
+                        >
+                          <Pencil aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          className={cn(iconOnly, 'enabled:hover:bg-danger-soft enabled:hover:text-danger')}
+                          title="Quitar"
+                          aria-label="Quitar cierre"
+                          onClick={() => void remove(item)}
+                        >
+                          <Trash2 aria-hidden="true" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="border-t border-ink/10 pt-3">
+                    <div className="border-t border-ink/6 bg-cream px-5 py-2.5">
                       <button
                         type="button"
-                        className="cursor-pointer border-0 bg-transparent p-0 text-sm font-semibold text-ink-soft"
+                        className="inline-flex cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-sm font-medium text-ink-soft hover:text-ink"
                         aria-expanded={threadOpen}
                         onClick={() => {
                           setOpenThread(threadOpen ? null : item.id)
                           setFollowup('')
                         }}
                       >
-                        Seguimiento{comments.length ? ` · ${comments.length}` : ''}
+                        <MessageSquare size={14} aria-hidden="true" />
+                        Seguimiento
+                        {comments.length ? (
+                          <span className="rounded-full bg-ink/6 px-1.5 text-xs tabular-nums">
+                            {comments.length}
+                          </span>
+                        ) : null}
                       </button>
                       {threadOpen ? (
-                        <div className="mt-3 flex flex-col gap-3">
+                        <div className="mt-3 flex flex-col gap-2 pb-1">
                           {comments.map((comment) => (
-                            <div key={comment.id} className="flex items-start gap-3">
-                              <p className="m-0 min-w-0 flex-1 whitespace-pre-wrap text-base leading-relaxed">
+                            <div
+                              key={comment.id}
+                              className="group/comment flex items-start gap-2.5 border-l-2 border-ink/10 pl-3"
+                            >
+                              <p className="m-0 min-w-0 flex-1 text-base leading-relaxed whitespace-pre-wrap">
                                 {comment.body}
                               </p>
                               <button
                                 type="button"
-                                className="cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-ink-soft"
+                                className={cn(iconOnly, 'size-7 opacity-0 group-hover/comment:opacity-100 focus-visible:opacity-100')}
+                                title="Quitar seguimiento"
+                                aria-label="Quitar seguimiento"
                                 onClick={() => void removeFollowup(item, comment)}
                               >
-                                Quitar
+                                <X aria-hidden="true" />
                               </button>
                             </div>
                           ))}
@@ -418,13 +503,17 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
                             }}
                           >
                             <input
-                              className="min-w-0 flex-1 rounded-full border border-ink/10 bg-cream px-3 py-2 text-ink outline-none"
+                              className={cn(fieldControl, 'min-w-0 flex-1')}
                               value={followup}
                               onChange={(event) => setFollowup(event.target.value)}
                               placeholder="Añadir seguimiento"
                               aria-label="Añadir seguimiento"
                             />
-                            <button type="submit" className={btnPrimary}>
+                            <button
+                              type="submit"
+                              className={btnPrimary}
+                              disabled={!followup.trim()}
+                            >
                               Añadir
                             </button>
                           </form>
@@ -456,16 +545,18 @@ function RailButton({ active, label, count, nested = false, empty = false, onCli
     <button
       type="button"
       className={cn(
-        'flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 py-[0.4rem] text-left text-sm font-semibold text-ink hover:bg-ink/5',
-        nested && 'pl-4 text-sm font-semibold',
-        empty && 'text-ink-soft',
-        active && 'bg-ink/5 text-coral-deep'
+        'flex w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent px-2.5 py-1.5 text-left text-sm font-medium text-ink transition-colors duration-150 hover:bg-ink/5',
+        nested && 'ml-2.5 w-[calc(100%-0.625rem)] border-l border-ink/10 rounded-l-none pl-3 text-ink-soft',
+        empty && 'text-ink-faint',
+        active && 'bg-coral-soft text-coral-deep hover:bg-coral-soft'
       )}
       aria-current={active ? 'true' : undefined}
       onClick={onClick}
     >
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="text-xs font-semibold text-ink-soft">{empty ? 'sin cierre' : count}</span>
+      <span className={cn('text-xs tabular-nums', active ? 'text-coral-deep' : 'text-ink-faint')}>
+        {empty ? '—' : count}
+      </span>
     </button>
   )
 }

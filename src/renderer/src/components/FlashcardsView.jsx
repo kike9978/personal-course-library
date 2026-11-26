@@ -1,6 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { Download, Layers, Plus, Send, Settings, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CircleCheck,
+  Download,
+  Layers,
+  NotebookText,
+  Pencil,
+  PlayCircle,
+  Plus,
+  RotateCcw,
+  Send,
+  Settings,
+  Trash2
+} from 'lucide-react'
 import AppHeader from './AppHeader'
 import FlashcardBuilder from './FlashcardBuilder'
 import { CardImage, CardText } from './flashcards/CardFace'
@@ -11,8 +27,10 @@ import { cn } from '../ui/cn'
 import {
   btnCompact,
   btnGhost,
+  btnOn,
   btnPrimary,
   btnQuiet,
+  fieldControl,
   card as cardSurface,
   cardHover,
   iconOnly,
@@ -164,35 +182,12 @@ function AnkiBar({ status, onRefresh }) {
   )
 }
 
-function DeckAnkiActions({ deck, ankiReady, busy, onSync, onExport }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        className={cn(btnGhost, smallBtn)}
-        disabled={busy || !ankiReady}
-        title={ankiReady ? 'Enviar a Anki y sincronizar' : 'Abre Anki para enviar'}
-        onClick={() => onSync(deck)}
-      >
-        {busy ? 'Enviando…' : 'Enviar a Anki'}
-      </button>
-      <button type="button" className={cn(btnGhost, smallBtn)} onClick={() => onExport(deck)}>
-        Exportar archivo
-      </button>
-      {deck.ankiSyncedAt ? (
-        <span className="text-xs text-ink-soft">
-          En Anki desde {formatWhen(deck.ankiSyncedAt)}
-        </span>
-      ) : null}
-    </div>
-  )
-}
-
 const cardFace =
-  'col-start-1 row-start-1 flex min-h-[14rem] flex-col rounded-lg border border-ink/10 bg-surface px-6 py-8 text-left shadow-card [backface-visibility:hidden]'
-const faceLabel =
-  'mb-3 block text-xs font-semibold tracking-[0.04em] text-ink-soft uppercase'
-const faceText = 'block font-display text-xl leading-[1.35] font-bold'
+  'col-start-1 row-start-1 flex min-h-[16rem] flex-col rounded-xl border border-ink/8 bg-surface px-8 py-8 text-left shadow-lift [backface-visibility:hidden]'
+const faceLabel = 'mb-4 block text-2xs font-semibold tracking-[0.07em] text-ink-faint uppercase'
+const faceText = 'block font-display text-2xl leading-snug font-semibold tracking-tight text-ink'
+const kbd =
+  'ml-1 rounded-xs border border-ink/12 bg-ink/4 px-1.5 font-body text-2xs font-medium text-ink-soft'
 
 /**
  * Reverse cards are studied both ways, and a cloze once per blank (as in Anki),
@@ -298,11 +293,11 @@ function StudyCard({ item, flipped, onFlip, typed }) {
           <span className={faceLabel}>{front.label}</span>
           <span className={faceText}>{front.body}</span>
         </span>
-        <span className={cn(cardFace, 'bg-cream [transform:rotateY(180deg)]')}>
+        <span className={cn(cardFace, 'border-teal/20 [transform:rotateY(180deg)]')}>
           <span className={faceLabel}>{back.label}</span>
           <span className={faceText}>{back.body}</span>
           {back.extra ? (
-            <span className="mt-3 block text-md leading-[1.45] text-ink-soft">
+            <span className="mt-3 block text-md leading-relaxed text-ink-soft">
               {back.extra}
             </span>
           ) : null}
@@ -492,6 +487,37 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
     }
   }
 
+  const shortcutRef = useRef(null)
+  shortcutRef.current = { card, editing, queue, index, showCard, markKnown }
+  useEffect(() => {
+    if (!deckId) return undefined
+    const onKeyDown = (event) => {
+      const state = shortcutRef.current
+      if (!state.card || state.editing || event.ctrlKey || event.metaKey || event.altKey) return
+      const target = event.target
+      if (target?.closest?.('input, textarea, select, [contenteditable="true"], dialog')) return
+      const { queue: list, index: at } = state
+      if (event.key === ' ') {
+        event.preventDefault()
+        setFlipped((value) => !value)
+      } else if (event.key === '1') {
+        event.preventDefault()
+        state.markKnown(false)
+      } else if (event.key === '2') {
+        event.preventDefault()
+        state.markKnown(true)
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        state.showCard(at + 1 >= list.length ? 0 : at + 1)
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        state.showCard(at <= 0 ? list.length - 1 : at - 1)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [deckId])
+
   const saveEdit = async (patch) => {
     try {
       putDeck(await window.api.updateDeckCard(deck.id, card.id, patch))
@@ -569,45 +595,78 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
         {loading ? (
           <p className="text-ink-soft">Cargando…</p>
         ) : deck ? (
-          <div className="mx-auto flex max-w-[36rem] flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <button type="button" className={btnGhost} onClick={() => setDeckId(null)}>
+          <div className="mx-auto flex h-full max-w-[42rem] flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <button
+                type="button"
+                className={cn(btnQuiet, btnCompact, 'h-8 -ml-2 text-ink')}
+                onClick={() => setDeckId(null)}
+              >
+                <ArrowLeft size={14} aria-hidden="true" />
                 Mazos
               </button>
-              <div className="flex flex-wrap gap-2">
+              <span className="h-5 w-px bg-ink/10" aria-hidden="true" />
+              <h2 className="m-0 min-w-0 flex-1 truncate font-display text-xl font-bold tracking-tight">
+                {deck.title}
+              </h2>
+              <button
+                type="button"
+                className={cn(btnGhost, btnCompact, 'h-8', pendingOnly && btnOn)}
+                aria-pressed={pendingOnly}
+                onClick={() => setPendingOnly((value) => !value)}
+              >
+                Solo pendientes
+              </button>
+              <div className="flex items-center">
                 <button
                   type="button"
-                  className={btnGhost}
+                  className={iconOnly}
+                  title="Añadir tarjetas"
+                  aria-label="Añadir tarjetas"
                   onClick={() => setBuilder({ target: deck.id })}
                 >
-                  Añadir tarjetas
+                  <Plus aria-hidden="true" />
                 </button>
                 <button
                   type="button"
-                  className={cn(btnGhost, pendingOnly && 'border-coral/35 bg-coral-soft text-coral-deep')}
-                  aria-pressed={pendingOnly}
-                  onClick={() => setPendingOnly((value) => !value)}
+                  className={iconOnly}
+                  disabled={syncingId === deck.id || !anki?.ok}
+                  title={anki?.ok ? 'Enviar a Anki y sincronizar' : 'Abre Anki para enviar'}
+                  aria-label="Enviar a Anki"
+                  onClick={() => syncDeck(deck)}
                 >
-                  Solo pendientes
+                  <Send aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={iconOnly}
+                  title="Exportar archivo"
+                  aria-label="Exportar archivo"
+                  onClick={() => exportDeck(deck)}
+                >
+                  <Download aria-hidden="true" />
                 </button>
               </div>
             </div>
-            <div className="flex flex-col gap-2">
-              <h2 className="m-0 font-display text-xl font-bold">{deck.title}</h2>
-              <DeckAnkiActions
-                deck={deck}
-                ankiReady={Boolean(anki?.ok)}
-                busy={syncingId === deck.id}
-                onSync={syncDeck}
-                onExport={exportDeck}
-              />
-              <p className="mt-1 mb-0 flex items-center gap-2 text-sm text-ink-soft">
-                {queue.length
-                  ? `${Math.min(index + 1, queue.length)} / ${queue.length}`
-                  : 'No quedan pendientes en este mazo.'}
-                {card ? <TypeBadge type={card.type} /> : null}
-              </p>
+
+            <div className="flex items-center gap-3">
+              <span
+                className="block h-1.5 flex-1 overflow-hidden rounded-full bg-ink/8"
+                aria-hidden="true"
+              >
+                <span
+                  className="block h-full rounded-full bg-coral transition-[width] duration-300 ease-pop"
+                  style={{
+                    width: `${queue.length ? ((Math.min(index, queue.length - 1) + 1) / queue.length) * 100 : 0}%`
+                  }}
+                />
+              </span>
+              <span className="text-xs text-ink-soft tabular-nums">
+                {queue.length ? `${Math.min(index + 1, queue.length)} / ${queue.length}` : '0 / 0'}
+              </span>
+              {card ? <TypeBadge type={card.type} /> : null}
             </div>
+
             {card && editing ? (
               <CardEditor
                 key={card.id}
@@ -617,13 +676,64 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
               />
             ) : card ? (
               <>
-                <StudyCard
-                  key={item.key}
-                  item={item}
-                  typed={typed}
-                  flipped={flipped}
-                  onFlip={() => setFlipped((value) => !value)}
-                />
+                <div className="-mx-1 min-h-0 flex-1 overflow-auto px-1 pb-1">
+                  <StudyCard
+                    key={item.key}
+                    item={item}
+                    typed={typed}
+                    flipped={flipped}
+                    onFlip={() => setFlipped((value) => !value)}
+                  />
+                  <div className="mt-2 flex flex-wrap items-center gap-0.5">
+                    {onOpenLesson && card.lessonPath && card.coursePath ? (
+                      <button
+                        type="button"
+                        className={cn(btnQuiet, btnCompact)}
+                        onClick={() =>
+                          onOpenLesson({
+                            coursePath: card.coursePath,
+                            lessonRelativePath: card.lessonPath,
+                            timeSec: card.timeSec
+                          })
+                        }
+                      >
+                        <PlayCircle size={14} aria-hidden="true" />
+                        Ver en el video
+                        {typeof card.timeSec === 'number' ? ` · ${formatClock(card.timeSec)}` : ''}
+                      </button>
+                    ) : null}
+                    {onOpenNote && card.noteId ? (
+                      <button
+                        type="button"
+                        className={cn(btnQuiet, btnCompact)}
+                        onClick={() =>
+                          onOpenNote({ id: card.noteId, coursePath: card.coursePath || null })
+                        }
+                      >
+                        <NotebookText size={14} aria-hidden="true" />
+                        Ver nota
+                      </button>
+                    ) : null}
+                    <span className="flex-1" />
+                    <button
+                      type="button"
+                      className={cn(btnQuiet, btnCompact)}
+                      onClick={() => setEditing(true)}
+                    >
+                      <Pencil size={14} aria-hidden="true" />
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(btnQuiet, btnCompact, 'enabled:hover:bg-danger-soft enabled:hover:text-danger')}
+                      onClick={removeCard}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                      Quitar
+                    </button>
+                  </div>
+                </div>
+
                 {card.type === 'typein' && !flipped ? (
                   <form
                     className="flex gap-2"
@@ -633,7 +743,7 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
                     }}
                   >
                     <input
-                      className="min-w-0 flex-1 rounded-md border border-ink/10 bg-surface px-3 py-[0.55rem] text-ink outline-none focus:shadow-focus"
+                      className={cn(fieldControl, 'min-w-0 flex-1')}
                       value={typed}
                       placeholder="Escribe la respuesta"
                       aria-label="Tu respuesta"
@@ -644,75 +754,73 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
                     </button>
                   </form>
                 ) : null}
-                <div className="flex flex-wrap items-center justify-between gap-2">
+
+                <div className="flex shrink-0 items-center gap-2 rounded-lg border border-ink/8 bg-surface p-2 shadow-card">
                   <button
                     type="button"
-                    className={btnGhost}
+                    className={iconOnly}
+                    title="Anterior (←)"
+                    aria-label="Anterior"
                     onClick={() => showCard(index <= 0 ? queue.length - 1 : index - 1)}
                   >
-                    Anterior
+                    <ChevronLeft aria-hidden="true" />
                   </button>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" className={btnGhost} onClick={() => setFlipped(true)}>
-                      Mostrar
-                    </button>
-                    <button type="button" className={btnGhost} onClick={() => markKnown(false)}>
+                  <div className="flex flex-1 items-center justify-center gap-2">
+                    {!flipped ? (
+                      <button
+                        type="button"
+                        className={cn(btnGhost, 'min-w-[9rem]')}
+                        onClick={() => setFlipped(true)}
+                      >
+                        Mostrar respuesta
+                        <kbd className={kbd}>Espacio</kbd>
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={cn(btnGhost, 'min-w-[7rem]')}
+                      onClick={() => markKnown(false)}
+                    >
+                      <RotateCcw size={14} aria-hidden="true" />
                       Otra vez
+                      <kbd className={kbd}>1</kbd>
                     </button>
-                    <button type="button" className={btnPrimary} onClick={() => markKnown(true)}>
+                    <button
+                      type="button"
+                      className={cn(btnPrimary, 'min-w-[7rem]')}
+                      onClick={() => markKnown(true)}
+                    >
+                      <Check size={14} aria-hidden="true" />
                       {card.known ? 'Aprendida' : 'La sé'}
+                      <kbd className={cn(kbd, 'border-white/30 bg-white/15 text-white/90')}>2</kbd>
                     </button>
                   </div>
                   <button
                     type="button"
-                    className={btnGhost}
+                    className={iconOnly}
+                    title="Siguiente (→)"
+                    aria-label="Siguiente"
                     onClick={() => showCard(index + 1 >= queue.length ? 0 : index + 1)}
                   >
-                    Siguiente
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {onOpenLesson && card.lessonPath && card.coursePath ? (
-                    <button
-                      type="button"
-                      className={cn(btnGhost, smallBtn)}
-                      onClick={() =>
-                        onOpenLesson({
-                          coursePath: card.coursePath,
-                          lessonRelativePath: card.lessonPath,
-                          timeSec: card.timeSec
-                        })
-                      }
-                    >
-                      Ver en el video
-                      {typeof card.timeSec === 'number' ? ` · ${formatClock(card.timeSec)}` : ''}
-                    </button>
-                  ) : null}
-                  {onOpenNote && card.noteId ? (
-                    <button
-                      type="button"
-                      className={cn(btnGhost, smallBtn)}
-                      onClick={() =>
-                        onOpenNote({ id: card.noteId, coursePath: card.coursePath || null })
-                      }
-                    >
-                      Ver nota
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className={cn(btnGhost, smallBtn)}
-                    onClick={() => setEditing(true)}
-                  >
-                    Editar
-                  </button>
-                  <button type="button" className={cn(btnGhost, smallBtn)} onClick={removeCard}>
-                    Quitar
+                    <ChevronRight aria-hidden="true" />
                   </button>
                 </div>
               </>
             ) : (
-              <p className="text-ink-soft">Marca Solo pendientes otra vez para verlas todas.</p>
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+                <CircleCheck className="size-10 text-teal" aria-hidden="true" />
+                <p className="m-0 font-display text-lg font-semibold">No quedan pendientes</p>
+                <p className="m-0 text-sm text-ink-soft">
+                  Desmarca «Solo pendientes» para repasar todas las tarjetas.
+                </p>
+                <button
+                  type="button"
+                  className={cn(btnGhost, 'mt-1')}
+                  onClick={() => setPendingOnly(false)}
+                >
+                  Ver todas
+                </button>
+              </div>
             )}
           </div>
         ) : decks.length === 0 ? (

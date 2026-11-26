@@ -2,6 +2,15 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { toast } from 'react-hot-toast'
 import {
   AppWindow,
+  CalendarDays,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Clock,
+  Film,
+  Hash,
+  History,
+  Link2,
+  Play,
   ArrowUpRight,
   EllipsisVertical,
   Group,
@@ -23,6 +32,7 @@ import { formatTime } from './StudySidePanel'
 import { askConfirm } from '../utils/askConfirm'
 import { cn } from '../ui/cn'
 import {
+  btnCompact,
   btnGhost,
   btnPrimary,
   iconOnly,
@@ -49,13 +59,10 @@ const relatedLink =
 const graphOption =
   'flex w-full cursor-pointer flex-col items-start gap-[0.05rem] rounded-sm border-0 bg-transparent px-2 py-[0.35rem] text-left font-[inherit] text-ink hover:bg-cream-deep [&.is-active]:bg-cream-deep [&_span]:max-w-full [&_span]:truncate [&_small]:text-2xs [&_small]:text-ink-soft'
 const popoverScroll = cn(popover, 'max-h-[min(60vh,22rem)] overflow-auto')
-const iconSquare =
-  'inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border border-ink/10 bg-white p-0 font-semibold text-ink-soft'
-const iconCreate =
-  'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-coral-deep bg-coral p-0 font-semibold text-white hover:bg-coral-deep'
+const iconSquare = iconOnly
+const iconCreate = cn(btnPrimary, btnCompact, 'h-8 px-2.5')
 const iconOn = 'border-coral bg-[rgba(232,69,112,0.12)] text-coral-deep'
-const toolBtn =
-  'inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent p-0 font-semibold text-ink-soft hover:border-transparent hover:bg-transparent aria-pressed:text-coral-deep'
+const toolBtn = cn(iconOnly, 'aria-pressed:bg-coral-soft aria-pressed:text-coral-deep')
 const listItem =
   'mt-[0.02rem] mb-[0.02rem] ml-[var(--ann-indent)] box-border flex w-[calc(100%-var(--ann-indent))] min-w-0 cursor-pointer flex-row items-baseline justify-between gap-[0.55rem] rounded-md border-0 bg-transparent px-[var(--ann-pad-x)] py-[0.2rem] text-left font-[inherit] text-ink hover:bg-[rgba(23,21,28,0.045)] [&.is-active]:bg-[rgba(23,21,28,0.08)] [&.is-active]:shadow-none [&.is-active:hover]:bg-[rgba(23,21,28,0.08)] [&_small]:text-2xs [&_small]:text-coral-deep [&.is-active_span_span]:font-semibold'
 const savePill =
@@ -63,8 +70,12 @@ const savePill =
 const saveWarm = 'border-chip-programs-border bg-chip-programs text-chip-programs-text'
 const saveCool = 'border-chip-status-border bg-chip-status text-chip-status-text'
 const propLabel = 'text-sm font-semibold text-ink-soft'
+const propRow =
+  'grid grid-cols-[9rem_minmax(0,1fr)] items-center gap-3 rounded-xs px-1.5 py-1 text-sm hover:bg-ink/[0.025] max-[900px]:grid-cols-1 max-[900px]:gap-0.5'
+const propKey =
+  'flex items-center gap-2 text-sm text-ink-soft [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-ink-faint'
 const topicChip =
-  'cursor-pointer rounded-full border border-chip-status-border bg-chip-status px-[0.55rem] py-[0.15rem] font-[inherit] text-xs text-chip-status-text'
+  'inline-flex cursor-pointer items-center rounded-full border border-chip-status-border bg-chip-status px-2 py-px text-xs font-medium text-chip-status-text hover:border-chip-status-text/40'
 const searchInList =
   'relative w-full min-w-0 max-w-none flex-none [&_input]:h-8 [&_input]:w-full [&_input]:rounded-full [&_input]:border [&_input]:border-ink/10 [&_input]:bg-surface [&_input]:py-0 [&_input]:pr-[0.85rem] [&_input]:pl-[2.15rem] [&_input]:text-sm [&_input]:text-ink [&_input]:shadow-none [&_input]:outline-none [&_input]:focus:shadow-find [&_svg]:pointer-events-none [&_svg]:absolute [&_svg]:top-1/2 [&_svg]:left-[0.7rem] [&_svg]:size-[0.9rem] [&_svg]:-translate-y-1/2 [&_svg]:opacity-55'
 const graphPanel =
@@ -1679,20 +1690,27 @@ function AnnotationsWorkspace({
               onDoubleClick={resetListWidth}
             />
           ) : null}
-          <div className="flex items-center gap-[0.4rem] border-b border-ink/10 px-2 py-[0.45rem]">
+          <div className="flex h-12 items-center gap-1.5 border-b border-ink/8 px-2">
             <button
               type="button"
               className={iconSquare}
               onClick={() => setListCollapsed((value) => !value)}
               title={listCollapsed ? 'Mostrar lista' : 'Ocultar lista'}
+              aria-label={listCollapsed ? 'Mostrar lista' : 'Ocultar lista'}
             >
-              {listCollapsed ? '»' : '«'}
+              {listCollapsed ? (
+                <PanelLeftOpen aria-hidden="true" />
+              ) : (
+                <PanelLeftClose aria-hidden="true" />
+              )}
             </button>
             {!listCollapsed ? (
               <>
-                <span className="ml-auto text-xs font-semibold text-ink-soft">
+                <span className="ml-1 text-sm font-semibold text-ink">Notas</span>
+                <span className="rounded-full bg-ink/6 px-1.5 text-xs text-ink-soft tabular-nums">
                   {filtered.length}
                 </span>
+                <span className="flex-1" />
                 {onCreate ? (
                   <button
                     type="button"
@@ -1701,7 +1719,8 @@ function AnnotationsWorkspace({
                     aria-label="Nueva anotación"
                     onClick={onCreate}
                   >
-                    <Plus size={16} />
+                    <Plus size={14} aria-hidden="true" />
+                    Nueva
                   </button>
                 ) : null}
               </>
@@ -2163,14 +2182,20 @@ function AnnotationsWorkspace({
                   placeholder={noteTitle(selected) || 'Título'}
                 />
 
-                <div className="mb-[1.35rem] flex flex-col gap-[0.45rem] border-b border-ink/10 pb-4">
-                  <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
-                    <span className={propLabel}>Fecha de creación</span>
+                <div className="-mx-1.5 mb-5 flex flex-col gap-0.5 border-b border-ink/8 pb-4">
+                  <div className={propRow}>
+                    <span className={propKey}>
+                      <CalendarDays aria-hidden="true" />
+                      Creada
+                    </span>
                     <span>{formatDateTime(selected.createdAt)}</span>
                   </div>
                   {courseColumn ? (
-                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
-                      <span className={propLabel}>Curso</span>
+                    <div className={propRow}>
+                      <span className={propKey}>
+                        <Library aria-hidden="true" />
+                        Curso
+                      </span>
                       <span>
                         {selected.coursePath
                           ? resolveCourseTitle(selected.coursePath, titles)
@@ -2179,25 +2204,29 @@ function AnnotationsWorkspace({
                     </div>
                   ) : null}
                   {selected.coursePath || selected.lessonRelativePath || selected.projectId ? (
-                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
-                      <span className={propLabel}>{targetPropLabel(selected)}</span>
+                    <div className={propRow}>
+                      <span className={propKey}>
+                        <Film aria-hidden="true" />
+                        {targetPropLabel(selected)}
+                      </span>
                       <span>{targetPropValue(selected)}</span>
                     </div>
                   ) : null}
                   {typeof selected.timeSec === 'number' ? (
-                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
-                      <span className={propLabel}>Tiempo</span>
+                    <div className={propRow}>
+                      <span className={propKey}>
+                        <Clock aria-hidden="true" />
+                        Tiempo
+                      </span>
                       <span className="flex min-w-0 flex-wrap items-center gap-[0.45rem]">
                         <span>{formatTime(selected.timeSec)}</span>
                         {onJump && selected.coursePath ? (
                           <button
                             type="button"
-                            className={cn(
-                              btnGhost,
-                              'px-2 py-[0.12rem] text-xs leading-[1.2]'
-                            )}
+                            className={cn(btnGhost, btnCompact, 'h-6 px-2')}
                             onClick={() => onJump(selected)}
                           >
+                            <Play className="size-3 fill-current" aria-hidden="true" />
                             Ir al video
                           </button>
                         ) : null}
@@ -2205,14 +2234,20 @@ function AnnotationsWorkspace({
                     </div>
                   ) : null}
                   {selected.updatedAt && selected.updatedAt !== selected.createdAt ? (
-                    <div className="grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
-                      <span className={propLabel}>Actualizado</span>
+                    <div className={propRow}>
+                      <span className={propKey}>
+                        <History aria-hidden="true" />
+                        Actualizada
+                      </span>
                       <span>{formatDateTime(selected.updatedAt)}</span>
                     </div>
                   ) : null}
                   {(selected.anchors || []).length > 1 ? (
-                    <div className="col-span-full grid grid-cols-[9.5rem_1fr] items-center gap-3 text-base max-[900px]:grid-cols-1 max-[900px]:gap-[0.15rem]">
-                      <span className={propLabel}>También anclada en</span>
+                    <div className={propRow}>
+                      <span className={propKey}>
+                        <Link2 aria-hidden="true" />
+                        También en
+                      </span>
                       <span>
                         {selected.anchors
                           .filter(
@@ -2226,9 +2261,13 @@ function AnnotationsWorkspace({
                   ) : null}
                 </div>
 
-                <div className="px-5 pb-3" data-annotation-topics="">
-                  <span className={propLabel}>Temas</span>
-                  <div className="mt-[0.35rem] flex flex-wrap items-center gap-[0.35rem]">
+                <div className="-mx-1.5 -mt-4 mb-5 border-b border-ink/8 pb-4" data-annotation-topics="">
+                  <div className={cn(propRow, 'items-start')}>
+                  <span className={cn(propKey, 'pt-0.5')}>
+                    <Hash aria-hidden="true" />
+                    Temas
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1">
                     {draftTopics.map((title) => (
                       <button
                         key={title}
@@ -2248,7 +2287,7 @@ function AnnotationsWorkspace({
                       </button>
                     ))}
                     <input
-                      className="min-w-[8rem] border-0 bg-transparent px-[0.2rem] py-[0.15rem] font-[inherit] text-ink outline-none"
+                      className="min-w-[8rem] border-0 bg-transparent px-1 py-0.5 text-sm text-ink outline-none placeholder:text-ink-faint"
                       value={topicQuery}
                       placeholder="Añadir tema"
                       aria-label="Añadir tema"
@@ -2265,8 +2304,9 @@ function AnnotationsWorkspace({
                       }}
                     />
                   </div>
+                  </div>
                   {topicQuery.trim() && topicSuggestions.length ? (
-                    <div className="mt-[0.35rem] flex flex-wrap gap-[0.35rem] [&_button]:cursor-pointer [&_button]:rounded-full [&_button]:border [&_button]:border-chip-status-border [&_button]:bg-chip-status [&_button]:px-[0.55rem] [&_button]:py-[0.15rem] [&_button]:font-[inherit] [&_button]:text-xs [&_button]:text-chip-status-text">
+                    <div className="mt-1.5 ml-[calc(9rem+0.75rem+0.375rem)] flex flex-wrap gap-1 max-[900px]:ml-1.5 [&_button]:cursor-pointer [&_button]:rounded-full [&_button]:border [&_button]:border-dashed [&_button]:border-chip-status-border [&_button]:bg-surface [&_button]:px-2 [&_button]:py-px [&_button]:text-xs [&_button]:text-chip-status-text [&_button:hover]:bg-chip-status">
                       {topicSuggestions.map((title) => (
                         <button key={title} type="button" onClick={() => addTopicTitle(title)}>
                           {title}
