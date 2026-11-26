@@ -41,6 +41,7 @@ import {
   segmentedItem,
   selectControl
 } from '../ui/classes'
+import { courseMissingMessage } from '../utils/courseMissing'
 
 const cardAction = cn(btnGhost, btnCompact)
 const VIEW_KEY = 'projects.view'
@@ -564,7 +565,7 @@ function ProjectsKanban({ courses, onNavigate, onOpenCourse }) {
   const handleOpen = (project) => {
     const course = courses.find((c) => c.path === project.coursePath)
     if (!course) {
-      toast.error('Curso no encontrado en la biblioteca')
+      toast.error(courseMissingMessage(courses))
       return
     }
     onOpenCourse(course, { projectId: project.id })

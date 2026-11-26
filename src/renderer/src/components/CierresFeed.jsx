@@ -31,6 +31,7 @@ import {
   searchIcon,
   searchInput
 } from '../ui/classes'
+import { courseMissingMessage } from '../utils/courseMissing'
 
 
 function formatWhen(ts) {
@@ -216,7 +217,7 @@ function CierresFeed({ courses, onNavigate, onOpenCourse }) {
   const openSubject = (item) => {
     const course = courses.find((entry) => entry.path === item.coursePath)
     if (!course) {
-      toast.error('Curso no encontrado en la biblioteca')
+      toast.error(courseMissingMessage(courses))
       return
     }
     if (item.projectId) onOpenCourse?.(course, { projectId: item.projectId })

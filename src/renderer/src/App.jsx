@@ -16,6 +16,7 @@ import PlaylistCanvas from './components/PlaylistCanvas'
 import FlashcardsView from './components/FlashcardsView'
 import SourcesView from './components/SourcesView'
 import LibraryHeader from './components/LibraryHeader'
+import AppHeader from './components/AppHeader'
 import CourseZipBar from './components/CourseZipBar'
 import ErrorBoundary from './components/ErrorBoundary'
 import Loader from './components/Loader'
@@ -42,6 +43,7 @@ import {
 import { focusSearchOnShortcut } from './utils/focusSearchBar'
 import { useBriefPending } from './utils/briefRoundtrip'
 import { cn } from './ui/cn'
+import { courseMissingMessage } from './utils/courseMissing'
 import { FileWarning, FileText, FolderOpen, ImageOff, X } from 'lucide-react'
 import {
   btnCompact,
@@ -50,6 +52,7 @@ import {
   btnQuiet,
   iconOnly,
   notice,
+  pageShell,
   sectionMeta,
   sectionTitle,
   statCard,
@@ -128,7 +131,11 @@ function DesktopShellNotice() {
   )
 }
 
-function LibrarySetup({ onPathSet }) {
+/**
+ * The Biblioteca page while no course folder is connected. The rest of the app
+ * (notes, sources, cards) keeps working: it lives in the app's own data, not the folder.
+ */
+function LibrarySetup({ onPathSet, onNavigate }) {
   const [isPicking, setIsPicking] = useState(false)
 
   const handlePick = async () => {
@@ -146,8 +153,8 @@ function LibrarySetup({ onPathSet }) {
     }
   }
 
-  return (
-    <div className={setupShell}>
+  const prompt = (
+    <div className={cn(setupShell, 'min-h-0 flex-1')}>
       <img
         src={brandMark}
         alt=""
@@ -155,9 +162,9 @@ function LibrarySetup({ onPathSet }) {
         height={72}
         className="rounded-xl shadow-lift ring-1 ring-ink/8"
       />
-      <h1 className="m-0 font-display text-3xl font-bold tracking-tight">Catálogo de cursos</h1>
+      <h2 className="m-0 font-display text-3xl font-bold tracking-tight">Catálogo de cursos</h2>
       <p className="m-0 max-w-[28rem] text-ink-soft">
-        Elige la carpeta que contiene tus cursos para empezar.
+        Elige la carpeta que contiene tus cursos para ver tu biblioteca.
       </p>
       <button
         type="button"
@@ -168,6 +175,16 @@ function LibrarySetup({ onPathSet }) {
         <FolderOpen size={16} aria-hidden="true" />
         {isPicking ? 'Abriendo…' : 'Elegir carpeta'}
       </button>
+      <p className="m-0 max-w-[28rem] text-sm text-ink-soft">
+        Mientras tanto puedes usar Anotaciones, Fuentes y Tarjetas desde el menú de arriba.
+      </p>
+    </div>
+  )
+
+  return (
+    <div className={pageShell}>
+      <AppHeader active="library" onNavigate={onNavigate} />
+      {prompt}
     </div>
   )
 }
@@ -930,6 +947,8 @@ function App() {
   const [courses, setCourses] = useState([])
   const [libraryPath, setLibraryPath] = useState(null)
   const [needsSetup, setNeedsSetup] = useState(false)
+  const needsSetupRef = useRef(false)
+  needsSetupRef.current = needsSetup
   const [activeCoursePath, setActiveCoursePath] = useState(null)
   const [resumeTarget, setResumeTarget] = useState(null)
   const [liveJump, setLiveJump] = useState(null)
@@ -1009,6 +1028,10 @@ function App() {
   }, [mergeLearning])
 
   const refreshCourses = useCallback(async () => {
+    if (needsSetupRef.current) {
+      loadCourses()
+      return
+    }
     if (loadingRef.current) return
     loadingRef.current = true
     setIsLoading(true)
@@ -1023,7 +1046,7 @@ function App() {
       setIsLoading(false)
       loadingRef.current = false
     }
-  }, [mergeLearning])
+  }, [mergeLearning, loadCourses])
 
   const handleLearningProgressChange = useCallback((coursePath, learning) => {
     setCourses((prev) =>
@@ -1266,25 +1289,7 @@ function App() {
       {shellMissing ? (
         <DesktopShellNotice />
       ) : annotationsWindowMode ? (
-        needsSetup ? (
-          <LibrarySetup
-            onPathSet={(path) => {
-              setLibraryPath(path)
-              setNeedsSetup(false)
-              loadCourses()
-            }}
-          />
-        ) : (
-          <AnnotationsPopoutView coursePath={annotationsWindowMode.coursePath} courses={courses} />
-        )
-      ) : needsSetup ? (
-        <LibrarySetup
-          onPathSet={(path) => {
-            setLibraryPath(path)
-            setNeedsSetup(false)
-            loadCourses()
-          }}
-        />
+        <AnnotationsPopoutView coursePath={annotationsWindowMode.coursePath} courses={courses} />
       ) : libraryStudyMode === 'annotations' ? (
         <LibraryStudyView
           courses={courses}
@@ -1315,7 +1320,7 @@ function App() {
           onOpenLesson={({ coursePath, lessonRelativePath, timeSec }) => {
             const course = courses.find((item) => item.path === coursePath)
             if (!course) {
-              toast.error('Curso no encontrado en la biblioteca')
+              toast.error(courseMissingMessage(courses))
               return
             }
             openCourse(course, { lessonRelativePath, timeSec: timeSec ?? null })
@@ -1364,6 +1369,15 @@ function App() {
           onOpenExplorer={(c) => window.api.openCourseFolder(c.path)}
           onOpenAnnotations={openCourseAnnotations}
           onProgressChange={handleLearningProgressChange}
+        />
+      ) : needsSetup ? (
+        <LibrarySetup
+          onNavigate={navigateApp}
+          onPathSet={(path) => {
+            setLibraryPath(path)
+            setNeedsSetup(false)
+            loadCourses()
+          }}
         />
       ) : (
         <FilterableCoursesGrid

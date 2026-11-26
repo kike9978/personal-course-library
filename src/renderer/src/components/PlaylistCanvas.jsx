@@ -56,6 +56,7 @@ import { ArrowUpRight, ChevronDown, Play, Plus, Search, X } from 'lucide-react'
 import { MAX_NESTED, settleNesting } from '../../../shared/playlistNest.js'
 import { applyCoursePick, collectExportCoursePaths } from '../../../shared/courseExportSelection.js'
 import { courseCatalog, sameFolder } from '../../../shared/courseFolderMatch.js'
+import { courseMissingMessage } from '../utils/courseMissing'
 import {
   PLAYLIST_CARD_H,
   PLAYLIST_COVER_H,
@@ -1060,7 +1061,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
     (coursePath) => {
       const course = courseCatalog(coursesRef.current).get(coursePath)
       if (!course) {
-        toast.error('Ese curso no está en la biblioteca')
+        toast.error(courseMissingMessage(coursesRef.current))
         return
       }
       onOpenCourse?.(course)
@@ -1071,7 +1072,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
   const previewCourse = useCallback((coursePath) => {
     const course = courseCatalog(coursesRef.current).get(coursePath)
     if (!course) {
-      toast.error('Ese curso no está en la biblioteca')
+      toast.error(courseMissingMessage(coursesRef.current))
       return
     }
     setDetailPath(course.path)

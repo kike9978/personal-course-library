@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import AnnotationsWorkspace from './AnnotationsWorkspace'
 import { collectCourseFacets } from '../utils/courseFilters'
+import { courseMissingMessage } from '../utils/courseMissing'
 
 function noteInCourse(item, coursePath) {
   if (!coursePath) return true
@@ -174,7 +175,7 @@ function LibraryStudyView({
     }
     const course = courses.find((c) => c.path === item.coursePath)
     if (!course) {
-      toast.error('Curso no encontrado en la biblioteca')
+      toast.error(courseMissingMessage(courses))
       return
     }
     onOpenCourse(
