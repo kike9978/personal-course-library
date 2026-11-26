@@ -273,3 +273,65 @@ describe('splitInstagramTitle', () => {
     assert.deepEqual(splitInstagramTitle('Just a title'), { title: 'Just a title' })
   })
 })
+
+describe('Notion wire for links', async () => {
+  const { sourceFromRow, sourceWire, sourceWireHash, wireHash } = await import('./notionSync.js')
+  const source = {
+    id: 's1',
+    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    kind: 'youtube',
+    title: 'Video',
+    author: 'Rick',
+    siteName: 'YouTube',
+    status: 'kept',
+    topicIds: ['b', 'a'],
+    startSec: 42,
+    lastPositionSec: 100,
+    thumbnailFile: 'x.jpg',
+    captures: [{ file: 'c.png' }]
+  }
+
+  it('leaves out per-computer fields', () => {
+    const local = sourceWireHash(wireHash, source)
+    const moved = sourceWireHash(wireHash, {
+      ...source,
+      lastPositionSec: 5,
+      thumbnailFile: null,
+      captures: []
+    })
+    assert.equal(local, moved)
+    assert.equal(JSON.parse(sourceWire(source).body).topicIds.join(), 'a,b')
+  })
+
+  it('reads a row back to the same hash', () => {
+    const wire = sourceWire(source)
+    const row = {
+      title: wire.title,
+      body: wire.body,
+      url: wire.url,
+      status: wire.status,
+      topicIds: ['a', 'b']
+    }
+    assert.equal(sourceWireHash(wireHash, sourceFromRow(row)), sourceWireHash(wireHash, source))
+  })
+
+  it('lets the Status and URL columns win over the body', () => {
+    const wire = sourceWire(source)
+    const shape = sourceFromRow({
+      title: 'Nuevo',
+      body: wire.body,
+      url: 'https://example.com/a',
+      status: 'archived'
+    })
+    assert.equal(shape.url, 'https://example.com/a')
+    assert.equal(shape.status, 'archived')
+    assert.equal(shape.title, 'Nuevo')
+  })
+
+  it('accepts a row typed in Notion with only a URL', () => {
+    const shape = sourceFromRow({ title: '', body: '', url: 'https://example.com/x' })
+    assert.equal(shape.url, 'https://example.com/x')
+    assert.equal(shape.status, 'inbox')
+    assert.equal(sourceFromRow({ title: 'x', body: '' }), null)
+  })
+})

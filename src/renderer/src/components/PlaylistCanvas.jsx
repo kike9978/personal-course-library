@@ -1903,6 +1903,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
     })
     return [...names].sort((a, b) => a.localeCompare(b))
   }, [courses])
+  const mediaNames = useMemo(() => collectCourseFacets(courses).media, [courses])
   const listedCourses = useMemo(() => {
     const paths = new Set()
     let stored = 0
@@ -2479,6 +2480,7 @@ function PlaylistWorkspace({ courses, onNavigate, onOpenCourse, zipExport }) {
             course={editingCourse}
             programOptions={programs}
             themeOptions={themes}
+            mediaOptions={mediaNames}
             onCourseUpdated={() => setEditingCourse(null)}
             onClose={() => setEditingCourse(null)}
           />

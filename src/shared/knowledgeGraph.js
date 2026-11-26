@@ -143,7 +143,12 @@ export function stripTopicFromMarkdown(markdown, topic = {}) {
 }
 
 function courseFolderName(coursePath) {
-  return String(coursePath || '').split(/[\\/]/).filter(Boolean).pop() || ''
+  return (
+    String(coursePath || '')
+      .split(/[\\/]/)
+      .filter(Boolean)
+      .pop() || ''
+  )
 }
 
 export function sameCourse(a, b) {
@@ -203,8 +208,7 @@ export function normalizeAnchor(anchor = {}, coursePath = null) {
     coursePath: anchor.coursePath || coursePath || null,
     lessonRelativePath: hasProject ? null : anchor.lessonRelativePath || null,
     lessonTitle: hasProject ? null : anchor.lessonTitle || null,
-    timeSec:
-      hasProject || typeof anchor.timeSec !== 'number' ? null : Math.max(0, anchor.timeSec),
+    timeSec: hasProject || typeof anchor.timeSec !== 'number' ? null : Math.max(0, anchor.timeSec),
     projectId,
     projectTitle: hasProject ? anchor.projectTitle || null : null
   }
@@ -297,7 +301,11 @@ export function topicCourseSpan(findings) {
   return span
 }
 
-export function groupFindingsByTopic(findings, topics, { corpus = findings, overlapOnly = false } = {}) {
+export function groupFindingsByTopic(
+  findings,
+  topics,
+  { corpus = findings, overlapOnly = false } = {}
+) {
   const span = topicCourseSpan(corpus)
   const topicById = new Map((topics || []).map((topic) => [topic.id, topic]))
   const buckets = new Map()
@@ -362,7 +370,9 @@ export function isDefaultNoteTitle(title) {
 
 /** Seconds encoded in a placeholder title such as "new note 1:23". */
 export function defaultTitleTimeSec(title) {
-  const match = String(title || '').trim().match(DEFAULT_NOTE_TITLE_RE)
+  const match = String(title || '')
+    .trim()
+    .match(DEFAULT_NOTE_TITLE_RE)
   if (!match?.[1]) return null
   const parts = match[1].split(':').map((part) => Number(part))
   if (parts.some((part) => !Number.isInteger(part) || part < 0)) return null
@@ -387,7 +397,11 @@ export function plainNoteText(markdown) {
   )
   text = text.replace(/\[([^\]]*)\]\([^)]*\)/g, (_, label) => {
     const value = String(label || '').trim()
-    if (!value || /^(https?:|course-media:|file:)/i.test(value) || /^[\w./-]+\.\w{2,5}$/.test(value)) {
+    if (
+      !value ||
+      /^(https?:|course-media:|file:)/i.test(value) ||
+      /^[\w./-]+\.\w{2,5}$/.test(value)
+    ) {
       return ' '
     }
     return ` ${value} `
@@ -500,7 +514,12 @@ function clip(text, max = 24) {
 }
 
 function fileName(path) {
-  return String(path || '').split(/[\\/]/).filter(Boolean).pop() || 'Archivo'
+  return (
+    String(path || '')
+      .split(/[\\/]/)
+      .filter(Boolean)
+      .pop() || 'Archivo'
+  )
 }
 
 function filesOf(finding) {
@@ -617,7 +636,8 @@ function rememberCourse(courses, coursePath) {
 
 function addEdge(edges, seen, source, target, edgeType, label, extra = null) {
   if (!source || !target || source === target) return false
-  const directed = edgeType === 'topic' || edgeType === 'file' || edgeType === 'course' || edgeType === 'link'
+  const directed =
+    edgeType === 'topic' || edgeType === 'file' || edgeType === 'course' || edgeType === 'link'
   const [from, to] = directed ? [source, target] : [source, target].sort()
   const id = directed ? `${from}->${to}` : `${edgeType}:${from}<->${to}`
   if (seen.has(id)) return false
@@ -659,7 +679,9 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
     byTopic.get(primary).push(finding)
   }
 
-  const nodes = topicList.map((topic) => nodeRecord('topic', topic.id, topic.title, topicPoints.get(topic.id)))
+  const nodes = topicList.map((topic) =>
+    nodeRecord('topic', topic.id, topic.title, topicPoints.get(topic.id))
+  )
   for (const [topicId, group] of byTopic) {
     const origin = topicPoints.get(topicId)
     group.forEach((finding, index) => {
@@ -677,28 +699,42 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
     .filter((finding) => !(finding.topicIds || []).some((id) => used.has(id)))
     .sort((a, b) => String(a.id).localeCompare(String(b.id)))
   const noteLinked = (finding) =>
-    untagged.concat(findingList).some(
-      (other) =>
-        other.id !== finding.id &&
-        (filesOf(finding).some((file) => filesOf(other).some((candidate) => candidate.id === file.id)) ||
-          courseKeys(finding).some((path) => courseKeys(other).some((candidate) => sameCourse(path, candidate))))
-    )
+    untagged
+      .concat(findingList)
+      .some(
+        (other) =>
+          other.id !== finding.id &&
+          (filesOf(finding).some((file) =>
+            filesOf(other).some((candidate) => candidate.id === file.id)
+          ) ||
+            courseKeys(finding).some((path) =>
+              courseKeys(other).some((candidate) => sameCourse(path, candidate))
+            ))
+      )
   const attached = untagged.filter((finding) => noteLinked(finding))
   const orphans = untagged.filter((finding) => !noteLinked(finding))
-  const placedPoints = new Map(nodes.filter((node) => node.data.kind === 'finding').map((node) => [node.data.refId, node]))
+  const placedPoints = new Map(
+    nodes.filter((node) => node.data.kind === 'finding').map((node) => [node.data.refId, node])
+  )
   const pending = [...attached]
   let placedAttached = true
   while (pending.length && placedAttached) {
     placedAttached = false
     for (let index = pending.length - 1; index >= 0; index -= 1) {
       const finding = pending[index]
-      const neighbors = untagged.concat(findingList).filter(
-        (other) =>
-          other.id !== finding.id &&
-          placedPoints.has(other.id) &&
-          (filesOf(finding).some((file) => filesOf(other).some((candidate) => candidate.id === file.id)) ||
-            courseKeys(finding).some((path) => courseKeys(other).some((candidate) => sameCourse(path, candidate))))
-      )
+      const neighbors = untagged
+        .concat(findingList)
+        .filter(
+          (other) =>
+            other.id !== finding.id &&
+            placedPoints.has(other.id) &&
+            (filesOf(finding).some((file) =>
+              filesOf(other).some((candidate) => candidate.id === file.id)
+            ) ||
+              courseKeys(finding).some((path) =>
+                courseKeys(other).some((candidate) => sameCourse(path, candidate))
+              ))
+        )
       if (!neighbors.length) continue
       const origin = neighbors.reduce(
         (sum, other) => {
@@ -720,7 +756,9 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
     }
   }
   if (pending.length) {
-    const clusterRadius = topicList.length ? Math.max(200, (topicList.length > 1 ? Math.max(180, topicList.length * 36) : 0) + 140) : 140
+    const clusterRadius = topicList.length
+      ? Math.max(200, (topicList.length > 1 ? Math.max(180, topicList.length * 36) : 0) + 140)
+      : 140
     ringPositions(pending.length, clusterRadius).forEach((point, index) => {
       const node = nodeRecord('finding', pending[index].id, findingLabel(pending[index]), point)
       node.data.orphan = true
@@ -729,9 +767,10 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
     })
   }
   const topicRadius = topicList.length > 1 ? Math.max(180, topicList.length * 36) : 0
-  const orphanRadius = topicList.length || attached.length
-    ? Math.max(260, topicRadius + 220)
-    : Math.max(120, orphans.length * 28)
+  const orphanRadius =
+    topicList.length || attached.length
+      ? Math.max(260, topicRadius + 220)
+      : Math.max(120, orphans.length * 28)
   const orphanPoints =
     orphans.length === 1 && !topicList.length && !attached.length
       ? [{ x: 0, y: 0 }]
@@ -761,15 +800,15 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
       files.get(file.id).findingIds.push(finding.id)
     }
   }
-  const findingPoint = new Map(nodes.filter((node) => node.data.kind === 'finding').map((node) => [node.id, node]))
+  const findingPoint = new Map(
+    nodes.filter((node) => node.data.kind === 'finding').map((node) => [node.id, node])
+  )
   for (const file of files.values()) {
-    const points = file.findingIds
-      .map((id) => findingPoint.get(`finding:${id}`))
-      .filter(Boolean)
-    const origin = points.reduce(
-      (sum, node) => ({ x: sum.x + node.x, y: sum.y + node.y }),
-      { x: 0, y: 0 }
-    )
+    const points = file.findingIds.map((id) => findingPoint.get(`finding:${id}`)).filter(Boolean)
+    const origin = points.reduce((sum, node) => ({ x: sum.x + node.x, y: sum.y + node.y }), {
+      x: 0,
+      y: 0
+    })
     const node = nodeRecord('file', file.id, file.label, {
       x: origin.x / Math.max(points.length, 1) + 36,
       y: origin.y / Math.max(points.length, 1) - 28
@@ -801,7 +840,10 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
   const placedById = new Map(placed.map((finding) => [finding.id, finding]))
   for (const [path, findingIds] of courseMembers) {
     const points = findingIds.map((id) => findingPoint.get(`finding:${id}`)).filter(Boolean)
-    const origin = points.reduce((sum, node) => ({ x: sum.x + node.x, y: sum.y + node.y }), { x: 0, y: 0 })
+    const origin = points.reduce((sum, node) => ({ x: sum.x + node.x, y: sum.y + node.y }), {
+      x: 0,
+      y: 0
+    })
     const node = nodeRecord('course', path, resolveCourseTitle(path, courseTitles), {
       x: origin.x / Math.max(points.length, 1) - 42,
       y: origin.y / Math.max(points.length, 1) + 34
@@ -834,7 +876,14 @@ function buildTopicsGraph(findings, topics, courseTitles = {}) {
   for (const finding of placed) {
     for (const mention of parseMentions(finding.body)) {
       if (mention.type !== 'note' || !placedIds.has(mention.id)) continue
-      const added = addEdge(edges, seen, `finding:${finding.id}`, `finding:${mention.id}`, 'link', '')
+      const added = addEdge(
+        edges,
+        seen,
+        `finding:${finding.id}`,
+        `finding:${mention.id}`,
+        'link',
+        ''
+      )
       if (!added && edges.length >= EDGE_CAP) truncated = true
     }
   }
@@ -883,14 +932,21 @@ function buildCoursesGraph(findings, topics, courseTitles) {
   }
 
   const ordered = [...courses].sort((a, b) =>
-    resolveCourseTitle(a, courseTitles).localeCompare(resolveCourseTitle(b, courseTitles), undefined, {
-      sensitivity: 'base'
-    })
+    resolveCourseTitle(a, courseTitles).localeCompare(
+      resolveCourseTitle(b, courseTitles),
+      undefined,
+      {
+        sensitivity: 'base'
+      }
+    )
   )
   const linkedPaths = ordered.filter((path) => linked.has(path))
   const loosePaths = ordered.filter((path) => !linked.has(path))
   const linkedPoints = linkedPaths.map((_, index) => phyllotaxis(index))
-  const maxRadius = linkedPoints.reduce((max, point) => Math.max(max, Math.hypot(point.x, point.y)), 0)
+  const maxRadius = linkedPoints.reduce(
+    (max, point) => Math.max(max, Math.hypot(point.x, point.y)),
+    0
+  )
   const outer = loosePaths.length
     ? ringPositions(loosePaths.length, Math.max(168, maxRadius + 128))
     : []

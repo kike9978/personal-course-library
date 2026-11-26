@@ -346,7 +346,9 @@ export function progressIsEmpty(progress) {
 
 /** Completed lessons and the En curso flag, without the playback position. */
 export function progressTrackKey(progress) {
-  const data = progress?.lessons ? progressWire(progress) && progressFromBody(progressWire(progress).body) : progressFromBody(progress)
+  const data = progress?.lessons
+    ? progressWire(progress) && progressFromBody(progressWire(progress).body)
+    : progressFromBody(progress)
   if (!data) return ''
   const done = Object.entries(data.lessons)
     .filter(([, lesson]) => lesson.completed)
@@ -393,7 +395,9 @@ export function mergeCourseProgress(local, remote) {
       durationSec,
       lastOpenedAt: Math.max(current.lastOpenedAt || 0, remoteLesson.lastOpenedAt || 0),
       positionSec:
-        completed && durationSec ? durationSec : current.positionSec || remoteLesson.positionSec || 0
+        completed && durationSec
+          ? durationSec
+          : current.positionSec || remoteLesson.positionSec || 0
     }
   }
   const last = viewedAtOf(right) >= viewedAtOf(left) ? right : left
@@ -557,6 +561,94 @@ export function projectWire(project) {
   return { title: normalizeTitle(project?.title) || 'Proyecto', body, status }
 }
 
+/** Topic ids in a fixed order, so the same set always hashes the same. */
+function sourceTopicIds(values) {
+  return sortedStrings(values).sort()
+}
+
+export const SOURCE_STATUSES_WIRE = new Set(['inbox', 'kept', 'archived'])
+
+/**
+ * A saved link (Fuentes). Title is the page title, status the Status select and the
+ * URL its own column. The rest rides in the body. Per-computer fields (playback
+ * position, cached thumbnail, captures) are not part of it.
+ */
+export function sourceWire(source) {
+  const status = SOURCE_STATUSES_WIRE.has(source?.status) ? source.status : 'inbox'
+  const body = normalizeBody(
+    JSON.stringify({
+      url: String(source?.url || ''),
+      kind: String(source?.kind || 'other'),
+      author: String(source?.author || ''),
+      siteName: String(source?.siteName || ''),
+      publishedAt: String(source?.publishedAt || ''),
+      startSec: typeof source?.startSec === 'number' ? source.startSec : null,
+      topicIds: sourceTopicIds(source?.topicIds),
+      status
+    })
+  )
+  return {
+    title: normalizeTitle(source?.title) || 'Enlace',
+    body,
+    status,
+    url: String(source?.url || '')
+  }
+}
+
+export function sourceFromBody(body) {
+  try {
+    const data = JSON.parse(String(body || ''))
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+    return {
+      url: String(data.url || ''),
+      kind: String(data.kind || 'other'),
+      author: String(data.author || ''),
+      siteName: String(data.siteName || ''),
+      publishedAt: String(data.publishedAt || ''),
+      startSec: typeof data.startSec === 'number' ? data.startSec : null,
+      topicIds: sourceTopicIds(data.topicIds),
+      status: SOURCE_STATUSES_WIRE.has(data.status) ? data.status : 'inbox'
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * What a Notion row says about a link. The Status and URL columns win over the body,
+ * so editing them in Notion's table view is enough.
+ */
+export function sourceFromRow(remote) {
+  const parsed = sourceFromBody(remote?.body)
+  const url = String(remote?.url || '').trim()
+  const status = SOURCE_STATUSES_WIRE.has(remote?.status) ? remote.status : null
+  if (!parsed && !url) return null
+  return {
+    ...(parsed || {
+      kind: 'other',
+      author: '',
+      siteName: '',
+      publishedAt: '',
+      startSec: null,
+      topicIds: [],
+      status: 'inbox'
+    }),
+    title: normalizeTitle(remote?.title) || 'Enlace',
+    url: url || parsed?.url || '',
+    status: status || parsed?.status || 'inbox',
+    topicIds:
+      Array.isArray(remote?.topicIds) && remote.topicIds.length
+        ? sourceTopicIds(remote.topicIds)
+        : parsed?.topicIds || []
+  }
+}
+
+/** Hash input for a link, the same whether it comes from the app or from a Notion row. */
+export function sourceWireHash(hashFn, source) {
+  const wire = sourceWire(source)
+  return hashFn(wire.title, wire.body)
+}
+
 export function projectFromBody(body) {
   try {
     const data = JSON.parse(String(body || ''))
@@ -642,7 +734,13 @@ export function fileKeyFromMarker(marker) {
  * Rebuild the sidebar anchor from the course row and the file page.
  * A file page that was never stamped falls back to its title.
  */
-export function anchorFromNotion({ courseMarker, fileMarker, fileTitle, filePageId, timeSec } = {}) {
+export function anchorFromNotion({
+  courseMarker,
+  fileMarker,
+  fileTitle,
+  filePageId,
+  timeSec
+} = {}) {
   const courseKey = String(courseMarker || '').replace(/^node:/, '')
   const folder = courseKey.startsWith('course:') ? courseKey.slice('course:'.length) : ''
   const coursePath = folder && folder !== '__loose__' ? folder : null
@@ -761,7 +859,8 @@ const NESTED_LIST_HEADING = 'Listas anidadas'
 
 function richBlock(type, content, link) {
   const rich = chunkRichText(content)
-  if (link && rich[0]?.text) rich[0] = { type: 'text', text: { content: rich[0].text.content, link: { url: link } } }
+  if (link && rich[0]?.text)
+    rich[0] = { type: 'text', text: { content: rich[0].text.content, link: { url: link } } }
   return {
     object: 'block',
     type,
@@ -855,7 +954,9 @@ export function playlistBodyFromBlocks(blocks) {
   for (const block of blocks || []) {
     const type = block?.type
     const rich = block?.[type]?.rich_text
-    const text = plainRichText(rich).replace(/\u200b/g, '').trim()
+    const text = plainRichText(rich)
+      .replace(/\u200b/g, '')
+      .trim()
     if (type === 'heading_1' || type === 'heading_2' || type === 'heading_3') {
       if (text === NESTED_LIST_HEADING) inChildren = true
       continue

@@ -46,6 +46,7 @@ export function courseToExportRecord(course = {}) {
     institution: course.institution || '',
     instructor: course.instructor || '',
     programs: stringList(course.programs),
+    media: stringList(course.media),
     theme: stringList(course.theme),
     rate: clampRate(course.rate),
     isInProcess: Boolean(course.isInProcess),

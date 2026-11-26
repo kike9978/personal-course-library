@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleCheck,
+  CloudUpload,
   Download,
   Layers,
   NotebookText,
@@ -36,7 +37,6 @@ import {
   iconOnly,
   pageShell
 } from '../ui/classes'
-
 
 function formatWhen(ts) {
   if (!ts) return ''
@@ -297,9 +297,7 @@ function StudyCard({ item, flipped, onFlip, typed }) {
           <span className={faceLabel}>{back.label}</span>
           <span className={faceText}>{back.body}</span>
           {back.extra ? (
-            <span className="mt-3 block text-md leading-relaxed text-ink-soft">
-              {back.extra}
-            </span>
+            <span className="mt-3 block text-md leading-relaxed text-ink-soft">{back.extra}</span>
           ) : null}
           <CardImage image={card.image} className="mt-4 self-center" />
           {card.source ? (
@@ -351,6 +349,14 @@ function CardEditor({ card, onCancel, onSave }) {
   )
 }
 
+/** Short Notion state for a deck, or null when Notion sync is off. */
+function notionLabel(deck, notionOn) {
+  if (!notionOn) return null
+  if (deck.notion?.error) return 'Notion: error'
+  if (deck.notion?.syncedAt) return `En Notion desde ${formatWhen(deck.notion.syncedAt)}`
+  return 'Notion: pendiente'
+}
+
 function cleanError(err, fallback) {
   return String(err?.message || fallback).replace(
     /^Error invoking remote method '[^']+': (Error: )?/,
@@ -383,6 +389,35 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
   useEffect(() => {
     checkAnki()
   }, [checkAnki])
+
+  const [notionOn, setNotionOn] = useState(false)
+  const [notionBusy, setNotionBusy] = useState(null)
+
+  useEffect(() => {
+    window.api
+      .getNotionSync?.()
+      .then((status) => setNotionOn(Boolean(status?.enabled)))
+      .catch(() => {})
+    const stop = window.api.onDeckNotion?.((saved) => {
+      if (saved?.id) putDeck(saved)
+    })
+    return () => stop?.()
+    // putDeck only calls setDecks.
+  }, [])
+
+  const pushNotion = async (item) => {
+    if (notionBusy) return
+    setNotionBusy(item.id)
+    try {
+      const saved = await window.api.pushDeckToNotion(item.id)
+      if (saved) putDeck(saved)
+      toast.success(`«${item.title}» está en Notion.`)
+    } catch (err) {
+      toast.error(cleanError(err, 'No se pudo enviar a Notion'))
+    } finally {
+      setNotionBusy(null)
+    }
+  }
 
   const putDeck = (saved) =>
     setDecks((current) => {
@@ -637,6 +672,22 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
                 >
                   <Send aria-hidden="true" />
                 </button>
+                {notionOn ? (
+                  <button
+                    type="button"
+                    className={iconOnly}
+                    disabled={notionBusy === deck.id}
+                    title={
+                      deck.notion?.error
+                        ? `Notion: ${deck.notion.error}. Reintentar`
+                        : 'Enviar a Notion ahora'
+                    }
+                    aria-label="Enviar a Notion"
+                    onClick={() => pushNotion(deck)}
+                  >
+                    <CloudUpload aria-hidden="true" />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={iconOnly}
@@ -725,7 +776,11 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
                     </button>
                     <button
                       type="button"
-                      className={cn(btnQuiet, btnCompact, 'enabled:hover:bg-danger-soft enabled:hover:text-danger')}
+                      className={cn(
+                        btnQuiet,
+                        btnCompact,
+                        'enabled:hover:bg-danger-soft enabled:hover:text-danger'
+                      )}
                       onClick={removeCard}
                     >
                       <Trash2 size={14} aria-hidden="true" />
@@ -855,7 +910,9 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
                 const known = entry.cards.filter((cardItem) => cardItem.known).length
                 return (
                   <li key={entry.id}>
-                    <article className={cn(cardSurface, cardHover, 'flex h-full flex-col overflow-hidden')}>
+                    <article
+                      className={cn(cardSurface, cardHover, 'flex h-full flex-col overflow-hidden')}
+                    >
                       <button
                         type="button"
                         className="flex flex-1 cursor-pointer flex-col gap-1 border-0 bg-transparent p-4 text-left focus-visible:outline-none focus-visible:shadow-[inset_var(--shadow-ring-soft)]"
@@ -887,7 +944,10 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
                         <span className="mt-1.5 block text-xs text-ink-faint">
                           {[
                             entry.updatedAt ? formatWhen(entry.updatedAt) : null,
-                            entry.ankiSyncedAt ? `En Anki desde ${formatWhen(entry.ankiSyncedAt)}` : null
+                            entry.ankiSyncedAt
+                              ? `En Anki desde ${formatWhen(entry.ankiSyncedAt)}`
+                              : null,
+                            notionLabel(entry, notionOn)
                           ]
                             .filter(Boolean)
                             .join(' · ')}
@@ -913,6 +973,22 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
                         >
                           <Send aria-hidden="true" />
                         </button>
+                        {notionOn ? (
+                          <button
+                            type="button"
+                            className={iconOnly}
+                            disabled={notionBusy === entry.id}
+                            title={
+                              entry.notion?.error
+                                ? `Notion: ${entry.notion.error}. Reintentar`
+                                : 'Enviar a Notion ahora'
+                            }
+                            aria-label="Enviar a Notion"
+                            onClick={() => pushNotion(entry)}
+                          >
+                            <CloudUpload aria-hidden="true" />
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className={iconOnly}
@@ -924,7 +1000,10 @@ function FlashcardsView({ courses = [], onNavigate, onOpenNote, onOpenLesson }) 
                         </button>
                         <button
                           type="button"
-                          className={cn(iconOnly, 'enabled:hover:bg-danger-soft enabled:hover:text-danger')}
+                          className={cn(
+                            iconOnly,
+                            'enabled:hover:bg-danger-soft enabled:hover:text-danger'
+                          )}
                           title="Borrar mazo"
                           aria-label="Borrar mazo"
                           onClick={() => removeDeck(entry)}

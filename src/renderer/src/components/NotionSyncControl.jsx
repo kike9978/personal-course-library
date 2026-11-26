@@ -266,10 +266,13 @@ function choiceLabel(choice, kind) {
   if (choice === 'both') return 'La versión de Notion quedó en una nota nueva'
   if (choice === 'local' && kind === 'proyecto') return 'Quedó el proyecto de esta biblioteca'
   if (choice === 'remote' && kind === 'proyecto') return 'Quedó el proyecto de Notion'
+  if (choice === 'local' && kind === 'fuente') return 'Quedó la fuente de esta biblioteca'
+  if (choice === 'remote' && kind === 'fuente') return 'Quedó la fuente de Notion'
   if (choice === 'remote') return 'Quedó el texto de Notion'
   if (choice === 'keep') {
     if (kind === 'lista') return 'Lista recuperada desde Notion'
     if (kind === 'proyecto') return 'Proyecto recuperado desde Notion'
+    if (kind === 'fuente') return 'Fuente recuperada desde Notion'
     return 'Nota recuperada desde Notion'
   }
   if (choice === 'discard') return 'Página borrada en Notion'
@@ -633,6 +636,33 @@ function NotionSyncAttention({ status, resolvingId, resolveWith, retryingSave })
           ))}
         </div>
       ) : null}
+      {status?.sourceConflicts?.length ? (
+        <div className={deletes}>
+          <h4>Fuentes por elegir</h4>
+          <p>
+            Cambiaron aquí y en Notion. El título, el enlace, el estado y los temas viajan con la
+            versión que elijas. La posición del video y las capturas se quedan en este equipo.
+          </p>
+          {status.sourceConflicts.map((item) => (
+            <VersionChoice
+              key={item.sourceId}
+              title={item.title || 'Enlace'}
+              localText={item.localBody}
+              remoteText={[item.remoteTitle, item.remoteBody].filter(Boolean).join('\n\n')}
+              busy={resolvingId === item.sourceId}
+              onChoose={(choice) =>
+                void resolveWith(
+                  item.sourceId,
+                  choice,
+                  () => window.api.resolveNotionSourceConflict(item.sourceId, choice),
+                  'No se pudo resolver el conflicto',
+                  'fuente'
+                )
+              }
+            />
+          ))}
+        </div>
+      ) : null}
       {status?.playlistConflicts?.length ? (
         <div className={deletes}>
           <h4>Listas por elegir</h4>
@@ -741,6 +771,52 @@ function NotionSyncAttention({ status, resolvingId, resolveWith, retryingSave })
                   }
                 >
                   Recuperar el de Notion
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {status?.sourceDeleteConflicts?.length ? (
+        <div className={deletes}>
+          <h4>Fuentes borradas a medias</h4>
+          <p>La fuente se borró aquí y Notion cambió después de la última sincronización.</p>
+          {status.sourceDeleteConflicts.map((item) => (
+            <article className={block} key={item.sourceId}>
+              <strong>{item.title || 'Enlace'}</strong>
+              <pre>{item.remoteBody || item.remoteTitle || 'Sin texto'}</pre>
+              <div className={actionsBtns}>
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={resolvingId === item.sourceId}
+                  onClick={() =>
+                    void resolveWith(
+                      item.sourceId,
+                      'discard',
+                      () => window.api.resolveNotionSourceDelete(item.sourceId, 'discard'),
+                      'No se pudo resolver el borrado',
+                      'fuente'
+                    )
+                  }
+                >
+                  Borrar en Notion
+                </button>
+                <button
+                  type="button"
+                  className={btnPrimary}
+                  disabled={resolvingId === item.sourceId}
+                  onClick={() =>
+                    void resolveWith(
+                      item.sourceId,
+                      'keep',
+                      () => window.api.resolveNotionSourceDelete(item.sourceId, 'keep'),
+                      'No se pudo resolver el borrado',
+                      'fuente'
+                    )
+                  }
+                >
+                  Recuperar la de Notion
                 </button>
               </div>
             </article>
@@ -891,6 +967,8 @@ export function NotionSyncButton() {
     (status?.playlistDeleteConflicts?.length || 0) +
     (status?.projectConflicts?.length || 0) +
     (status?.projectDeleteConflicts?.length || 0) +
+    (status?.sourceConflicts?.length || 0) +
+    (status?.sourceDeleteConflicts?.length || 0) +
     (status?.progressConflicts?.length || 0)
   const retryingSave =
     status?.lastErrorCode === 'conflict_error' && (status.syncing || status.queued)

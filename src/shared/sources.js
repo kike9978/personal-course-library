@@ -181,6 +181,8 @@ export function normalizeSource(input = {}, existing = null) {
     topicIds: Array.isArray(pick('topicIds')) ? [...new Set(pick('topicIds').filter(Boolean))] : [],
     status,
     snapshot: pick('snapshot') ?? null,
+    // Notion sync cursor (pageId, ackedHash, conflict…), owned by notionSync.js.
+    notion: pick('notion') ?? null,
     lastPositionSec:
       typeof pick('lastPositionSec') === 'number' && pick('lastPositionSec') >= 0
         ? pick('lastPositionSec')

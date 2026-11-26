@@ -44,7 +44,7 @@ import { focusSearchOnShortcut } from './utils/focusSearchBar'
 import { useBriefPending } from './utils/briefRoundtrip'
 import { cn } from './ui/cn'
 import { courseMissingMessage } from './utils/courseMissing'
-import { FileWarning, FileText, FolderOpen, ImageOff, X } from 'lucide-react'
+import { Flag, FileWarning, FileText, FolderOpen, ImageOff, X } from 'lucide-react'
 import {
   btnCompact,
   btnGhost,
@@ -233,10 +233,12 @@ function FilterableCoursesGrid({
   const [isNewOnly, setIsNewOnly] = useState(false)
   const [recentlyViewedOnly, setRecentlyViewedOnly] = useState(false)
   const [missingPropsOnly, setMissingPropsOnly] = useState(false)
+  const [untaggedOnly, setUntaggedOnly] = useState(false)
   const [gapFilter, setGapFilter] = useState('')
   const [institutionFilter, setInstitutionFilter] = useState('')
   const [programFilter, setProgramFilter] = useState('')
   const [themeFilter, setThemeFilter] = useState('')
+  const [mediaFilter, setMediaFilter] = useState('')
   const [minRate, setMinRate] = useState(0)
   const [minExcitement, setMinExcitement] = useState(0)
   const [sortMode, setSortMode] = useState('az')
@@ -251,7 +253,7 @@ function FilterableCoursesGrid({
   const [importMissingOpen, setImportMissingOpen] = useState(false)
   const [coverSearch, setCoverSearch] = useState(null)
   const [descriptionBatchOpen, setDescriptionBatchOpen] = useState(false)
-  const [programsBatchOpen, setProgramsBatchOpen] = useState(false)
+  const [programsBatch, setProgramsBatch] = useState(null)
   const [dismissedCoverSignature, setDismissedCoverSignature] = useState(() =>
     readStoredSignature(COVER_BANNER_DISMISS_KEY)
   )
@@ -260,7 +262,10 @@ function FilterableCoursesGrid({
   )
   const debouncedFilter = useDebouncedValue(filterText, 200)
 
-  const { institutions, programs, themes } = useMemo(() => collectCourseFacets(courses), [courses])
+  const { institutions, programs, themes, media } = useMemo(
+    () => collectCourseFacets(courses),
+    [courses]
+  )
 
   const missingPropsCourses = useMemo(() => courses.filter((c) => c.missingProps), [courses])
   const missingCoverCourses = useMemo(() => courses.filter((c) => !c.hasCover), [courses])
@@ -268,6 +273,7 @@ function FilterableCoursesGrid({
     () => courses.filter((c) => !c.description?.summary),
     [courses]
   )
+  const reviewCourses = useMemo(() => courses.filter((c) => c.needsReview === true), [courses])
   const missingProgramsCount = useMemo(
     () => courses.filter((c) => !c.missingProps && !(c.programs || []).length).length,
     [courses]
@@ -311,10 +317,12 @@ function FilterableCoursesGrid({
       isNewOnly,
       recentlyViewedOnly,
       missingPropsOnly,
+      untaggedOnly,
       gap: gapFilter,
       institution: institutionFilter,
       program: programFilter,
       theme: themeFilter,
+      media: mediaFilter,
       minRate,
       minExcitement
     }
@@ -368,10 +376,12 @@ function FilterableCoursesGrid({
     isNewOnly,
     recentlyViewedOnly,
     missingPropsOnly,
+    untaggedOnly,
     gapFilter,
     institutionFilter,
     programFilter,
     themeFilter,
+    mediaFilter,
     minRate,
     minExcitement,
     sortMode,
@@ -607,6 +617,8 @@ function FilterableCoursesGrid({
         onRecentlyViewedOnlyChange={setRecentlyViewedOnly}
         missingPropsOnly={missingPropsOnly}
         onMissingPropsOnlyChange={setMissingPropsOnly}
+        untaggedOnly={untaggedOnly}
+        onUntaggedOnlyChange={setUntaggedOnly}
         courseCount={sortedCourses.length}
         isLoading={isLoading}
         onRefresh={onRefresh}
@@ -615,12 +627,15 @@ function FilterableCoursesGrid({
         institutions={institutions}
         programs={programs}
         themes={themes}
+        media={media}
         institutionFilter={institutionFilter}
         onInstitutionFilterChange={setInstitutionFilter}
         programFilter={programFilter}
         onProgramFilterChange={setProgramFilter}
         themeFilter={themeFilter}
         onThemeFilterChange={setThemeFilter}
+        mediaFilter={mediaFilter}
+        onMediaFilterChange={setMediaFilter}
         minRate={minRate}
         onMinRateChange={setMinRate}
         minExcitement={minExcitement}
@@ -638,7 +653,7 @@ function FilterableCoursesGrid({
         onSearchCovers={handleOpenCoverSearch}
         onWriteDescriptions={handleOpenDescriptionBatch}
         missingProgramsCount={missingProgramsCount}
-        onGuessPrograms={() => setProgramsBatchOpen(true)}
+        onGuessPrograms={() => setProgramsBatch({ paths: null })}
       />
 
       <div
@@ -685,7 +700,8 @@ function FilterableCoursesGrid({
 
               {(missingPropsCourses.length > 0 && !missingPropsOnly) ||
               showCoverBanner ||
-              showDescriptionBanner ? (
+              showDescriptionBanner ||
+              reviewCourses.length > 0 ? (
                 <div className="mb-8 flex flex-col gap-2">
                   {missingPropsCourses.length > 0 && !missingPropsOnly ? (
                     <div className={notice} role="status">
@@ -777,6 +793,28 @@ function FilterableCoursesGrid({
                       </div>
                     </div>
                   ) : null}
+
+                  {reviewCourses.length > 0 ? (
+                    <div className={notice} role="status">
+                      <div className="flex items-center gap-2.5">
+                        <Flag className={noticeIcon} aria-hidden="true" />
+                        <span>
+                          <strong>{reviewCourses.length}</strong> curso
+                          {reviewCourses.length === 1 ? '' : 's'} por revisar
+                        </span>
+                      </div>
+                      <div className={bannerActions}>
+                        <button
+                          type="button"
+                          className={noticeBtnGhost}
+                          aria-pressed={gapFilter === 'review'}
+                          onClick={() => toggleGapFilter('review')}
+                        >
+                          {gapFilter === 'review' ? 'Ver todos' : 'Verlos'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -784,11 +822,13 @@ function FilterableCoursesGrid({
                 !isNewOnly &&
                 !recentlyViewedOnly &&
                 !missingPropsOnly &&
+                !untaggedOnly &&
                 !gapFilter &&
                 !debouncedFilter &&
                 !institutionFilter &&
                 !programFilter &&
                 !themeFilter &&
+                !mediaFilter &&
                 !minRate &&
                 !minExcitement &&
                 !hasColumnFilters(columnFilters) && (
@@ -808,7 +848,12 @@ function FilterableCoursesGrid({
                 </span>
                 {gapFilter ? (
                   <button type="button" className={gapChip} onClick={() => setGapFilter('')}>
-                    {gapFilter === 'cover' ? 'Sin portada' : 'Sin descripción'} · Quitar filtro
+                    {gapFilter === 'cover'
+                      ? 'Sin portada'
+                      : gapFilter === 'review'
+                        ? 'Por revisar'
+                        : 'Sin descripción'}{' '}
+                    · Quitar filtro
                   </button>
                 ) : null}
                 <button
@@ -879,6 +924,7 @@ function FilterableCoursesGrid({
                   course={editingCourse}
                   programOptions={programs}
                   themeOptions={themes}
+                  mediaOptions={media}
                   onCourseUpdated={() => {
                     setEditingCourse(null)
                     onRefresh?.()
@@ -912,10 +958,11 @@ function FilterableCoursesGrid({
                 />
               ) : null}
 
-              {programsBatchOpen ? (
+              {programsBatch ? (
                 <CourseProgramsBatch
                   courses={courses.filter((c) => !c.missingProps)}
-                  onClose={() => setProgramsBatchOpen(false)}
+                  initialPaths={programsBatch.paths}
+                  onClose={() => setProgramsBatch(null)}
                 />
               ) : null}
             </>
@@ -933,6 +980,12 @@ function FilterableCoursesGrid({
               selectedCourse.missingProps ? () => handleGenerateOne(selectedCourse) : null
             }
             onSearchCover={() => setCoverSearch({ courses: [selectedCourse] })}
+            onGuessPrograms={(course) => setProgramsBatch({ paths: [course.path] })}
+            onToggleReview={(course) =>
+              window.api
+                .updateCourse(course.path, { needsReview: !course.needsReview })
+                .catch((err) => toast.error(err?.message || 'No se pudo actualizar'))
+            }
           />
         )}
       </div>

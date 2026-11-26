@@ -47,6 +47,7 @@ describe('course catalog export', () => {
       institution: 'School',
       instructor: 'Ada',
       programs: ['Blender'],
+      media: [],
       theme: ['Lighting'],
       rate: 4,
       isInProcess: true,

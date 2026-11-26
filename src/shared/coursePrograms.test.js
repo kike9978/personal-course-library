@@ -8,8 +8,11 @@ import {
   mergePrograms,
   parseProgramsReply,
   pickKey,
+  picksWhere,
+  programTally,
   programKey,
-  programVocabulary
+  programVocabulary,
+  randomCourseSample
 } from './coursePrograms.js'
 
 const blender = {
@@ -157,5 +160,94 @@ describe('parseProgramsReply', () => {
 describe('mergePrograms', () => {
   it('appends without duplicates', () => {
     assert.deepEqual(mergePrograms(['Blender'], ['blender', 'Maya']), ['Blender', 'Maya'])
+  })
+})
+
+describe('programTally and picksWhere', () => {
+  const items = [
+    {
+      path: 'a',
+      suggestions: [
+        { name: 'Blender', confidence: 'high' },
+        { name: 'Krita', confidence: 'low' }
+      ]
+    },
+    { path: 'b', suggestions: [{ name: 'blender', confidence: 'medium' }] }
+  ]
+  it('counts each program across courses', () => {
+    assert.deepEqual(
+      programTally(items).map((row) => [row.name, row.count]),
+      [
+        ['Blender', 2],
+        ['Krita', 1]
+      ]
+    )
+  })
+  it('selects by program or confidence', () => {
+    const blender = picksWhere(items, (s) => programKey(s.name) === programKey('Blender'))
+    assert.deepEqual([...blender], [pickKey('a', 'Blender'), pickKey('b', 'blender')])
+    assert.equal(picksWhere(items, (s) => s.confidence === 'high').size, 1)
+  })
+})
+
+describe('randomCourseSample', () => {
+  const pool = [
+    { path: 'a', programs: ['Blender'] },
+    { path: 'b', programs: [] },
+    { path: 'c' },
+    { path: 'd', programs: ['Maya'] }
+  ]
+  it('takes untagged courses first and caps at count', () => {
+    const two = randomCourseSample(pool, 2)
+    assert.deepEqual([...two].sort(), ['b', 'c'])
+    const three = randomCourseSample(pool, 3)
+    assert.equal(three.length, 3)
+    assert.ok(three.includes('b') && three.includes('c'))
+  })
+  it('handles counts larger than the pool and bad input', () => {
+    assert.equal(randomCourseSample(pool, 99).length, 4)
+    assert.deepEqual(randomCourseSample(pool, 'x'), [])
+  })
+})
+
+describe('web sources', () => {
+  it('asks the chat to search the web and keeps https sources', () => {
+    const text = buildProgramsBrief([{ course: blender, outline }])
+    assert.match(text, /Search the web/)
+    assert.match(text, /source/)
+    const reply = JSON.stringify({
+      programs: [
+        {
+          folder: blender.path,
+          programs: [
+            { name: 'Blender', confidence: 'high', source: 'https://school.com/grease' },
+            { name: 'Krita', confidence: 'low', source: 'javascript:alert(1)' }
+          ]
+        }
+      ]
+    })
+    const parsed = parseProgramsReply(reply, [blender])
+    assert.equal(parsed.items[0].suggestions[0].source, 'https://school.com/grease')
+    assert.equal(parsed.items[0].suggestions[1].source, undefined)
+  })
+})
+
+describe('media brief and reply', () => {
+  it('asks for materials and reads a media reply', () => {
+    const text = buildProgramsBrief([{ course: { ...blender, media: [] }, outline }], {
+      field: 'media'
+    })
+    assert.match(text, /traditional media/)
+    assert.match(text, /Materiales/)
+    assert.match(text, /"media": \[/)
+    const reply = JSON.stringify({
+      media: [{ folder: blender.path, media: [{ name: 'Gouache', confidence: 'medium' }] }]
+    })
+    const parsed = parseProgramsReply(reply, [{ ...blender, media: [] }], { field: 'media' })
+    assert.equal(parsed.ok, true)
+    assert.deepEqual(
+      parsed.items[0].suggestions.map((s) => s.name),
+      ['Gouache']
+    )
   })
 })

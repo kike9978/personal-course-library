@@ -153,3 +153,24 @@ describe('gap filter', () => {
     assert.equal(libraryFiltersActive({ gap: 'cover' }), true)
   })
 })
+
+describe('gap filter: review', () => {
+  it('keeps only courses flagged for review', () => {
+    assert.equal(
+      courseMatchesLibraryFilters({ title: 'A', needsReview: true }, { gap: 'review' }),
+      true
+    )
+    assert.equal(courseMatchesLibraryFilters({ title: 'B' }, { gap: 'review' }), false)
+    assert.equal(courseMatchesLibraryFilters({ title: 'B' }, {}), true)
+  })
+})
+
+describe('untagged filter', () => {
+  it('keeps only courses with no program and no medium', () => {
+    const f = { untaggedOnly: true }
+    assert.equal(courseMatchesLibraryFilters({ title: 'A' }, f), true)
+    assert.equal(courseMatchesLibraryFilters({ title: 'B', programs: ['Blender'] }, f), false)
+    assert.equal(courseMatchesLibraryFilters({ title: 'C', media: ['Ink'] }, f), false)
+    assert.equal(libraryFiltersActive(f), true)
+  })
+})

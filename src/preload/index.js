@@ -74,6 +74,13 @@ const api = {
     ipcRenderer.invoke('generate-course-props-batch', coursePaths),
   saveCourseDescription: (coursePath, description) =>
     ipcRenderer.invoke('save-course-description', { coursePath, description }),
+  detectCoursePrograms: (coursePaths, field = 'programs') =>
+    ipcRenderer.invoke('detect-course-programs', { coursePaths, field }),
+  onDetectCourseProgramsProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('detect-course-programs-progress', listener)
+    return () => ipcRenderer.removeListener('detect-course-programs-progress', listener)
+  },
   saveCourseDescriptionBatch: (entries) =>
     ipcRenderer.invoke('save-course-description-batch', { entries }),
   listProjects: (coursePath) => ipcRenderer.invoke('list-projects', coursePath),
@@ -146,6 +153,16 @@ const api = {
     ipcRenderer.invoke('resolve-notion-project-conflict', { projectId, choice }),
   resolveNotionProjectDelete: (projectId, choice) =>
     ipcRenderer.invoke('resolve-notion-project-delete', { projectId, choice }),
+  resolveNotionSourceConflict: (sourceId, choice) =>
+    ipcRenderer.invoke('resolve-notion-source-conflict', { sourceId, choice }),
+  resolveNotionSourceDelete: (sourceId, choice) =>
+    ipcRenderer.invoke('resolve-notion-source-delete', { sourceId, choice }),
+  pushDeckToNotion: (deckId) => ipcRenderer.invoke('push-deck-to-notion', deckId),
+  onDeckNotion: (callback) => {
+    const listener = (_event, deck) => callback(deck)
+    ipcRenderer.on('deck-notion', listener)
+    return () => ipcRenderer.removeListener('deck-notion', listener)
+  },
   onNotionSync: (callback) => {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('notion-sync', listener)

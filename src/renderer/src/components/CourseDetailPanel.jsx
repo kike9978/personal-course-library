@@ -7,9 +7,10 @@ import CourseDescription from './CourseDescription'
 import ExcitementGauge from './ExcitementGauge'
 import brandMark from '../assets/img/brand-mark.svg'
 import { cn } from '../ui/cn'
-import { X } from 'lucide-react'
+import { Flag, X } from 'lucide-react'
 import {
   badgeAccent,
+  badgeMedia,
   badgeSuccess,
   badgeTheme,
   badgeWarn,
@@ -235,6 +236,8 @@ function CourseDetailPanel({
   onToggleInProcess,
   onGenerateProps,
   onSearchCover,
+  onGuessPrograms,
+  onToggleReview,
   dock = false
 }) {
   const fallbackCover = absoluteAssetUrl(getCoverFallback())
@@ -284,10 +287,15 @@ function CourseDetailPanel({
   }
 
   const programs = course.programs || []
+  const media = course.media || []
   const themes = course.theme || []
   const hasRating = course.rate > 0
   const hasCatalog =
-    Boolean(course.instructor) || programs.length > 0 || themes.length > 0 || hasRating
+    Boolean(course.instructor) ||
+    programs.length > 0 ||
+    media.length > 0 ||
+    themes.length > 0 ||
+    hasRating
   const showProgress = (course.learning?.playableCount || 0) > 0
   const percent = Math.min(100, Math.max(0, course.learning?.percent || 0))
   const showIdle =
@@ -453,6 +461,20 @@ function CourseDetailPanel({
                   </dd>
                 </div>
               ) : null}
+              {media.length ? (
+                <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-start gap-x-2 gap-y-[0.35rem]">
+                  <dt className="m-0 pt-[0.15rem] text-2xs font-semibold tracking-[0.07em] text-ink-soft uppercase">
+                    Medios
+                  </dt>
+                  <dd className="m-0 flex min-w-0 flex-wrap gap-[0.3rem] text-base">
+                    {media.map((item, index) => (
+                      <span key={`${item}-${index}`} className={badgeMedia}>
+                        {item}
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              ) : null}
               {themes.length ? (
                 <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-start gap-x-2 gap-y-[0.35rem]">
                   <dt className="m-0 pt-[0.15rem] text-2xs font-semibold tracking-[0.07em] text-ink-soft uppercase">
@@ -505,6 +527,38 @@ function CourseDetailPanel({
               onClick={onGenerateProps}
             >
               Generar propiedades
+            </button>
+          ) : null}
+          {onToggleReview && !course.missingProps ? (
+            <button
+              type="button"
+              className={cn(
+                detailUtil,
+                'inline-flex items-center gap-1.5 self-start [&_svg]:size-3.5',
+                course.needsReview && 'border-warn-text/40 bg-warn-text/10 text-warn-text'
+              )}
+              aria-pressed={course.needsReview === true}
+              onClick={() => onToggleReview(course)}
+              title={
+                course.needsReview
+                  ? 'Ya lo revisaste: quita la marca'
+                  : 'Marcar para revisarlo a mano después'
+              }
+            >
+              <Flag aria-hidden="true" fill={course.needsReview ? 'currentColor' : 'none'} />
+              {course.needsReview ? 'Por revisar · Quitar marca' : 'Marcar para revisar'}
+            </button>
+          ) : null}
+          {onGuessPrograms && !course.missingProps ? (
+            <button
+              type="button"
+              className={cn(detailUtil, 'self-start')}
+              onClick={() => onGuessPrograms(course)}
+              title="Propone programas a partir de las lecciones, la descripción y los archivos del curso"
+            >
+              {programs.length || media.length
+                ? 'Deducir más programas o medios'
+                : 'Deducir programas o medios'}
             </button>
           ) : null}
         </section>

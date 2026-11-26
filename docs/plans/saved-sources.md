@@ -2,7 +2,7 @@
 
 **App:** Catálogo de cursos (personal-course-library)  
 **Date:** 2026-11-26  
-**Status:** Phases 1–2 built (2026-11-26). Phases 3–6 proposed.  
+**Status:** Phases 1, 2 and 2c built (2026-11-26). Phase 2c checked against a live Notion database. Phases 2b and 3–6 proposed.  
 **Goal:** Let a YouTube video, an article, or an Instagram post become a place in the knowledge base, the same way a lesson is. Notes taken on a link are ordinary findings. They carry topics, show up in Anotaciones and the graph, sync to Notion, and feed flashcards.
 
 ---
@@ -260,6 +260,58 @@ If a later need appears that only such a service can meet, add it as an explicit
 - **Cerrar sesión de Instagram** removes the cookies, and the same reel goes back to the cover and the message.
 - An expired session shows the message and the sign-in button, never a login form in the viewer.
 
+### Phase 2c — Sync links to Notion
+
+**Value:** The links themselves, not just the notes on them, live in Notion next to courses, projects and lists. A link saved on one computer shows up on another. A link added to Notion from a phone lands in the Bandeja.
+
+**What syncs today (Phases 1–2).** Only notes on a link. Each one sits under a **Fuentes** page, inside a page per link (`file:course:__sources__::<sourceId>`, kind `source`), created the first time a note exists. The link's URL, author, status and topics never reach Notion. A link with no notes has no page. Deleting a link moves its notes out of the link's page.
+
+**Model: one row per link, same pattern as projects.**
+
+- **Database.** Add `source` to `KIND_OPTIONS` in `notionClient.js`. Add `inbox`, `kept` and `archived` to the `Status` select. Add a `URL` property of type `url`. The schema check today creates only text, number, checkbox and select properties, so it needs a `url` branch. Existing databases get the new property and options on the next sync, as they do now.
+- **Row.** `kind: 'source'`, `externalId` = source id, `parentExternalId` = `course:__sources__` (the existing **Fuentes** page), title = link title, `Status` = inbox / kept / archived, `URL` = canonical URL, `Topic ids` = the link's topics, icon 🔗.
+- **Wire and hash.** A new `sourceWire(source)` in `src/shared/notionSync.js` returns `{ title, body, status }`. The body is JSON with `url`, `kind`, `author`, `siteName`, `publishedAt`, `startSec` and `topicIds`, and `sourceFromBody` reads it back. Sync state lives on the link as `source.notion = { pageId, ackedHash, remoteEditedAt, conflict, error }`, the same cursor projects use.
+- **Page content.** Below the JSON code block, a YouTube link gets a Notion `video` block and other links a `bookmark` block. Neither carries text, so they never change the synced body. *As built:* the thumbnail is not uploaded, because Notion's bookmark already shows the page's preview image.
+- **One page per link, not two.** *As built:* once the database uses rows, notes point at their place through the **Parent** column, and per-link `file` rows exist only if the rows migration made them. When a link's row is first created, it takes over that `file` row (`file:course:__sources__::<id>`) if there is one, by rewriting its Kind to `source`. Otherwise it creates a new row. The migration no longer makes `file` rows for links. Notes keep their Parent text (`file:course:__sources__::<id>`), the same pattern project notes use.
+
+**Direction and conflicts** (same rules as projects):
+
+- **App → Notion.** Creating a link, editing its title, author, status or topics, or adding a capture queues `source-upsert`. The note write hook already debounces. Links get the same hook through `setSourceWriteHook` in `learningStore.js`.
+- **Notion → App.** On poll, a `source` row whose `editedAt` moved is read back. Title, status and topics apply. A URL change is canonicalized. If it collides with another saved link, the row becomes a conflict instead of a duplicate.
+- **Both changed.** Shown in the existing sync conflict list as **Fuente · <title>**, with **Usar la de la app** / **Usar la de Notion**.
+- **New in Notion.** A row with `Kind = source` and a `URL` but no `Id` is adopted. The app creates the link in the Bandeja, looks up its title and thumbnail, then writes the `Id` back. This covers the mobile gap in section 6: a link shared to Notion from a phone arrives in Fuentes.
+- **Deletes.** Deleting a link locally leaves a tombstone (`sourceTombstones`) and archives the Notion page. Its notes are re-placed by the existing "lugar" check: they lose the link anchor, so they move to **Sin curso**. *As built:* archiving a link's page in Notion does not delete it here, the same as projects. Archived rows are not returned by the poll, and the next local change re-creates the row. Propagating Notion-side deletes is left for later.
+
+**Not synced**
+
+- Playback position (`lastPositionSec`) and `lastOpenedAt` are per computer, like how far you scrolled.
+- The thumbnail file. Each install fetches its own from the link. A link that arrives from Notion or another computer gets its thumbnail fetched on adoption.
+- Captures. *As built:* not uploaded yet. Uploading them as image blocks, and downloading them on another install, comes with Phase 3 copies.
+- The Instagram session (Phase 2b) never leaves the computer. Neither does anything else in its partition.
+- Collections are covered in Phase 4.
+
+**Live check (2026-11-26).** Run against the real database from a throwaway copy of the app, with the user's app closed. All test rows were archived afterwards. Passed:
+- link row created
+- status pushed
+- note's Parent set to the link
+- title edited in Notion pulled
+- row typed in Notion adopted, with its Id written back
+- conflict raised and resolved
+- deletes archived
+
+Two fixes came out of it:
+- Filtering on a Kind option no row has used yet returns a validation error. `listRows` now treats it as "no rows", and the option appears when the first row is written.
+- Notion's edit time has minute precision, so an edit in the same minute as the app's last write was skipped. For links, the poll also compares the title, URL and Status columns. Projects and topics still have that blind spot.
+
+**Done when**
+
+- A link saved with no notes appears in Notion under **Fuentes** with its title, URL, status and topics.
+- Its first note nests under that same page. No second page per link appears, including for links that already had notes before this phase.
+- Changing the status to Guardadas in the app updates the Notion row, and editing the title in Notion updates the app on the next poll.
+- A row added in Notion with only `Kind = source` and a `URL` shows up in the Bandeja with a fetched title.
+- Editing the same link on both sides shows one conflict. Choosing a side resolves it without a duplicate.
+- Deleting a link in the app archives its page, and its notes still exist in Notion under **Sin curso**.
+
 ### Phase 3 — Keep a copy, reach the rest of the app
 
 **Value:** A link that dies or a post that is deleted does not take the context with it, and sources take part in study.
@@ -305,6 +357,7 @@ If a later need appears that only such a service can meet, add it as an explicit
 - A source can be in two collections, reordered in one without affecting the other.
 - Switching a collection between Lista and Tablero keeps the order and the captions.
 - Nothing in Listas, the library, or the course board changes or lists a source.
+- **Notion:** collections sync like lists, under their own **Colecciones** page, never under **Listas**. Rows have `Kind = collection` and a body of ordered source ids, captions and layout, with the same cursor and conflict rules as Phase 2c. Needs Phase 2c, so the items they point to exist in Notion.
 
 ### Phase 5 — Smart builder for collections
 
@@ -393,7 +446,7 @@ For sources:
 - **Embed changes.** If Instagram starts requiring a login for the embed page, the viewer falls back to captures and metadata. The Phase 2 spike result should be re-checked when an Electron upgrade lands.
 - **SQLite move.** The connected-study plan moves the learning store to SQLite in Phase 4. `sources` and `sourceCollections` (with an items join table) become their own tables, separate from playlists, and source anchors fit the anchor table it introduces. If that migration lands first, add them to it rather than to the JSON shape.
 - **Quick capture outside the app.** Phase 6 covers Chrome. A global shortcut that reads the clipboard would also help for links that arrive in chat apps. Leave that until Phase 6 shows how much capture still happens outside the browser.
-- **Mobile.** Instagram links are mostly found on a phone. Neither the app nor the extension reaches the phone. A later option is a share target that writes to a synced inbox file. That is out of scope here.
+- **Mobile.** Instagram links are mostly found on a phone. Neither the app nor the extension reaches the phone. Phase 2c covers this through Notion: share the link to the Notion database from the phone with `Kind = source`, and it arrives in the Bandeja on the next sync.
 - **Privacy.** Metadata requests go straight to the link's host from the user's machine, with nothing else attached. Do not route them through any third-party service.
 
 ---
@@ -405,6 +458,7 @@ For sources:
 | 1 | Store + view | Source anchor in `normalizeAnchor` and Notion places |
 | 2 | In-app viewer | Phase 1 source panel. Instagram embed spike first. CSP and webview isolation. Captured copies need Phase 3 or 6 |
 | 2b | Optional Instagram sign-in | Phase 2 viewer and its isolation rules. Independent of Phases 3–6 |
+| 2c | Sync links to Notion | Phase 1 store and the existing Notion sync. Adopting the per-link page needs the Phase 1 `source` place. Independent of 2b |
 | 3 | Copies + flashcards | Phase 2 for transcripts |
 | 4 | Collections | Phase 1 only. Can start right after Phase 1 if grouping matters more than the player |
 | 5 | Smart builder | Phase 4 records. Refactor of `playlistSemantic.js` with its tests kept green |

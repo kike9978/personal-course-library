@@ -151,6 +151,7 @@ export const badgeAccent = cn(
 )
 export const badgeSuccess = cn(badge, 'border-chip-status-border bg-chip-status text-chip-status-text')
 export const badgeTheme = cn(badge, 'border-chip-theme-border bg-chip-theme text-chip-theme-text')
+export const badgeMedia = cn(badge, 'border-chip-media-border bg-chip-media text-chip-media-text')
 export const badgeWarn = cn(badge, 'border-warn-border bg-warn text-warn-text')
 
 /* ---------- Stats & sections ---------- */

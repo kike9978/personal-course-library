@@ -54,7 +54,8 @@ function CourseEditModal({
   onCourseUpdated,
   onClose,
   programOptions = [],
-  themeOptions = []
+  themeOptions = [],
+  mediaOptions = []
 }) {
   const dialogRef = useRef(null)
   const [instructor, setInstructor] = useState(course.instructor || '')
@@ -64,6 +65,7 @@ function CourseEditModal({
     Array.isArray(course.programs) ? course.programs : []
   )
   const [localThemes, setLocalThemes] = useState(Array.isArray(course.theme) ? course.theme : [])
+  const [localMedia, setLocalMedia] = useState(Array.isArray(course.media) ? course.media : [])
   const [rate, setRate] = useState(Number(course.rate) || 0)
   const [hide, setHide] = useState(course.hide === true)
   const [isSaving, setIsSaving] = useState(false)
@@ -75,6 +77,7 @@ function CourseEditModal({
     setLocalCourseTitle(course.title || '')
     setLocalProgramsList(Array.isArray(course.programs) ? course.programs : [])
     setLocalThemes(Array.isArray(course.theme) ? course.theme : [])
+    setLocalMedia(Array.isArray(course.media) ? course.media : [])
     setInstructor(course.instructor || '')
     setInstitution(course.institution || '')
     setRate(Number(course.rate) || 0)
@@ -143,6 +146,9 @@ function CourseEditModal({
       const updates = {
         title: localCourseTitle,
         programs: programsArray,
+        media: (Array.isArray(localMedia) ? localMedia : [])
+          .map((item) => String(item).trim())
+          .filter(Boolean),
         theme: themesArray,
         rate,
         instructor,
@@ -236,6 +242,16 @@ function CourseEditModal({
             options={programOptions}
             onChange={setLocalProgramsList}
             placeholder="Buscar o añadir programa…"
+          />
+
+          <ChipAutocomplete
+            id="course-media"
+            label="Medios"
+            values={localMedia}
+            options={mediaOptions}
+            onChange={setLocalMedia}
+            placeholder="Grafito, acuarela, tinta…"
+            tone="media"
           />
 
           <ChipAutocomplete

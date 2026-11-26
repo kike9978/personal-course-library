@@ -50,6 +50,8 @@ function LibraryHeader({
   onRecentlyViewedOnlyChange,
   missingPropsOnly,
   onMissingPropsOnlyChange,
+  untaggedOnly,
+  onUntaggedOnlyChange,
   courseCount,
   isLoading,
   onRefresh,
@@ -58,12 +60,15 @@ function LibraryHeader({
   institutions,
   programs,
   themes,
+  media,
   institutionFilter,
   onInstitutionFilterChange,
   programFilter,
   onProgramFilterChange,
   themeFilter,
   onThemeFilterChange,
+  mediaFilter,
+  onMediaFilterChange,
   minRate,
   onMinRateChange,
   minExcitement,
@@ -223,7 +228,7 @@ function LibraryHeader({
                       onGuessPrograms()
                     }}
                   >
-                    <span>Deducir programas</span>
+                    <span>Deducir programas y medios</span>
                     <small>
                       {missingProgramsCount > 0
                         ? `${missingProgramsCount} curso${missingProgramsCount === 1 ? '' : 's'} sin programas`
@@ -293,15 +298,20 @@ function LibraryHeader({
         onRecentlyViewedOnlyChange={onRecentlyViewedOnlyChange}
         missingPropsOnly={missingPropsOnly}
         onMissingPropsOnlyChange={onMissingPropsOnlyChange}
+        untaggedOnly={untaggedOnly}
+        onUntaggedOnlyChange={onUntaggedOnlyChange}
         institutions={institutions}
         programs={programs}
         themes={themes}
+        media={media}
         institutionFilter={institutionFilter}
         onInstitutionFilterChange={onInstitutionFilterChange}
         programFilter={programFilter}
         onProgramFilterChange={onProgramFilterChange}
         themeFilter={themeFilter}
         onThemeFilterChange={onThemeFilterChange}
+        mediaFilter={mediaFilter}
+        onMediaFilterChange={onMediaFilterChange}
         minRate={minRate}
         onMinRateChange={onMinRateChange}
         minExcitement={minExcitement}

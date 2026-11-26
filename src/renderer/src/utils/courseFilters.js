@@ -19,7 +19,9 @@ export function courseMatchesLibraryFilters(course, filters = {}) {
   const title = (course?.title || '').toLowerCase()
   const institution = (course?.institution || '').toLowerCase()
   const instructor = (course?.instructor || '').toLowerCase()
-  const programsText = (course?.programs || []).join(' ').toLowerCase()
+  const programsText = [...(course?.programs || []), ...(course?.media || [])]
+    .join(' ')
+    .toLowerCase()
   const themesText = (course?.theme || []).join(' ').toLowerCase()
   const notesText = (course?.notesSearchText || '').toLowerCase()
   const matchesText =
@@ -36,11 +38,15 @@ export function courseMatchesLibraryFilters(course, filters = {}) {
   if (filters.isNewOnly && !course?.isNew) return false
   if (filters.recentlyViewedOnly && !course?.learning?.isRecentlyViewed) return false
   if (filters.missingPropsOnly && !course?.missingProps) return false
+  if (filters.untaggedOnly && ((course?.programs || []).length || (course?.media || []).length))
+    return false
   if (filters.gap === 'cover' && course?.hasCover) return false
   if (filters.gap === 'description' && String(course?.description?.summary || '').trim())
     return false
+  if (filters.gap === 'review' && course?.needsReview !== true) return false
   if (filters.institution && course?.institution !== filters.institution) return false
   if (filters.program && !(course?.programs || []).includes(filters.program)) return false
+  if (filters.media && !(course?.media || []).includes(filters.media)) return false
   if (filters.theme && !(course?.theme || []).includes(filters.theme)) return false
   if (filters.minRate && (Number(course?.rate) || 0) < Number(filters.minRate)) return false
   if (!matchesExcitement(course, filters)) return false
@@ -64,9 +70,11 @@ export function libraryFiltersActive(filters = {}) {
     filters.isNewOnly ||
     filters.recentlyViewedOnly ||
     filters.missingPropsOnly ||
+    filters.untaggedOnly ||
     filters.gap ||
     filters.institution ||
     filters.program ||
+    filters.media ||
     filters.theme ||
     Number(filters.minRate) > 0 ||
     Number(filters.minExcitement) > 0
@@ -77,6 +85,7 @@ export function collectCourseFacets(courses) {
   const institutions = new Set()
   const programs = new Map()
   const themes = new Map()
+  const media = new Map()
   for (const course of courses || []) {
     if (course?.institution) institutions.add(course.institution)
     for (const program of course?.programs || []) {
@@ -85,13 +94,17 @@ export function collectCourseFacets(courses) {
     for (const theme of course?.theme || []) {
       if (theme) themes.set(theme, (themes.get(theme) || 0) + 1)
     }
+    for (const item of course?.media || []) {
+      if (item) media.set(item, (media.get(item) || 0) + 1)
+    }
   }
   const byCount = (map) =>
     [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name)
   return {
     institutions: [...institutions].sort((a, b) => a.localeCompare(b)),
     programs: byCount(programs),
-    themes: byCount(themes)
+    themes: byCount(themes),
+    media: byCount(media)
   }
 }
 

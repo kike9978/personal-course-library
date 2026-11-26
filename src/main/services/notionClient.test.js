@@ -396,3 +396,104 @@ describe('notion client', () => {
     assert.equal(recent.pages.at(-1).pageId, 'page-note')
   })
 })
+
+describe('notion client · saved links', () => {
+  it('adds the URL column, writes a link row with a video block, and reads it back', async () => {
+    const calls = []
+    const pages = new Map()
+    const fetchImpl = async (url, options = {}) => {
+      const body = options.body ? JSON.parse(options.body) : null
+      calls.push({ url, method: options.method || 'GET', body })
+      if (url.endsWith('/users/me')) return jsonResponse({ object: 'user', id: 'bot' })
+      if (url.endsWith('/databases/db-1')) {
+        return jsonResponse({ data_sources: [{ id: 'src-1', name: 'Anotaciones' }] })
+      }
+      if (url.endsWith('/data_sources/src-1') && (!options.method || options.method === 'GET')) {
+        return jsonResponse({ object: 'data_source', id: 'src-1', properties: { Nombre: { type: 'title' } } })
+      }
+      if (url.endsWith('/data_sources/src-1') && options.method === 'PATCH') return jsonResponse({ ok: true })
+      if (url.endsWith('/data_sources/src-1/query')) return jsonResponse({ results: [] })
+      if (url.endsWith('/pages') && options.method === 'POST') {
+        pages.set('page-9', body)
+        return jsonResponse({ id: 'page-9', last_edited_time: '2026-11-26T10:00:00.000Z' })
+      }
+      if (url.endsWith('/pages/page-9')) {
+        const saved = pages.get('page-9')
+        return jsonResponse({
+          id: 'page-9',
+          last_edited_time: '2026-11-26T10:00:00.000Z',
+          parent: { type: 'data_source_id' },
+          properties: Object.fromEntries(
+            Object.entries(saved.properties).map(([name, value]) => [
+              name,
+              value.title ? { type: 'title', title: value.title } : value
+            ])
+          )
+        })
+      }
+      if (url.includes('/blocks/page-9/children')) {
+        return jsonResponse({
+          results: pages.get('page-9').children.map((block, index) => ({ id: `b${index}`, ...block }))
+        })
+      }
+      return jsonResponse({ message: `unexpected ${url}` }, 500)
+    }
+    const client = createNotionClient({ token: 'secret', databaseId: 'db-1', fetchImpl })
+    const body = JSON.stringify({ url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', kind: 'youtube' })
+    await client.saveRow({
+      kind: 'source',
+      externalId: 'src-a',
+      title: 'Video',
+      body,
+      status: 'kept',
+      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    })
+
+    const schemaPatch = calls.find((call) => call.url.endsWith('/data_sources/src-1') && call.method === 'PATCH')
+    assert.deepEqual(schemaPatch.body.properties.URL, { url: {} })
+    assert.equal(
+      schemaPatch.body.properties.Status.select.options.some((option) => option.name === 'kept'),
+      true
+    )
+    const created = pages.get('page-9')
+    assert.equal(created.properties.URL.url, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+    assert.equal(created.properties.Kind.select.name, 'source')
+    assert.deepEqual(
+      created.children.map((block) => block.type),
+      ['code', 'video']
+    )
+
+    const read = await client.readPage('page-9')
+    assert.equal(read.kind, 'source')
+    assert.equal(read.url, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+    assert.equal(read.status, 'kept')
+    // The video block carries no text, so the body read back is exactly what was written.
+    assert.equal(read.body, body)
+  })
+})
+
+describe('notion client · new kinds', () => {
+  it('treats a filter on a Kind option that does not exist yet as no rows', async () => {
+    const fetchImpl = async (url, options = {}) => {
+      if (url.endsWith('/users/me')) return jsonResponse({ object: 'user', id: 'bot' })
+      if (url.endsWith('/databases/db-1')) return jsonResponse({ data_sources: [{ id: 'src-1' }] })
+      if (url.endsWith('/data_sources/src-1') && (!options.method || options.method === 'GET')) {
+        return jsonResponse({ object: 'data_source', id: 'src-1', properties: { Nombre: { type: 'title' } } })
+      }
+      if (url.endsWith('/data_sources/src-1') && options.method === 'PATCH') return jsonResponse({ ok: true })
+      if (url.endsWith('/data_sources/src-1/query')) {
+        return jsonResponse(
+          {
+            object: 'error',
+            code: 'validation_error',
+            message: 'select option "source" not found for property "Kind". Available options: "course".'
+          },
+          400
+        )
+      }
+      return jsonResponse({ message: 'unexpected' }, 500)
+    }
+    const client = createNotionClient({ token: 'secret', databaseId: 'db-1', fetchImpl })
+    assert.equal(await client.findRow('source', 'abc'), null)
+  })
+})

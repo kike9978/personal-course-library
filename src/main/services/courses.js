@@ -131,6 +131,7 @@ export function buildCoursePropsFromFolderName(folderName) {
   return {
     title: (parts[1] || name).trim(),
     programs: suggestProgramsFromName(name),
+    media: [],
     theme: [],
     institution: (parts[0] && parts.length > 1 ? parts[0] : '').trim(),
     instructor: '',
@@ -174,11 +175,13 @@ function normalizeCourseRecord(courseDir, data, meta = {}) {
     institution: data?.institution || '',
     instructor: data?.instructor || '',
     programs: Array.isArray(data?.programs) ? data.programs.filter(Boolean) : [],
+    media: Array.isArray(data?.media) ? data.media.filter(Boolean) : [],
     theme,
     rate,
     isInProcess: Boolean(data?.isInProcess),
     isIncomplete: Boolean(data?.isIncomplete),
     hide: isCourseHidden(data),
+    needsReview: data?.needsReview === true,
     description: storedDescription(data?.description),
     hasCover: Boolean(meta.hasCover),
     hasProps: meta.hasProps !== false,
@@ -427,6 +430,7 @@ export async function repairCourseProps(courseDir) {
     institution: existing.institution ?? defaults.institution,
     instructor: existing.instructor ?? '',
     programs: Array.isArray(existing.programs) ? existing.programs : defaults.programs,
+    media: Array.isArray(existing.media) ? existing.media : defaults.media,
     theme,
     rate: normalizeRate(existing.rate ?? defaults.rate),
     isIncomplete: Boolean(existing.isIncomplete),
@@ -490,11 +494,19 @@ function sanitizeUpdates(updates = {}) {
   if (next.programs !== undefined && !Array.isArray(next.programs)) {
     next.programs = []
   }
+  if (next.media !== undefined) {
+    next.media = Array.isArray(next.media)
+      ? next.media.map((item) => String(item ?? '').trim()).filter(Boolean)
+      : []
+  }
   if (Object.prototype.hasOwnProperty.call(next, 'description')) {
     next.description = storedDescription(next.description)
   }
   if (Object.prototype.hasOwnProperty.call(next, 'hide')) {
     next.hide = next.hide === true
+  }
+  if (Object.prototype.hasOwnProperty.call(next, 'needsReview')) {
+    next.needsReview = next.needsReview === true
   }
   return next
 }

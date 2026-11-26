@@ -27,6 +27,7 @@ import {
 } from './services/courses.js'
 import { isCourseHidden } from '../shared/courseHide.js'
 import { saveCourseDescription, saveCourseDescriptionBatch } from './services/courseDescription.js'
+import { detectPrograms } from './services/programDetect.js'
 import {
   searchCoverCandidates,
   saveCourseCover,
@@ -83,6 +84,7 @@ import {
   appendDeckCards,
   updateDeckCard,
   deleteDeckCard,
+  getDeck,
   getPlaylistIntent,
   savePlaylistIntent,
   listCierres,
@@ -94,6 +96,7 @@ import {
   setNoteWriteHook,
   setPlaylistWriteHook,
   setProjectWriteHook,
+  setSourceWriteHook,
   deleteSource,
   findSourceByUrl,
   listSourceNotes,
@@ -124,11 +127,22 @@ import {
   resolveNotionProgress,
   resolveNotionProjectConflict,
   resolveNotionProjectDelete,
+  enqueueNotionSourceUpsert,
+  enqueueNotionSourceDelete,
+  resolveNotionSourceConflict,
+  resolveNotionSourceDelete,
   saveNotionSettings,
   startNotionSync,
   syncNotionNow
 } from './services/notionSync.js'
 import { readLessonTranscripts } from './services/lessonTranscripts.js'
+import {
+  archiveNotionDeck,
+  enqueueNotionDeck,
+  pushDeckToNotion,
+  queueAllNotionDecks,
+  setDeckNotionListener
+} from './services/notionDecks.js'
 import { canonicalSourceUrl } from '../shared/sources.js'
 import {
   cacheSourceThumbnail,
@@ -554,6 +568,10 @@ function registerIpcHandlers() {
     if (event.op === 'delete') enqueueNotionProjectDelete(event.project)
     else enqueueNotionProjectUpsert(event.coursePath, event.id)
   })
+  setSourceWriteHook((event) => {
+    if (event.op === 'delete') enqueueNotionSourceDelete(event.source)
+    else enqueueNotionSourceUpsert(event.id)
+  })
   ipcMain.handle('get-library-path', () => {
     const libraryPath = getLibraryPath()
     return {
@@ -650,6 +668,21 @@ function registerIpcHandlers() {
       win.webContents.send('course-updated', { coursePath, fullData: saved.props })
     })
     return { success: true, description: saved.description }
+  })
+
+  ipcMain.handle('detect-course-programs', async (event, { coursePaths, field } = {}) => {
+    let last = 0
+    return detectPrograms(coursePaths, {
+      field: field === 'media' ? 'media' : 'programs',
+      onProgress: (done, total) => {
+        const now = Date.now()
+        if (done !== total && now - last < 120) return
+        last = now
+        if (!event.sender.isDestroyed()) {
+          event.sender.send('detect-course-programs-progress', { done, total })
+        }
+      }
+    })
   })
 
   ipcMain.handle('save-course-description-batch', async (_event, { entries } = {}) => {
@@ -939,16 +972,35 @@ function registerIpcHandlers() {
     deleteProject(coursePath, projectId)
   )
   ipcMain.handle('list-decks', () => listDecks())
-  ipcMain.handle('create-deck', (_event, deck) => createDeck(deck || {}))
-  ipcMain.handle('delete-deck', (_event, deckId) => deleteDeck(deckId))
-  ipcMain.handle('append-deck-cards', (_event, { deckId, cards } = {}) =>
-    appendDeckCards(deckId, cards)
-  )
-  ipcMain.handle('update-deck-card', (_event, { deckId, cardId, patch } = {}) =>
-    updateDeckCard(deckId, cardId, patch)
-  )
-  ipcMain.handle('delete-deck-card', (_event, { deckId, cardId } = {}) =>
-    deleteDeckCard(deckId, cardId)
+  // Every deck change is pushed to Notion a few seconds later (one way).
+  ipcMain.handle('create-deck', (_event, deck) => {
+    const saved = createDeck(deck || {})
+    enqueueNotionDeck(saved?.id)
+    return saved
+  })
+  ipcMain.handle('delete-deck', (_event, deckId) => {
+    const deck = getDeck(deckId)
+    const result = deleteDeck(deckId)
+    archiveNotionDeck(deck)
+    return result
+  })
+  ipcMain.handle('append-deck-cards', (_event, { deckId, cards } = {}) => {
+    const result = appendDeckCards(deckId, cards)
+    enqueueNotionDeck(deckId)
+    return result
+  })
+  ipcMain.handle('update-deck-card', (_event, { deckId, cardId, patch } = {}) => {
+    const saved = updateDeckCard(deckId, cardId, patch)
+    enqueueNotionDeck(deckId)
+    return saved
+  })
+  ipcMain.handle('delete-deck-card', (_event, { deckId, cardId } = {}) => {
+    const saved = deleteDeckCard(deckId, cardId)
+    enqueueNotionDeck(deckId)
+    return saved
+  })
+  ipcMain.handle('push-deck-to-notion', (_event, deckId) =>
+    pushDeckToNotion(deckId, { force: true })
   )
   ipcMain.handle('read-lesson-transcripts', (_event, { coursePath, items } = {}) =>
     readLessonTranscripts(coursePath, items)
@@ -1226,7 +1278,11 @@ function registerIpcHandlers() {
 
   ipcMain.handle('get-notion-sync', () => getNotionSyncStatus())
   ipcMain.handle('get-notion-debug', () => notionDebugReport())
-  ipcMain.handle('set-notion-sync', (_event, payload = {}) => saveNotionSettings(payload))
+  ipcMain.handle('set-notion-sync', async (_event, payload = {}) => {
+    const result = await saveNotionSettings(payload)
+    queueAllNotionDecks()
+    return result
+  })
   ipcMain.handle('sync-notion-now', (_event, findingId) => syncNotionNow(findingId || null))
   ipcMain.handle('resolve-notion-conflict', (_event, { findingId, choice } = {}) =>
     resolveNotionConflict(findingId, choice)
@@ -1249,6 +1305,12 @@ function registerIpcHandlers() {
   )
   ipcMain.handle('resolve-notion-project-delete', (_event, { projectId, choice } = {}) =>
     resolveNotionProjectDelete(projectId, choice)
+  )
+  ipcMain.handle('resolve-notion-source-conflict', (_event, { sourceId, choice } = {}) =>
+    resolveNotionSourceConflict(sourceId, choice)
+  )
+  ipcMain.handle('resolve-notion-source-delete', (_event, { sourceId, choice } = {}) =>
+    resolveNotionSourceDelete(sourceId, choice)
   )
 
   ipcMain.handle('open-project-link', async (_event, { coursePath, projectId }) => {
@@ -1275,6 +1337,7 @@ app.whenReady().then(() => {
     notifyPlaylists: () => broadcastToWindows('playlists-changed', {}),
     notifyProgress: () => broadcastToWindows('progress-changed', {}),
     notifyProjects: () => broadcastToWindows('projects-changed', {}),
+    notifySources: () => broadcastToWindows('sources-changed', {}),
     notifyCourse: (coursePath, data) =>
       broadcastToWindows('course-updated', {
         coursePath,
@@ -1285,6 +1348,8 @@ app.whenReady().then(() => {
     notifyStatus: (status) => broadcastToWindows('notion-sync', status),
     isActive: () => Boolean(BrowserWindow.getFocusedWindow())
   })
+  setDeckNotionListener((deck) => broadcastToWindows('deck-notion', deck))
+  queueAllNotionDecks()
   app.on('browser-window-focus', () => {
     pollNotionChanges()
   })

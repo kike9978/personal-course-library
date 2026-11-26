@@ -80,6 +80,7 @@ function makeId() {
 let noteWriteHook = null
 let playlistWriteHook = null
 let projectWriteHook = null
+let sourceWriteHook = null
 let noteWriteSuppress = 0
 let storeCache = null
 let storeFlushTimer = null
@@ -107,6 +108,10 @@ export function setProjectWriteHook(fn) {
   projectWriteHook = typeof fn === 'function' ? fn : null
 }
 
+export function setSourceWriteHook(fn) {
+  sourceWriteHook = typeof fn === 'function' ? fn : null
+}
+
 /** Store writes from the sync worker must not enqueue another sync. */
 export function withoutNoteWriteHook(fn) {
   noteWriteSuppress += 1
@@ -130,6 +135,11 @@ function emitPlaylistWrite(event) {
 function emitProjectWrite(event) {
   if (noteWriteSuppress > 0 || !projectWriteHook) return
   projectWriteHook(event)
+}
+
+function emitSourceWrite(event) {
+  if (noteWriteSuppress > 0 || !sourceWriteHook) return
+  sourceWriteHook(event)
 }
 
 function ensureArrays(course) {
@@ -1779,6 +1789,14 @@ function publicDeck(deck) {
     createdAt: deck.createdAt || null,
     updatedAt: deck.updatedAt || null,
     ankiSyncedAt: deck.ankiSyncedAt || null,
+    notion: deck.notion
+      ? {
+          pageId: deck.notion.pageId || null,
+          hash: deck.notion.hash || null,
+          syncedAt: deck.notion.syncedAt || null,
+          error: deck.notion.error || null
+        }
+      : null,
     cards: (deck.cards || []).map(publicCard)
   }
 }
@@ -1869,6 +1887,16 @@ export function deleteDeckCard(deckId, cardId) {
 export function getDeck(deckId) {
   const deck = (readStore().decks || []).find((item) => item.id === deckId)
   return deck ? publicDeck(deck) : null
+}
+
+/** Record where a deck lives in Notion. Does not touch the deck's updatedAt. */
+export function setDeckNotion(deckId, patch = {}) {
+  const store = readStore()
+  const deck = (store.decks || []).find((item) => item.id === deckId)
+  if (!deck) return null
+  deck.notion = { ...(deck.notion || {}), ...patch }
+  writeStore(store)
+  return publicDeck(deck)
 }
 
 export function markDeckAnkiSynced(deckId, at = Date.now()) {
@@ -2162,8 +2190,43 @@ export function upsertSource(payload = {}) {
     }
   }
   writeStore(store)
+  emitSourceWrite({ op: 'upsert', id: next.id })
   const counts = noteCountsBySource(store)
   return presentSource(structuredClone(next), counts, topicIndex(store))
+}
+
+/** Every stored link, for sync scans. Callers must not mutate the records. */
+export function readSourceList() {
+  return sourceList(readStore())
+}
+
+/** Set a link's Notion cursor without touching anything else or queueing another sync. */
+export function writeSourceNotion(id, notion) {
+  const store = readStore()
+  const source = sourceList(store).find((item) => item.id === id)
+  if (!source) return null
+  source.notion = notion
+  writeStore(store)
+  return structuredClone(source)
+}
+
+/**
+ * Put back a link exactly as given (adopted from Notion, or kept after a delete conflict).
+ * The URL must not belong to another stored link.
+ */
+export function restoreSource(record) {
+  if (!record?.id || !record?.url) throw new Error('Fuente no encontrada')
+  const store = readStore()
+  const list = sourceList(store)
+  const clash = list.find((item) => item.url === record.url && item.id !== record.id)
+  if (clash) throw new Error('Ese enlace ya está guardado')
+  const existing = list.find((item) => item.id === record.id)
+  const next = normalizeSource(record, existing)
+  next.topicIds = (next.topicIds || []).filter((id) => store.topics.some((t) => t.id === id))
+  if (existing) Object.assign(existing, next)
+  else list.push(next)
+  writeStore(store)
+  return structuredClone(next)
 }
 
 /**
@@ -2187,6 +2250,7 @@ export function deleteSource(id) {
   }
   writeStore(store)
   for (const findingId of touched) emitNoteWrite({ op: 'upsert', id: findingId })
+  emitSourceWrite({ op: 'delete', source: structuredClone(removed) })
   return { removed: structuredClone(removed), noteCount: touched.length }
 }
 

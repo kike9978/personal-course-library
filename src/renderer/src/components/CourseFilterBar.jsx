@@ -31,7 +31,9 @@ function FilterChip({ pressed, onClick, title, tone = 'status', children }) {
         tone === 'program' &&
           'text-ink-soft hover:text-ink aria-pressed:border-chip-programs-border aria-pressed:bg-chip-programs aria-pressed:text-chip-programs-text',
         tone === 'theme' &&
-          'aria-pressed:border-chip-theme-border aria-pressed:bg-chip-theme aria-pressed:text-chip-theme-text'
+          'aria-pressed:border-chip-theme-border aria-pressed:bg-chip-theme aria-pressed:text-chip-theme-text',
+        tone === 'media' &&
+          'aria-pressed:border-chip-media-border aria-pressed:bg-chip-media aria-pressed:text-chip-media-text'
       )}
       aria-pressed={pressed}
       title={title}
@@ -66,15 +68,20 @@ function CourseFilterBar({
   onRecentlyViewedOnlyChange,
   missingPropsOnly,
   onMissingPropsOnlyChange,
+  untaggedOnly = false,
+  onUntaggedOnlyChange,
   institutions = [],
   programs = [],
   themes = [],
+  media = [],
   institutionFilter,
   onInstitutionFilterChange,
   programFilter,
   onProgramFilterChange,
   themeFilter,
   onThemeFilterChange,
+  mediaFilter = '',
+  onMediaFilterChange,
   minRate,
   onMinRateChange,
   minExcitement = 0,
@@ -93,16 +100,19 @@ function CourseFilterBar({
   const rateId = `${idPrefix}-min-rate-filter`
   const excitementId = `${idPrefix}-min-excitement-filter`
   const themeLabelId = `${idPrefix}-theme-filter-label`
+  const mediaLabelId = `${idPrefix}-media-filter-label`
   const passed = className || ''
   const extraClass = passed.replace(/\bcourse-filter-bar(--board)?\b/g, '').trim()
 
   const extraFilterCount =
     Number(recentlyViewedOnly) +
     Number(missingPropsOnly) +
+    Number(Boolean(untaggedOnly)) +
     Number(Boolean(institutionFilter)) +
     Number(minRate > 0) +
     Number(minExcitement > 0) +
-    Number(Boolean(themeFilter))
+    Number(Boolean(themeFilter)) +
+    Number(Boolean(mediaFilter))
 
   useEffect(() => {
     if (closeSignal) setFiltersOpen(false)
@@ -156,10 +166,12 @@ function CourseFilterBar({
   const clearExtraFilters = () => {
     onRecentlyViewedOnlyChange(false)
     onMissingPropsOnlyChange(false)
+    onUntaggedOnlyChange?.(false)
     onInstitutionFilterChange('')
     onMinRateChange(0)
     onMinExcitementChange?.(0)
     onThemeFilterChange('')
+    onMediaFilterChange?.('')
     setFiltersOpen(false)
   }
 
@@ -284,6 +296,15 @@ function CourseFilterBar({
               >
                 Sin props
               </FilterChip>
+              {onUntaggedOnlyChange ? (
+                <FilterChip
+                  pressed={untaggedOnly}
+                  title="Cursos sin ningún programa ni medio"
+                  onClick={() => onUntaggedOnlyChange(!untaggedOnly)}
+                >
+                  Sin programa ni medio
+                </FilterChip>
+              ) : null}
             </div>
 
             <label className={popoverLabel} htmlFor={institutionId}>
@@ -349,6 +370,26 @@ function CourseFilterBar({
                       onClick={() => onThemeFilterChange(themeFilter === theme ? '' : theme)}
                     >
                       {theme}
+                    </FilterChip>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {media.length > 0 && onMediaFilterChange ? (
+              <div className="mt-3">
+                <span className={cn(popoverLabel, 'mt-0 mb-2')} id={mediaLabelId}>
+                  Medios
+                </span>
+                <div className="flex flex-wrap gap-2" role="group" aria-labelledby={mediaLabelId}>
+                  {media.map((item) => (
+                    <FilterChip
+                      key={item}
+                      tone="media"
+                      pressed={mediaFilter === item}
+                      onClick={() => onMediaFilterChange(mediaFilter === item ? '' : item)}
+                    >
+                      {item}
                     </FilterChip>
                   ))}
                 </div>

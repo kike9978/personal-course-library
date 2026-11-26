@@ -20,8 +20,19 @@ import {
   topicIdsFromText
 } from '../../shared/notionSync.js'
 
-const KIND_OPTIONS = ['course', 'file', 'note', 'playlist', 'progress', 'topic', 'project', 'intent']
-const STATUS_OPTIONS = ['todo', 'in_progress', 'paused', 'done']
+const KIND_OPTIONS = [
+  'course',
+  'file',
+  'note',
+  'playlist',
+  'progress',
+  'topic',
+  'project',
+  'intent',
+  'source'
+]
+// inbox / kept / archived are the states of a saved link (Fuentes).
+const STATUS_OPTIONS = ['todo', 'in_progress', 'paused', 'done', 'inbox', 'kept', 'archived']
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'])
 
@@ -236,13 +247,15 @@ export function createNotionClient({
       Color: 'rich_text',
       Status: 'select',
       Anchors: 'rich_text',
-      'Topic ids': 'rich_text'
+      'Topic ids': 'rich_text',
+      URL: 'url'
     }
     for (const [name, type] of Object.entries(expect)) {
       if (found[name] === type) continue
       if (type === 'rich_text') properties[name] = { rich_text: {} }
       else if (type === 'number') properties[name] = { number: { format: 'number' } }
       else if (type === 'checkbox') properties[name] = { checkbox: {} }
+      else if (type === 'url') properties[name] = { url: {} }
       else if (name === 'Kind') properties[name] = { select: { options: selectOptions(KIND_OPTIONS) } }
       else if (name === 'Status') properties[name] = { select: { options: selectOptions(STATUS_OPTIONS) } }
     }
@@ -266,6 +279,7 @@ export function createNotionClient({
       statusName: 'Status',
       anchorsName: 'Anchors',
       topicIdsName: 'Topic ids',
+      urlName: 'URL',
       dataSourceId
     }
     return schema
@@ -303,6 +317,9 @@ export function createNotionClient({
       ...(row.kind === 'note' && names.findingName
         ? { [names.findingName]: { rich_text: chunkRichText(String(row.externalId || '')) } }
         : {}),
+      ...(row.kind === 'source' && names.urlName
+        ? { [names.urlName]: { url: row.url ? String(row.url) : null } }
+        : {}),
       ...(row.nodeMarker && names.nodeName
         ? { [names.nodeName]: { rich_text: chunkRichText(String(row.nodeMarker)) } }
         : {})
@@ -326,7 +343,8 @@ export function createNotionClient({
       color: plainRichText(props[names.colorName]?.rich_text).trim(),
       status: selectValue(props[names.statusName]),
       anchors: anchorsFromText(plainRichText(props[names.anchorsName]?.rich_text)),
-      topicIds: topicIdsFromText(plainRichText(props[names.topicIdsName]?.rich_text))
+      topicIds: topicIdsFromText(plainRichText(props[names.topicIdsName]?.rich_text)),
+      url: names.urlName ? String(props[names.urlName]?.url || '') : ''
     }
   }
 
@@ -394,6 +412,7 @@ export function createNotionClient({
         const fields = rowFields(page, names)
         pages.push({
           pageId: page.id,
+          title: pageTitle(page, names.titleName),
           findingId: plainRichText(page.properties?.[names.findingName]?.rich_text).trim(),
           nodeMarker: plainRichText(page.properties?.[names.nodeName]?.rich_text).trim(),
           parentType: page.parent?.type || '',
@@ -413,13 +432,23 @@ export function createNotionClient({
     if (!id) return []
     const filters = [{ property: names.idName, rich_text: { equals: id } }]
     if (kind) filters.push({ property: names.kindName, select: { equals: kind } })
-    const data = await request(`/data_sources/${names.dataSourceId}/query`, {
-      method: 'POST',
-      body: {
-        page_size: 25,
-        filter: filters.length === 1 ? filters[0] : { and: filters }
+    let data
+    try {
+      data = await request(`/data_sources/${names.dataSourceId}/query`, {
+        method: 'POST',
+        body: {
+          page_size: 25,
+          filter: filters.length === 1 ? filters[0] : { and: filters }
+        }
+      })
+    } catch (error) {
+      // Filtering on a Kind no row has used yet is a validation error, not "no rows".
+      // The option appears when the first row of that kind is written.
+      if (kind && error?.status === 400 && /select option .* not found/i.test(error?.message || '')) {
+        return []
       }
-    })
+      throw error
+    }
     return (data.results || [])
       .filter((item) => !item.archived && !item.in_trash)
       .map((page) => ({
@@ -515,7 +544,31 @@ export function createNotionClient({
 
   function pageChildren(body, findingId, kind, childTitles, timeSec) {
     if (kind === 'playlist') return playlistBlocks(body, findingId, childTitles)
+    if (kind === 'source') {
+      return [...bodyToBlocks(body, findingId, kind, timeSec), ...sourceLinkBlocks(body)]
+    }
     return bodyToBlocks(body, findingId, kind, timeSec)
+  }
+
+  /**
+   * A playable video or a bookmark under a link's data, so the page is useful in Notion.
+   * These blocks carry no text, so they never change the synced body.
+   */
+  function sourceLinkBlocks(body) {
+    let url = ''
+    let kind = ''
+    try {
+      const data = JSON.parse(String(body || ''))
+      url = String(data?.url || '')
+      kind = String(data?.kind || '')
+    } catch {
+      return []
+    }
+    if (!/^https?:\/\//i.test(url)) return []
+    if (kind === 'youtube') {
+      return [{ object: 'block', type: 'video', video: { type: 'external', external: { url } } }]
+    }
+    return [{ object: 'block', type: 'bookmark', bookmark: { url } }]
   }
 
   function contentBlocks(existing) {
@@ -986,6 +1039,55 @@ export function createNotionClient({
     await request(`/blocks/${blockId}`, { method: 'DELETE' })
   }
 
+  /** Upload a file to Notion and return its upload id, to place in a block. */
+  async function uploadFile(filename, bytes, contentType) {
+    const version = await useCurrentVersion()
+    const type = contentType || 'application/octet-stream'
+    const created = await request('/file_uploads', {
+      method: 'POST',
+      version,
+      body: { mode: 'single_part', filename, content_type: type }
+    })
+    await sendFile(created.id, filename, bytes, type)
+    return created.id
+  }
+
+  /**
+   * A flashcard deck row (kind "deck"): create or find it, set its title, then
+   * replace the page content with `children`. One way: the app owns the deck.
+   */
+  async function saveDeckPage({ deckId, title, children, pageId: knownPageId = null, emoji = null }) {
+    const names = await loadSchema()
+    const externalId = String(deckId || '')
+    let pageId = knownPageId
+    if (pageId) {
+      const parent = await pageParent(pageId).catch(() => null)
+      if (!parent || parent.type === 'page_id') pageId = null
+    }
+    // Before the first deck exists the "deck" option may be missing; a failed lookup means "not there yet".
+    if (!pageId) pageId = (await findRow('deck', externalId).catch(() => null))?.pageId || null
+    const properties = rowProperties(names, { kind: 'deck', externalId, title })
+    const icon = emojiIcon(emoji)
+    if (!pageId) {
+      const page = await request('/pages', {
+        method: 'POST',
+        body: {
+          parent: { type: 'data_source_id', data_source_id: names.dataSourceId },
+          ...(icon ? { icon } : {}),
+          properties
+        }
+      })
+      pageId = page.id
+    } else {
+      await request(`/pages/${pageId}`, {
+        method: 'PATCH',
+        body: { properties, ...(icon ? { icon } : {}) }
+      })
+    }
+    await replaceContent(pageId, children || [])
+    return { pageId, editedAt: (await pageEditedAt(pageId)) || null }
+  }
+
   async function archivePage(pageId) {
     const version = await useCurrentVersion()
     await request(`/pages/${pageId}`, {
@@ -1018,6 +1120,8 @@ export function createNotionClient({
     pageEditedAt,
     recentPages,
     archivePage,
+    uploadFile,
+    saveDeckPage,
     acceptedDatabaseId: () => acceptedId
   }
 }

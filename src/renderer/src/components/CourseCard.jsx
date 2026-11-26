@@ -8,7 +8,7 @@ import { FolderOpen, ImagePlus, Pencil, Play } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { cn } from '../ui/cn'
 import { coverErrorText, saveCoverFromTransfer, transferMayHoldImage } from '../utils/coverDrop'
-import { badgeAccent, badgeSuccess, badgeTheme, badgeWarn } from '../ui/classes'
+import { badgeAccent, badgeMedia, badgeSuccess, badgeTheme, badgeWarn } from '../ui/classes'
 
 const ribbon =
   'inline-flex items-center rounded-full border px-2 py-0.5 text-2xs font-semibold tracking-[0.04em] uppercase backdrop-blur-md'
@@ -21,7 +21,7 @@ const cardAction = cn(
   'transition-[background-color,color,transform] duration-150 ease-pop hover:bg-coral hover:text-white active:scale-95 [&_svg]:size-3.5'
 )
 
-function useCoverImage(coursePath, hasCover, coverStamp) {
+export function useCoverImage(coursePath, hasCover, coverStamp) {
   const fallbackCover = absoluteAssetUrl(getCoverFallback())
   const [coverImg, setCoverImg] = useState(fallbackCover)
   const [coverFailed, setCoverFailed] = useState(false)
@@ -352,6 +352,11 @@ function CourseCard({
           {(programs || []).slice(0, 3).map((program, index) => (
             <span key={`${program}-${index}`} className={badgeAccent}>
               {program}
+            </span>
+          ))}
+          {(course.media || []).slice(0, 2).map((item, index) => (
+            <span key={`media-${item}-${index}`} className={badgeMedia}>
+              {item}
             </span>
           ))}
           {(course.theme || []).slice(0, 2).map((theme, index) => (

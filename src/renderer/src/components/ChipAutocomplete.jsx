@@ -12,7 +12,8 @@ function ChipAutocomplete({
   values = [],
   options = [],
   onChange,
-  placeholder = 'Escribe para buscar…'
+  placeholder = 'Escribe para buscar…',
+  tone = 'programs'
 }) {
   const listboxId = useId()
   const rootRef = useRef(null)
@@ -158,7 +159,11 @@ function ChipAutocomplete({
         {selected.map((value) => (
           <span
             key={value}
-            className="inline-flex max-w-full items-center gap-[0.2rem] rounded-full border border-chip-programs-border bg-chip-programs py-[0.2rem] pr-[0.35rem] pl-[0.55rem] text-xs font-semibold text-chip-programs-text"
+            className={
+              tone === 'media'
+                ? 'inline-flex max-w-full items-center gap-[0.2rem] rounded-full border border-chip-media-border bg-chip-media py-[0.2rem] pr-[0.35rem] pl-[0.55rem] text-xs font-semibold text-chip-media-text'
+                : 'inline-flex max-w-full items-center gap-[0.2rem] rounded-full border border-chip-programs-border bg-chip-programs py-[0.2rem] pr-[0.35rem] pl-[0.55rem] text-xs font-semibold text-chip-programs-text'
+            }
           >
             <span className="truncate">{value}</span>
             <button
