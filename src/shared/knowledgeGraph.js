@@ -179,7 +179,24 @@ export function resolveCourseTitle(coursePath, courseTitles = {}) {
   )
 }
 
+/**
+ * One place a finding points at: a lesson moment, a project, the course itself, or a
+ * saved link (Fuentes). A source anchor has no course and only keeps a time.
+ * Source fields are written only on source anchors so older anchors keep their shape.
+ */
 export function normalizeAnchor(anchor = {}, coursePath = null) {
+  if (anchor.sourceId) {
+    return {
+      coursePath: null,
+      lessonRelativePath: null,
+      lessonTitle: null,
+      timeSec: typeof anchor.timeSec === 'number' ? Math.max(0, anchor.timeSec) : null,
+      projectId: null,
+      projectTitle: null,
+      sourceId: String(anchor.sourceId),
+      sourceTitle: anchor.sourceTitle || null
+    }
+  }
   const projectId = anchor.projectId || null
   const hasProject = Boolean(projectId)
   return {
@@ -231,8 +248,32 @@ export function projectFinding(finding, coursePath = null) {
     lessonTitle: anchor.lessonTitle || null,
     timeSec: typeof anchor.timeSec === 'number' ? anchor.timeSec : null,
     projectId: anchor.projectId || null,
-    projectTitle: anchor.projectTitle || null
+    projectTitle: anchor.projectTitle || null,
+    sourceId: anchor.sourceId || null,
+    sourceTitle: anchor.sourceTitle || null
   }
+}
+
+/** Findings anchored to a saved link, shaped like the course note lists. */
+export function findingsForSource(findings, sourceId) {
+  if (!sourceId) return []
+  return (findings || [])
+    .filter((finding) => (finding.anchors || []).some((anchor) => anchor.sourceId === sourceId))
+    .map((finding) => {
+      const anchors = finding.anchors || []
+      const anchor = anchors.find((item) => item.sourceId === sourceId)
+      return {
+        ...projectFinding(finding),
+        coursePath: null,
+        lessonRelativePath: null,
+        lessonTitle: null,
+        projectId: null,
+        projectTitle: null,
+        timeSec: typeof anchor.timeSec === 'number' ? anchor.timeSec : null,
+        sourceId,
+        sourceTitle: anchor.sourceTitle || null
+      }
+    })
 }
 
 export function findingsForCourse(findings, coursePath) {

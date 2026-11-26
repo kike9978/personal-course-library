@@ -11,6 +11,7 @@ export function sortWithinGroup(a, b) {
 }
 
 function targetKey(item) {
+  if (item.sourceId) return `source:${item.sourceId}`
   if (item.projectId) return `project:${item.projectId}`
   if (item.lessonRelativePath) return `file:${item.lessonRelativePath}`
   if (!item.coursePath) return '__loose__'
@@ -18,6 +19,7 @@ function targetKey(item) {
 }
 
 function targetTitle(item) {
+  if (item.sourceId) return item.sourceTitle || 'Enlace'
   if (item.projectId) return item.projectTitle || 'Proyecto'
   if (item.lessonRelativePath) return item.lessonTitle || item.lessonRelativePath
   if (!item.coursePath) return 'Sin curso'
@@ -39,6 +41,7 @@ export function groupAnnotationsByTarget(annotations, opts = {}) {
   for (const item of annotations) {
     const path = item.lessonRelativePath || null
     const projectId = item.projectId || null
+    const sourceId = item.sourceId || null
     const coursePath = includeCourseKey ? item.coursePath || null : null
     const localKey = targetKey(item)
     const key = includeCourseKey ? `${coursePath || ''}::${localKey}` : localKey
@@ -48,6 +51,7 @@ export function groupAnnotationsByTarget(annotations, opts = {}) {
         key,
         path,
         projectId,
+        sourceId,
         coursePath,
         title: targetTitle(item),
         items: []
@@ -65,13 +69,15 @@ export function groupAnnotationsByTarget(annotations, opts = {}) {
 
   const groups = [...byKey.values()].map((g) => ({
     ...g,
-    title: g.projectId
-      ? g.title || 'Proyecto'
-      : g.path
-        ? g.title || g.path
-        : g.key.endsWith('__loose__')
-          ? 'Sin curso'
-          : 'Del curso',
+    title: g.sourceId
+      ? g.title || 'Enlace'
+      : g.projectId
+        ? g.title || 'Proyecto'
+        : g.path
+          ? g.title || g.path
+          : g.key.endsWith('__loose__')
+            ? 'Sin curso'
+            : 'Del curso',
     items: [...g.items].sort(sortWithinGroup)
   }))
 
@@ -103,8 +109,8 @@ export function groupAnnotationsByTarget(annotations, opts = {}) {
       const bPref = bLocal === preferLocalKey
       if (aPref !== bPref) return aPref ? -1 : 1
     }
-    const aCourse = !a.path && !a.projectId
-    const bCourse = !b.path && !b.projectId
+    const aCourse = !a.path && !a.projectId && !a.sourceId
+    const bCourse = !b.path && !b.projectId && !b.sourceId
     if (aCourse !== bCourse) return aCourse ? -1 : 1
     const aIsProject = Boolean(a.projectId)
     const bIsProject = Boolean(b.projectId)

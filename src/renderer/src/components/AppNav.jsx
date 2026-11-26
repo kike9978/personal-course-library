@@ -1,10 +1,19 @@
-import { BookOpenText, Flag, GalleryVerticalEnd, KanbanSquare, LibraryBig, ListVideo } from 'lucide-react'
+import {
+  BookOpenText,
+  Flag,
+  GalleryVerticalEnd,
+  KanbanSquare,
+  LibraryBig,
+  Link2,
+  ListVideo
+} from 'lucide-react'
 import { cn } from '../ui/cn'
 import { segmented, segmentedItem } from '../ui/classes'
 
 export const NAV_ITEMS = [
   { id: 'library', label: 'Biblioteca', icon: LibraryBig },
   { id: 'annotations', label: 'Anotaciones', icon: BookOpenText },
+  { id: 'sources', label: 'Fuentes', icon: Link2 },
   { id: 'projects', label: 'Proyectos', icon: KanbanSquare },
   { id: 'cierres', label: 'Cierres', icon: Flag },
   { id: 'playlists', label: 'Listas', icon: ListVideo },

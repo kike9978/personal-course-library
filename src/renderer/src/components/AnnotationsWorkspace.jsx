@@ -2273,7 +2273,9 @@ function AnnotationsWorkspace({
                         <span className="truncate">
                           {selected.coursePath
                             ? resolveCourseTitle(selected.coursePath, titles)
-                            : 'Sin curso'}
+                            : selected.sourceId
+                              ? `Fuentes · ${selected.sourceTitle || 'Enlace'}`
+                              : 'Sin curso'}
                         </span>
                       </span>
                     ) : null}
@@ -2334,7 +2336,9 @@ function AnnotationsWorkspace({
                       <span>
                         {selected.coursePath
                           ? resolveCourseTitle(selected.coursePath, titles)
-                          : 'Sin curso'}
+                          : selected.sourceId
+                            ? `Fuentes · ${selected.sourceTitle || 'Enlace'}`
+                            : 'Sin curso'}
                       </span>
                     </div>
                   ) : null}

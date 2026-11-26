@@ -13,6 +13,7 @@ import ProjectsKanban from './components/ProjectsKanban'
 import CierresFeed from './components/CierresFeed'
 import PlaylistCanvas from './components/PlaylistCanvas'
 import FlashcardsView from './components/FlashcardsView'
+import SourcesView from './components/SourcesView'
 import LibraryHeader from './components/LibraryHeader'
 import CourseZipBar from './components/CourseZipBar'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -1184,7 +1185,8 @@ function App() {
       section === 'annotations' ||
       section === 'playlists' ||
       section === 'cierres' ||
-      section === 'flashcards'
+      section === 'flashcards' ||
+      section === 'sources'
     ) {
       setLibraryStudyMode(section)
       return
@@ -1267,6 +1269,8 @@ function App() {
           onOpenCourse={openCourse}
           onBack={annotationsCoursePath ? backFromAnnotations : null}
         />
+      ) : libraryStudyMode === 'sources' ? (
+        <SourcesView onNavigate={navigateApp} />
       ) : libraryStudyMode === 'projects' ? (
         <ProjectsKanban courses={courses} onNavigate={navigateApp} onOpenCourse={openCourse} />
       ) : libraryStudyMode === 'cierres' ? (

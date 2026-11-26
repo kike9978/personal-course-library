@@ -93,7 +93,13 @@ import {
   deleteCierreComment,
   setNoteWriteHook,
   setPlaylistWriteHook,
-  setProjectWriteHook
+  setProjectWriteHook,
+  deleteSource,
+  findSourceByUrl,
+  listSourceNotes,
+  listSources,
+  readSource,
+  upsertSource
 } from './services/learningStore.js'
 import {
   enqueueNotionDelete,
@@ -120,6 +126,13 @@ import {
   syncNotionNow
 } from './services/notionSync.js'
 import { readLessonTranscripts } from './services/lessonTranscripts.js'
+import { canonicalSourceUrl } from '../shared/sources.js'
+import {
+  cacheSourceThumbnail,
+  removeSourceThumbnail,
+  resolveSourceMeta,
+  sourceThumbPath
+} from './services/sourceMeta.js'
 import {
   ankiStatus,
   exportDeckForAnki,
@@ -397,6 +410,16 @@ function registerCourseMediaProtocol() {
 
       const url = new URL(request.url)
       const courseDir = url.searchParams.get('course')
+
+      if (url.hostname === 'source-thumb') {
+        const thumbPath = sourceThumbPath(url.searchParams.get('file'))
+        if (!thumbPath || !fs.existsSync(thumbPath)) return new Response('Not Found', { status: 404 })
+        const data = await fsPromises.readFile(thumbPath)
+        const mime = COVER_MIME[extname(thumbPath).toLowerCase()] || 'image/avif'
+        return new Response(data, {
+          headers: withCors({ 'Content-Type': mime, 'Cache-Control': 'public, max-age=86400' })
+        })
+      }
 
       if (url.hostname === 'cover') {
         if (!courseDir) return new Response('Not Found', { status: 404 })
@@ -803,6 +826,63 @@ function registerIpcHandlers() {
   })
   ipcMain.handle('list-all-bookmarks', () => listAllBookmarks())
   ipcMain.handle('get-notes-search-by-course', () => getNotesSearchByCourse())
+
+  // Fuentes: saved links.
+  ipcMain.handle('list-sources', () => listSources())
+  ipcMain.handle('list-source-notes', (_event, sourceId) => listSourceNotes(sourceId))
+  ipcMain.handle('resolve-source', (_event, url) => resolveSourceMeta(url))
+  ipcMain.handle('add-source', async (_event, payload = {}) => {
+    const looked = payload.meta?.url ? payload.meta : await resolveSourceMeta(payload.url)
+    const canonical = canonicalSourceUrl(looked?.url)
+    if (!canonical) throw new Error(looked?.reason || 'No parece un enlace válido')
+    const meta = { ...looked, url: canonical.url, kind: canonical.kind }
+    const existing = findSourceByUrl(meta.url)
+    if (existing) return { source: existing, existed: true }
+    const overrides = payload.overrides || {}
+    let source = upsertSource({ ...meta, ...overrides, status: 'inbox' })
+    const thumbnailFile = await cacheSourceThumbnail(source.id, source.thumbnail)
+    if (thumbnailFile) source = upsertSource({ id: source.id, thumbnailFile })
+    broadcastToWindows('sources-changed', { id: source.id })
+    return { source, existed: false, ok: meta.ok !== false, reason: meta.reason || null }
+  })
+  ipcMain.handle('update-source', (_event, payload = {}) => {
+    const source = upsertSource(payload)
+    broadcastToWindows('sources-changed', { id: source.id })
+    if (payload.title !== undefined) broadcastToWindows('notes-changed', {})
+    return source
+  })
+  ipcMain.handle('refresh-source', async (_event, id) => {
+    const current = readSource(id)
+    if (!current) throw new Error('Fuente no encontrada')
+    const meta = await resolveSourceMeta(current.url)
+    if (!meta.ok) throw new Error(meta.reason || 'No se pudo leer el enlace')
+    let source = upsertSource({
+      id,
+      title: meta.title,
+      author: meta.author,
+      siteName: meta.siteName,
+      thumbnail: meta.thumbnail,
+      publishedAt: meta.publishedAt
+    })
+    const thumbnailFile = await cacheSourceThumbnail(id, source.thumbnail)
+    if (thumbnailFile) source = upsertSource({ id, thumbnailFile })
+    broadcastToWindows('sources-changed', { id })
+    broadcastToWindows('notes-changed', {})
+    return source
+  })
+  ipcMain.handle('delete-source', async (_event, id) => {
+    const result = deleteSource(id)
+    if (result.removed?.thumbnailFile) await removeSourceThumbnail(result.removed.thumbnailFile)
+    broadcastToWindows('sources-changed', { id })
+    if (result.noteCount) broadcastToWindows('notes-changed', {})
+    return { noteCount: result.noteCount, removed: Boolean(result.removed) }
+  })
+  ipcMain.handle('open-source-url', async (_event, id) => {
+    const source = readSource(id)
+    if (!source?.url || !/^https?:\/\//i.test(source.url)) throw new Error('Fuente no encontrada')
+    await shell.openExternal(source.url)
+    return { success: true }
+  })
   ipcMain.handle('reveal-learning-store', () => {
     const filePath = ensureLearningStoreFile()
     revealAbsolutePath(filePath)

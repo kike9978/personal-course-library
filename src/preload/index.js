@@ -49,6 +49,14 @@ const api = {
   deleteTopic: (topicId) => ipcRenderer.invoke('delete-topic', topicId),
   listAllBookmarks: () => ipcRenderer.invoke('list-all-bookmarks'),
   getNotesSearchByCourse: () => ipcRenderer.invoke('get-notes-search-by-course'),
+  listSources: () => ipcRenderer.invoke('list-sources'),
+  listSourceNotes: (sourceId) => ipcRenderer.invoke('list-source-notes', sourceId),
+  resolveSource: (url) => ipcRenderer.invoke('resolve-source', url),
+  addSource: (payload) => ipcRenderer.invoke('add-source', payload || {}),
+  updateSource: (payload) => ipcRenderer.invoke('update-source', payload || {}),
+  refreshSource: (id) => ipcRenderer.invoke('refresh-source', id),
+  deleteSource: (id) => ipcRenderer.invoke('delete-source', id),
+  openSourceUrl: (id) => ipcRenderer.invoke('open-source-url', id),
   revealLearningStore: () => ipcRenderer.invoke('reveal-learning-store'),
   generateCourseProps: (coursePath, overwrite = false) =>
     ipcRenderer.invoke('generate-course-props', { coursePath, overwrite }),
@@ -156,6 +164,11 @@ const api = {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('notes-changed', listener)
     return () => ipcRenderer.removeListener('notes-changed', listener)
+  },
+  onSourcesChanged: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('sources-changed', listener)
+    return () => ipcRenderer.removeListener('sources-changed', listener)
   },
   onPlaylistsChanged: (callback) => {
     const listener = () => callback()

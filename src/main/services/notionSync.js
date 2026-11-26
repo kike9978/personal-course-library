@@ -320,6 +320,7 @@ function clientFromConfig() {
 }
 
 function placeLabel(anchor) {
+  if (anchor?.sourceId) return ['Fuentes', anchor.sourceTitle || anchor.sourceId].join(' / ')
   const course = String(anchor?.coursePath || '')
     .split(/[/\\]/)
     .filter(Boolean)

@@ -13,6 +13,7 @@ import { hiddenCoursePathSet } from './courses.js'
 import {
   findingFromLegacyNote,
   findingsForCourse,
+  findingsForSource,
   normalizeAnchor,
   hashtagTitlesFromBody,
   stripTopicFromMarkdown,
@@ -25,6 +26,7 @@ import {
   topicKey
 } from '../../shared/knowledgeGraph.js'
 import { clampExcitement, viewSession } from '../../shared/notionSync.js'
+import { normalizeSource } from '../../shared/sources.js'
 import { cardKey, cardType, checkCardFields } from '../../shared/flashcardCards.js'
 import {
   cierreCourseKey,
@@ -48,6 +50,7 @@ function emptyStore() {
     playlists: [],
     topics: [],
     findings: [],
+    sources: [],
     cierres: [],
     decks: []
   }
@@ -415,6 +418,10 @@ function loadStoreFromDisk() {
     }
     if (!Array.isArray(data.decks)) {
       data.decks = []
+      dirty = true
+    }
+    if (!Array.isArray(data.sources)) {
+      data.sources = []
       dirty = true
     }
     for (const course of Object.values(data.courses || {})) ensureArrays(course)
@@ -820,6 +827,11 @@ function decorateFinding(store, finding, topicsById = topicIndex(store)) {
     .map((id) => topicsById.get(id))
     .filter(Boolean)
     .map((topic) => ({ id: topic.id, title: topic.title }))
+  if (finding.sourceId) {
+    // The anchor keeps the title it was saved with; show the link's current title.
+    const source = (store.sources || []).find((item) => item.id === finding.sourceId)
+    if (source) return { ...finding, topics, sourceTitle: source.title }
+  }
   return { ...finding, topics }
 }
 
@@ -1001,7 +1013,7 @@ export function upsertNote(coursePath, payload) {
     if (Array.isArray(payload.anchors)) {
       finding.anchors = payload.anchors
         .map((anchor) => normalizeAnchor(anchor, anchor.coursePath || key))
-        .filter((anchor) => anchor.coursePath)
+        .filter((anchor) => anchor.coursePath || anchor.sourceId)
       return
     }
     if (!key || !targetsTouched(payload)) return
@@ -1044,11 +1056,26 @@ export function upsertNote(coursePath, payload) {
     savedId = finding.id
   }
 
+  keepSourcesWithNotes(store, findingRecord(savedId) || store.findings.find((f) => f.id === savedId))
+
   // Autosave sends this every pause in typing. Batch the disk write like playback progress;
   // pending writes are flushed on quit.
   writeStore(store, { debounce: true })
   emitNoteWrite({ op: 'upsert', id: savedId })
   return key ? listNotes(coursePath) : listAllNotes()
+}
+
+/** A link leaves the Bandeja once a note points at it. */
+function keepSourcesWithNotes(store, finding) {
+  if (!finding?.body?.trim()) return
+  for (const anchor of finding.anchors || []) {
+    if (!anchor.sourceId) continue
+    const source = (store.sources || []).find((item) => item.id === anchor.sourceId)
+    if (source && source.status === 'inbox') {
+      source.status = 'kept'
+      source.updatedAt = Date.now()
+    }
+  }
 }
 
 export function deleteNote(coursePath, noteId) {
@@ -2060,3 +2087,119 @@ export function ensureLearningStoreFile() {
 }
 
 export { COMPLETE_THRESHOLD }
+
+// ---------------------------------------------------------------------------
+// Fuentes: saved links. Stored apart from courses and playlists.
+
+function sourceList(store) {
+  if (!Array.isArray(store.sources)) store.sources = []
+  return store.sources
+}
+
+function noteCountsBySource(store) {
+  const counts = new Map()
+  for (const finding of store.findings || []) {
+    const ids = new Set()
+    for (const anchor of finding.anchors || []) if (anchor?.sourceId) ids.add(anchor.sourceId)
+    for (const id of ids) counts.set(id, (counts.get(id) || 0) + 1)
+  }
+  return counts
+}
+
+function presentSource(source, counts, topicsById) {
+  return {
+    ...source,
+    noteCount: counts.get(source.id) || 0,
+    topics: (source.topicIds || [])
+      .map((id) => topicsById.get(id))
+      .filter(Boolean)
+      .map((topic) => ({ id: topic.id, title: topic.title }))
+  }
+}
+
+/** Every saved link, newest first, with its note count and topic names. */
+export function listSources() {
+  const store = readStore()
+  const counts = noteCountsBySource(store)
+  const topics = topicIndex(store)
+  return sourceList(store)
+    .map((source) => presentSource(source, counts, topics))
+    .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
+}
+
+export function readSource(id) {
+  const source = sourceList(readStore()).find((item) => item.id === id)
+  return source ? structuredClone(source) : null
+}
+
+export function findSourceByUrl(url) {
+  if (!url) return null
+  const source = sourceList(readStore()).find((item) => item.url === url)
+  return source ? structuredClone(source) : null
+}
+
+/** Create or update one link. `payload.id` updates; otherwise a new id is made. */
+export function upsertSource(payload = {}) {
+  const store = readStore()
+  const list = sourceList(store)
+  const existing = payload.id ? list.find((item) => item.id === payload.id) : null
+  if (payload.id && !existing) throw new Error('Fuente no encontrada')
+  const next = normalizeSource({ ...payload, id: existing?.id || makeId() }, existing)
+  if (!next.url) throw new Error('La fuente necesita un enlace')
+  const clash = list.find((item) => item.url === next.url && item.id !== next.id)
+  if (clash) throw new Error('Ese enlace ya está guardado')
+  if (Array.isArray(payload.topicIds)) {
+    next.topicIds = payload.topicIds.filter((id) => store.topics.some((topic) => topic.id === id))
+  }
+  if (existing) Object.assign(existing, next)
+  else list.push(next)
+  if (existing && payload.title !== undefined) {
+    // Keep the title stored on note anchors in step, so Notion places the note under the new name.
+    for (const finding of store.findings || []) {
+      for (const anchor of finding.anchors || []) {
+        if (anchor.sourceId === next.id) anchor.sourceTitle = next.title
+      }
+    }
+  }
+  writeStore(store)
+  const counts = noteCountsBySource(store)
+  return presentSource(structuredClone(next), counts, topicIndex(store))
+}
+
+/**
+ * Remove a link. Notes keep their text and lose only the anchor to it.
+ * Returns the removed link and how many notes pointed at it.
+ */
+export function deleteSource(id) {
+  const store = readStore()
+  const list = sourceList(store)
+  const index = list.findIndex((item) => item.id === id)
+  if (index < 0) return { removed: null, noteCount: 0 }
+  const [removed] = list.splice(index, 1)
+  const touched = []
+  for (const finding of store.findings || []) {
+    const before = (finding.anchors || []).length
+    finding.anchors = (finding.anchors || []).filter((anchor) => anchor.sourceId !== id)
+    if (finding.anchors.length !== before) {
+      finding.updatedAt = Date.now()
+      touched.push(finding.id)
+    }
+  }
+  writeStore(store)
+  for (const findingId of touched) emitNoteWrite({ op: 'upsert', id: findingId })
+  return { removed: structuredClone(removed), noteCount: touched.length }
+}
+
+/** Notes anchored to one link, oldest first; timed notes in video order. */
+export function listSourceNotes(sourceId) {
+  const store = readStore()
+  const topics = topicIndex(store)
+  return findingsForSource(store.findings, sourceId)
+    .map((finding) => decorateFinding(store, finding, topics))
+    .sort((a, b) => {
+      const aT = typeof a.timeSec === 'number' ? a.timeSec : Number.POSITIVE_INFINITY
+      const bT = typeof b.timeSec === 'number' ? b.timeSec : Number.POSITIVE_INFINITY
+      if (aT !== bT) return aT - bT
+      return (a.createdAt || 0) - (b.createdAt || 0)
+    })
+}

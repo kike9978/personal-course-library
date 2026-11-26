@@ -1,14 +1,23 @@
 import { resolveCourseTitle } from '../../../shared/knowledgeGraph.js'
 
+const SOURCES_NODE = '__sources__'
+
 function courseLabel(coursePath, titles) {
+  if (coursePath === SOURCES_NODE) return 'Fuentes'
   if (!coursePath) return 'Sin curso'
   return resolveCourseTitle(coursePath, titles)
+}
+
+/** Saved-link notes sit under one "Fuentes" node instead of "Sin curso". */
+function placeKey(entry) {
+  if (entry.sourceId) return SOURCES_NODE
+  return entry.coursePath || null
 }
 
 function nestByCourse(items, titles, idPrefix) {
   const courses = new Map()
   for (const item of items) {
-    const coursePath = item.coursePath || null
+    const coursePath = placeKey(item)
     const id = `${idPrefix}::course:${coursePath || '__loose__'}`
     if (!courses.has(id)) {
       courses.set(id, {
@@ -60,7 +69,7 @@ export function buildAnnotationTree(groups, { groupMode, courseColumn, titles } 
 
   const courses = new Map()
   for (const group of groups) {
-    const coursePath = group.coursePath || null
+    const coursePath = placeKey(group)
     const id = `course:${coursePath || '__loose__'}`
     if (!courses.has(id)) {
       courses.set(id, {
@@ -80,6 +89,9 @@ export function buildAnnotationTree(groups, { groupMode, courseColumn, titles } 
       const aLoose = String(a.id).endsWith('__loose__')
       const bLoose = String(b.id).endsWith('__loose__')
       if (aLoose !== bLoose) return aLoose ? 1 : -1
+      const aSources = String(a.id).endsWith(SOURCES_NODE)
+      const bSources = String(b.id).endsWith(SOURCES_NODE)
+      if (aSources !== bSources) return aSources ? 1 : -1
       return String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' })
     })
     .map(collapseDuplicateLevel)

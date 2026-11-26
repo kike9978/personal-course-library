@@ -67,8 +67,20 @@ function fileLabel(relativePath) {
  * Where a note sits in the same tree as Por archivo:
  * course page, then the file or project page when that level exists.
  */
+export const SOURCES_COURSE_KEY = 'course:__sources__'
+
 export function notionPlace(finding, courseTitles = {}) {
   const anchor = (Array.isArray(finding?.anchors) ? finding.anchors : [])[0] || {}
+  if (anchor.sourceId) {
+    // Saved links sit under one "Fuentes" page, one page per link.
+    return {
+      courseTitle: 'Fuentes',
+      fileTitle: String(anchor.sourceTitle || '').trim() || 'Enlace',
+      courseKey: SOURCES_COURSE_KEY,
+      fileKey: `file:${SOURCES_COURSE_KEY}::${anchor.sourceId}`,
+      fileKind: 'source'
+    }
+  }
   const coursePath = anchor.coursePath || null
   const courseTitle = coursePath ? resolveCourseTitle(coursePath, courseTitles) : 'Sin curso'
   let fileTitle = null
@@ -415,14 +427,22 @@ function sortedStrings(values) {
 
 /** Anchors shared with Notion. Every place stays, not only the first one. */
 export function noteAnchorsWire(anchors) {
-  return (Array.isArray(anchors) ? anchors : []).map((anchor) => ({
-    coursePath: anchor?.coursePath || null,
-    lessonRelativePath: anchor?.lessonRelativePath || null,
-    lessonTitle: anchor?.lessonTitle || null,
-    timeSec: roundTimeSec(anchor?.timeSec),
-    projectId: anchor?.projectId || null,
-    projectTitle: anchor?.projectTitle || null
-  }))
+  return (Array.isArray(anchors) ? anchors : []).map((anchor) => {
+    const wire = {
+      coursePath: anchor?.coursePath || null,
+      lessonRelativePath: anchor?.lessonRelativePath || null,
+      lessonTitle: anchor?.lessonTitle || null,
+      timeSec: roundTimeSec(anchor?.timeSec),
+      projectId: anchor?.projectId || null,
+      projectTitle: anchor?.projectTitle || null
+    }
+    // Only saved-link anchors carry these, so older notes keep the same synced text.
+    if (anchor?.sourceId) {
+      wire.sourceId = String(anchor.sourceId)
+      wire.sourceTitle = anchor.sourceTitle || null
+    }
+    return wire
+  })
 }
 
 export function anchorsToText(anchors) {
@@ -638,11 +658,26 @@ export function anchorFromNotion({ courseMarker, fileMarker, fileTitle, filePage
     return next
   }
   const raw = String(fileMarker || '').replace(/^node:/, '')
-  const kindMatch = raw.match(/@(lesson|project|course)$/)
+  const kindMatch = raw.match(/@(lesson|project|course|source)$/)
   const kind = kindMatch ? kindMatch[1] : ''
   const fileKey = kind ? raw.slice(0, -(kind.length + 1)) : raw
   const prefix = `file:${courseKey}::`
   const rest = fileKey.startsWith(prefix) ? fileKey.slice(prefix.length) : ''
+  if (kind === 'source' || courseKey === SOURCES_COURSE_KEY) {
+    const sourceId = rest || ''
+    if (sourceId) {
+      return {
+        coursePath: null,
+        lessonRelativePath: null,
+        lessonTitle: null,
+        timeSec: timeSec === undefined ? null : roundTimeSec(timeSec),
+        projectId: null,
+        projectTitle: null,
+        sourceId,
+        sourceTitle: fileTitle || null
+      }
+    }
+  }
   if (kind === 'course' || rest === '__course__') return finish(anchor)
   if (kind === 'project' || (!kind && rest && !/[./\\]/.test(rest))) {
     anchor.projectId = rest
