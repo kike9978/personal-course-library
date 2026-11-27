@@ -39,6 +39,7 @@ import {
   upsertTopic,
   upsertProject,
   restoreProject,
+  deleteProject,
   savePlaylistIntent,
   withoutNoteWriteHook,
   writeCourseProgress,
@@ -49,6 +50,7 @@ import {
   anchorFromNotion,
   anchorsWithVideoTime,
   decideDelete,
+  decideRemoteGone,
   decideSync,
   fileKeyFromMarker,
   filePageMarker,
@@ -2797,6 +2799,15 @@ async function reconcileProject(client, id, coursePath) {
   const localHash = wireHash(wire.title, wire.body)
   const remote = await loadKindPage(client, 'project', id, project.notion?.pageId)
   const parsed = remote ? projectFromBody(remote.body) : null
+  // Deleted on another computer: the page this copy last synced is in the trash and no
+  // other row carries the id. Without this, the next push would bring it back.
+  if (!remote && project.notion?.pageId && (await client.pageGone(project.notion.pageId))) {
+    if (decideRemoteGone({ localHash, ackedHash: project.notion?.ackedHash }) === 'remove') {
+      withoutNoteWriteHook(() => deleteProject(project.coursePath || coursePath, id))
+      notifyProjects()
+      return
+    }
+  }
   const action = decideSync({
     hasRemote: Boolean(remote && parsed),
     localHash,
@@ -3314,6 +3325,38 @@ function rememberParked(row, parked, seen) {
 }
 
 async function queueRowPoll(client) {
+/**
+ * The edited-since poll never sees a trashed page, so a project deleted on another
+ * computer would stay here. Now and then, list the project rows still in Notion and
+ * re-check every synced project that is missing from it.
+ */
+async function queueGoneProjects(client) {
+  if (Date.now() - goneProjectsCheckedAt < GONE_PROJECTS_CHECK_MS) return
+  const synced = listStoredProjects().filter(
+    (project) => project.notion?.pageId && !project.notion?.conflict
+  )
+  if (!synced.length) return
+  let live
+  try {
+    live = await client.listKindIds('project')
+  } catch (error) {
+    noteFailure(error)
+    return
+  }
+  goneProjectsCheckedAt = Date.now()
+  for (const project of synced) {
+    if (live.has(project.id)) continue
+    const key = projectJobKey(project.id)
+    if (jobs.has(key) || saveConflictParked(key)) continue
+    jobs.set(key, {
+      op: 'project-upsert',
+      projectId: project.id,
+      coursePath: path.basename(String(project.coursePath || '')),
+      attempts: 0
+    })
+  }
+}
+
   const startedAt = new Date().toISOString()
   const state = readState()
   const watermark = state.pollWatermark || ''
@@ -3360,6 +3403,7 @@ async function queueRowPoll(client) {
     driftedGeneration = localDriftGeneration
   }
   // The watermark moves every pass; on disk it only saves re-reading a little after a restart.
+  await queueGoneProjects(client)
   // Write when the parked rows change, or every few minutes, not on every 15 s pass.
   const parkedChanged = JSON.stringify(parked) !== JSON.stringify(state.parked || [])
   state.pollWatermark = startedAt
@@ -4248,6 +4292,8 @@ const POLL_STATE_WRITE_MS = 5 * 60 * 1000
 let lastPollAt = 0
 let pollStateWrittenAt = 0
 
+const GONE_PROJECTS_CHECK_MS = 60 * 1000
+let goneProjectsCheckedAt = 0
 function setRemoteWatch(active) {
   if (!active) {
     clearInterval(pollTimer)

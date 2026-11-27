@@ -5,6 +5,7 @@ import {
   blocksToBody,
   bodyToBlocks,
   decideDelete,
+  decideRemoteGone,
   decideSync,
   filePageMarker,
   anchorsWithVideoTime,
@@ -428,6 +429,18 @@ describe('note titles', () => {
 })
 
 describe('notion reconcile', () => {
+  it('drops a copy deleted on another computer when nothing changed here', () => {
+    assert.equal(decideRemoteGone({ localHash: 'acked', ackedHash: 'acked' }), 'remove')
+  })
+
+  it('writes the page again when this copy changed after its last sync', () => {
+    assert.equal(decideRemoteGone({ localHash: 'local', ackedHash: 'acked' }), 'create')
+  })
+
+  it('never drops a copy that was never synced', () => {
+    assert.equal(decideRemoteGone({ localHash: 'a', ackedHash: null }), 'create')
+  })
+
   it('creates a page when the note has never been synced', () => {
     assert.equal(
       decideSync({ hasRemote: false, localHash: 'a', remoteHash: null, ackedHash: null }),

@@ -496,4 +496,34 @@ describe('notion client · new kinds', () => {
     const client = createNotionClient({ token: 'secret', databaseId: 'db-1', fetchImpl })
     assert.equal(await client.findRow('source', 'abc'), null)
   })
+
+  it('lists the ids of live rows of one kind across pages', async () => {
+    const row = (id, extra = {}) => ({
+      id: `page-${id}`,
+      properties: { Kind: { select: { name: 'project' } }, Id: { rich_text: [{ plain_text: id }] } },
+      ...extra
+    })
+    const bodies = []
+    const fetchImpl = async (url, options = {}) => {
+      if (url.endsWith('/users/me')) return jsonResponse({ object: 'user', id: 'bot' })
+      if (url.endsWith('/databases/db-1')) return jsonResponse({ data_sources: [{ id: 'src-1' }] })
+      if (url.endsWith('/data_sources/src-1') && (!options.method || options.method === 'GET')) {
+        return jsonResponse({ object: 'data_source', id: 'src-1', properties: { Nombre: { type: 'title' } } })
+      }
+      if (url.endsWith('/data_sources/src-1') && options.method === 'PATCH') return jsonResponse({ ok: true })
+      if (url.endsWith('/data_sources/src-1/query')) {
+        const body = JSON.parse(options.body)
+        bodies.push(body)
+        if (!body.start_cursor) {
+          return jsonResponse({ results: [row('a'), row('b', { in_trash: true })], has_more: true, next_cursor: 'c2' })
+        }
+        return jsonResponse({ results: [row('c')], has_more: false })
+      }
+      return jsonResponse({ message: 'unexpected' }, 500)
+    }
+    const client = createNotionClient({ token: 'secret', databaseId: 'db-1', fetchImpl })
+    const ids = await client.listKindIds('project')
+    assert.deepEqual([...ids].sort(), ['a', 'c'])
+    assert.deepEqual(bodies[0].filter, { property: 'Kind', select: { equals: 'project' } })
+  })
 })

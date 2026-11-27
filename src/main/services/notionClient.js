@@ -459,6 +459,39 @@ export function createNotionClient({
       }))
   }
 
+  /** External ids of every live row of one kind. Trashed rows are left out. */
+  async function listKindIds(kind) {
+    const names = await loadSchema()
+    const ids = new Set()
+    const seen = new Set()
+    let cursor = ''
+    do {
+      let data
+      try {
+        data = await request(`/data_sources/${names.dataSourceId}/query`, {
+          method: 'POST',
+          body: {
+            page_size: 100,
+            ...(cursor ? { start_cursor: cursor } : {}),
+            filter: { property: names.kindName, select: { equals: kind } }
+          }
+        })
+      } catch (error) {
+        if (error?.status === 400 && /select option .* not found/i.test(error?.message || '')) {
+          return ids
+        }
+        throw error
+      }
+      for (const page of data.results || []) {
+        if (page.archived || page.in_trash) continue
+        const id = rowFields(page, names).externalId
+        if (id) ids.add(id)
+      }
+      cursor = advanceCursor(data, seen)
+    } while (cursor)
+    return ids
+  }
+
   async function findRow(kind, externalId) {
     const rows = await listRows(kind, externalId)
     return rows[0] || null
@@ -1196,6 +1229,7 @@ export function createNotionClient({
     findPage,
     findRow,
     listRows,
+    listKindIds,
     saveRow,
     findNode,
     readPage,

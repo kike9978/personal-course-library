@@ -1157,6 +1157,15 @@ export function decideSync({ hasRemote, localHash, remoteHash, ackedHash }) {
 /** A local delete whose page also changed waits. An untouched page is archived. */
 export function decideDelete({ hasRemote, remoteHash, ackedHash }) {
   if (!hasRemote) return 'drop'
+/**
+ * A synced page that is now gone from Notion (another computer deleted it).
+ * `remove` drops the local copy when nothing changed here since the last sync.
+ * A local edit since then wins, so the page is written again (`create`).
+ */
+export function decideRemoteGone({ localHash, ackedHash }) {
+  return ackedHash && localHash === ackedHash ? 'remove' : 'create'
+}
+
   if (ackedHash && remoteHash === ackedHash) return 'archive'
   return 'conflict'
 }
