@@ -67,6 +67,15 @@ const api = {
     ipcRenderer.on('source-captions', listener)
     return () => ipcRenderer.removeListener('source-captions', listener)
   },
+  listSourceCollections: () => ipcRenderer.invoke('list-source-collections'),
+  upsertSourceCollection: (payload) =>
+    ipcRenderer.invoke('upsert-source-collection', payload || {}),
+  deleteSourceCollection: (id) => ipcRenderer.invoke('delete-source-collection', id),
+  onSourceCollectionsChanged: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('source-collections-changed', listener)
+    return () => ipcRenderer.removeListener('source-collections-changed', listener)
+  },
   readSourceCopy: (id) => ipcRenderer.invoke('read-source-copy', id),
   deleteSourceCopy: (id) => ipcRenderer.invoke('delete-source-copy', id),
   instagramSessionStatus: () => ipcRenderer.invoke('instagram-session-status'),
@@ -176,6 +185,10 @@ const api = {
     ipcRenderer.invoke('resolve-notion-project-conflict', { projectId, choice }),
   resolveNotionProjectDelete: (projectId, choice) =>
     ipcRenderer.invoke('resolve-notion-project-delete', { projectId, choice }),
+  resolveNotionCollectionConflict: (collectionId, choice) =>
+    ipcRenderer.invoke('resolve-notion-collection-conflict', { collectionId, choice }),
+  resolveNotionCollectionDelete: (collectionId, choice) =>
+    ipcRenderer.invoke('resolve-notion-collection-delete', { collectionId, choice }),
   resolveNotionSourceConflict: (sourceId, choice) =>
     ipcRenderer.invoke('resolve-notion-source-conflict', { sourceId, choice }),
   resolveNotionSourceDelete: (sourceId, choice) =>

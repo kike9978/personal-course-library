@@ -29,7 +29,8 @@ const KIND_OPTIONS = [
   'topic',
   'project',
   'intent',
-  'source'
+  'source',
+  'collection'
 ]
 // inbox / kept / archived are the states of a saved link (Fuentes).
 const STATUS_OPTIONS = ['todo', 'in_progress', 'paused', 'done', 'inbox', 'kept', 'archived']

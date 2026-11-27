@@ -655,6 +655,44 @@ export function sourceWireHash(hashFn, source) {
   return hashFn(wire.title, wire.body)
 }
 
+export const COLLECTIONS_COURSE_KEY = 'course:__collections__'
+
+/**
+ * A collection of links (Fuentes). Title is the page title; layout, description, cover and
+ * the ordered items with their captions ride in the body. Order is part of the collection.
+ */
+export function collectionWire(collection) {
+  const items = (Array.isArray(collection?.items) ? collection.items : [])
+    .filter((item) => item?.sourceId)
+    .map((item) => ({ sourceId: String(item.sourceId), note: String(item.note || '') }))
+  const body = normalizeBody(
+    JSON.stringify({
+      description: String(collection?.description || ''),
+      layout: collection?.layout === 'board' ? 'board' : 'list',
+      cover: collection?.cover ? String(collection.cover) : null,
+      items
+    })
+  )
+  return { title: normalizeTitle(collection?.title) || 'Colección', body }
+}
+
+export function collectionFromBody(body) {
+  try {
+    const data = JSON.parse(String(body || ''))
+    if (!data || typeof data !== 'object' || !Array.isArray(data.items)) return null
+    return {
+      description: String(data.description || ''),
+      layout: data.layout === 'board' ? 'board' : 'list',
+      cover: data.cover ? String(data.cover) : null,
+      items: data.items
+        .filter((item) => item && item.sourceId)
+        .map((item) => ({ sourceId: String(item.sourceId), note: String(item.note || '') }))
+    }
+  } catch {
+    return null
+  }
+}
+
 export function projectFromBody(body) {
   try {
     const data = JSON.parse(String(body || ''))

@@ -456,3 +456,85 @@ describe('instagramThumbnailUrl', async () => {
     assert.equal(instagramThumbnailUrl('https://www.instagram.com/stories/a/1/'), null)
   })
 })
+
+describe('collections', async () => {
+  const {
+    addCollectionItems,
+    collectionDuration,
+    collectionEntries,
+    moveCollectionItem,
+    nextToPlay,
+    normalizeCollection
+  } = await import('./collections.js')
+  const { collectionFromBody, collectionWire, wireHash } = await import('./notionSync.js')
+  const sources = [
+    { id: 'a', kind: 'youtube', durationSec: 100, lastPositionSec: 95 },
+    { id: 'b', kind: 'youtube', durationSec: 200, lastPositionSec: 10 },
+    { id: 'c', kind: 'instagram' }
+  ]
+
+  it('keeps order, drops duplicates, and only covers its own items', () => {
+    const c = normalizeCollection({
+      title: '  Ver  luego ',
+      layout: 'nope',
+      cover: 'zzz',
+      items: [{ sourceId: 'a' }, { sourceId: 'a' }, { sourceId: 'b', note: 'x' }]
+    })
+    assert.equal(c.title, 'Ver luego')
+    assert.equal(c.layout, 'list')
+    assert.equal(c.cover, null)
+    assert.deepEqual(
+      c.items.map((item) => item.sourceId),
+      ['a', 'b']
+    )
+  })
+
+  it('adds and moves items', () => {
+    const items = addCollectionItems([{ sourceId: 'a' }], ['a', 'b', 'c'])
+    assert.deepEqual(
+      items.map((item) => item.sourceId),
+      ['a', 'b', 'c']
+    )
+    assert.deepEqual(
+      moveCollectionItem(items, 'c', 0).map((item) => item.sourceId),
+      ['c', 'a', 'b']
+    )
+    assert.deepEqual(
+      moveCollectionItem(items, 'a', 99).map((item) => item.sourceId),
+      ['b', 'c', 'a']
+    )
+  })
+
+  it('plays the first unwatched video and knows the total length', () => {
+    const entries = collectionEntries(
+      { items: [{ sourceId: 'a' }, { sourceId: 'b' }, { sourceId: 'c' }, { sourceId: 'gone' }] },
+      sources
+    )
+    assert.equal(entries.length, 3)
+    assert.equal(nextToPlay(entries).sourceId, 'b')
+    assert.equal(nextToPlay(entries, 'b'), null)
+    assert.equal(collectionDuration(entries), 300)
+  })
+
+  it('round-trips through the Notion wire with order and captions', () => {
+    const local = {
+      title: 'Ver luego',
+      layout: 'board',
+      description: 'd',
+      items: [
+        { sourceId: 'b', note: 'primero', addedAt: 5 },
+        { sourceId: 'a', note: '' }
+      ]
+    }
+    const wire = collectionWire(local)
+    const back = collectionFromBody(wire.body)
+    assert.deepEqual(back.items, [
+      { sourceId: 'b', note: 'primero' },
+      { sourceId: 'a', note: '' }
+    ])
+    assert.equal(back.layout, 'board')
+    const again = collectionWire({ title: wire.title, ...back })
+    assert.equal(wireHash(again.title, again.body), wireHash(wire.title, wire.body))
+    assert.equal(collectionFromBody('{"x":1}'), null)
+  })
+})

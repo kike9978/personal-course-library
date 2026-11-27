@@ -2,7 +2,7 @@
 
 **App:** Catálogo de cursos (personal-course-library)  
 **Date:** 2026-11-26  
-**Status:** Phases 1, 2, 2b, 2c and 3 built (2026-11-26). Phase 2c checked against a live Notion database. Phase 2b checked up to Instagram's login page; a real sign-in is left to the user. Phases 4–6 proposed.  
+**Status:** Phases 1, 2, 2b, 2c, 3 and 4 built (2026-11-26). Phase 2c checked against a live Notion database. Phase 2b checked up to Instagram's login page; a real sign-in is left to the user. Phases 5–6 proposed.  
 **Goal:** Let a YouTube video, an article, or an Instagram post become a place in the knowledge base, the same way a lesson is. Notes taken on a link are ordinary findings. They carry topics, show up in Anotaciones and the graph, sync to Notion, and feed flashcards.
 
 ---
@@ -387,6 +387,33 @@ Two fixes came out of it:
 - Header: cover mosaic, title, description, count, total duration for Lista.
 - Filter by kind and topic inside the collection.
 - **Notas de la colección:** every finding anchored to any source in it, newest first. This is the "what did I learn from this board" view.
+
+**As built (2026-11-26)**
+
+- **Where.** A **Fuentes / Colecciones** switch in the Fuentes toolbar. Collections live in `store.sourceCollections`, never in `playlists`, and Listas is untouched. The UI is in `SourceCollections.jsx`, the rules in `src/shared/collections.js`.
+- **Adding.**
+  - **Guardar en…** sits in the link panel.
+  - **Seleccionar** in the grid lets you pick several links, then **Guardar en…** saves them all, or **Nueva colección** makes one.
+  - Pasting a link while a collection is open adds it there.
+  - *Not built:* a **Guardar en…** button on each card (the card is one button, and a menu inside it would nest buttons) and dropping cards on a sidebar (Fuentes has no sidebar).
+- **Page.**
+  - The header has a mosaic cover, a title you can edit in place, a description, the link count, and the total length once every video's length is known.
+  - **Lista** has numbered rows. **Tablero** is a masonry grid with each image's own shape.
+  - You can drag to reorder (not while a filter is on), add a short note to each item, and remove items with **Deshacer**.
+  - **Notas de la colección** shows every note on its links, newest first.
+- **Playing.** **Reproducir** opens the first video not watched to the end (saved position within 30 s of its end). While a video from a collection plays, the viewer bar offers **Siguiente: …**.
+- **Notion.**
+  - Each collection is a `Kind = collection` row, Parent `course:__collections__`.
+  - Its text holds the description, layout, cover and ordered items with their notes. When each item was added stays on this computer.
+  - It uses the same push, pull, conflict and delete rules as links, with "Colecciones por elegir" in the sync panel.
+  - A collection can arrive before its links: missing items are kept and hidden until their links arrive.
+  - **Live check (2026-11-26):** 8 of 8 passed against the real database, with every test row archived afterwards:
+    - row created with Parent `course:__collections__`, board layout, order and note
+    - a reorder reaches Notion
+    - a new name, layout, order and note written from another computer reach the app
+    - a conflict is raised, and resolving it pushes the chosen side
+    - deleting in the app archives the row
+  - **Fix from the check:** Notion's edit time has minute precision, so an edit in the same minute as the app's last write looked unchanged. Link and collection rows are now read once more when their edit time falls in that minute. Projects and topics still have the blind spot.
 
 **Done when**
 

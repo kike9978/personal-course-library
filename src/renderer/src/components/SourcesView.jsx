@@ -3,12 +3,9 @@ import { toast } from 'react-hot-toast'
 import {
   ArrowLeft,
   Archive,
-  Camera,
   Eye,
   Play,
   ExternalLink,
-  FileText,
-  Globe,
   Inbox,
   Link2,
   Loader2,
@@ -17,12 +14,14 @@ import {
   Pencil,
   RefreshCw,
   Search,
-  SquarePlay,
   Trash2,
   X
 } from 'lucide-react'
 import AppHeader from './AppHeader'
 import SourceViewer from './SourceViewer'
+import { KindIcon, Thumb } from './sourceVisuals'
+import { CollectionPage, CollectionsHome, SaveToCollectionMenu } from './SourceCollections'
+import { collectionEntries, nextToPlay } from '../../../shared/collections.js'
 import NoteEditor, { NoteBody } from './NoteEditor'
 import ChipAutocomplete from './ChipAutocomplete'
 import { askConfirm } from '../utils/askConfirm'
@@ -64,43 +63,13 @@ const KIND_FILTERS = [
   { id: 'other', label: 'Otros' }
 ]
 
-const KIND_ICON = {
-  youtube: SquarePlay,
-  instagram: Camera,
-  article: FileText,
-  other: Globe
-}
-
-function thumbUrl(source) {
-  return source?.thumbnailFile
-    ? `course-media://source-thumb/?file=${encodeURIComponent(source.thumbnailFile)}`
-    : null
-}
-
-function KindIcon({ kind, className }) {
-  const Icon = KIND_ICON[kind] || Globe
-  return <Icon aria-hidden="true" className={className} />
-}
-
-function Thumb({ source, className }) {
-  const src = thumbUrl(source)
-  if (src) {
-    return <img src={src} alt="" loading="lazy" className={cn('object-cover', className)} />
-  }
-  return (
-    <div className={cn('grid place-items-center bg-cream text-ink-faint', className)}>
-      <KindIcon kind={source?.kind} className="size-8" />
-    </div>
-  )
-}
-
 function isTypingTarget(target) {
   if (!target) return false
   const tag = target.tagName
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable
 }
 
-function SourceCard({ source, selected, highlighted, onSelect }) {
+function SourceCard({ source, selected, highlighted, onSelect, picking = false, picked = false }) {
   const meta = [source.author, source.siteName || sourceKindLabel(source.kind)]
     .filter(Boolean)
     .join(' · ')
@@ -112,11 +81,22 @@ function SourceCard({ source, selected, highlighted, onSelect }) {
       className={cn(
         card,
         cardHover,
-        'group flex cursor-pointer flex-col overflow-hidden p-0 text-left',
-        selected && 'shadow-ring',
+        'group relative flex cursor-pointer flex-col overflow-hidden p-0 text-left',
+        (selected || picked) && 'shadow-ring',
         highlighted && 'animate-pulse shadow-ring'
       )}
     >
+      {picking ? (
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute top-2 left-2 z-[1] grid size-6 place-items-center rounded-full border-2 border-white text-xs font-bold shadow-card',
+            picked ? 'bg-coral text-white' : 'bg-ink/30 text-transparent'
+          )}
+        >
+          ✓
+        </span>
+      ) : null}
       <Thumb source={source} className="aspect-video w-full" />
       <div className="flex min-w-0 flex-1 flex-col gap-1 px-3 py-2.5">
         <div className="flex items-center gap-1.5 text-xs text-ink-soft">
@@ -440,7 +420,17 @@ function SourceNotes({ source, player, onOpenAt }) {
   )
 }
 
-function SourcePanel({ source, topics, viewing, player, onView, onOpenAt, onClose, onDeleted }) {
+function SourcePanel({
+  source,
+  topics,
+  collections = [],
+  viewing,
+  player,
+  onView,
+  onOpenAt,
+  onClose,
+  onDeleted
+}) {
   const [refreshing, setRefreshing] = useState(false)
 
   const update = async (patch) => {
@@ -553,6 +543,7 @@ function SourcePanel({ source, topics, viewing, player, onView, onOpenAt, onClos
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <SaveToCollectionMenu sourceIds={[source.id]} collections={collections} />
           {viewing ? null : (
             <button type="button" className={cn(btnPrimary, btnCompact)} onClick={onView}>
               <Eye aria-hidden="true" className="size-3.5" />
@@ -626,6 +617,19 @@ function SourcesView({ onNavigate, openTarget }) {
   const [topicId, setTopicId] = useState('')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState(null)
+  // Fuentes / Colecciones. Collections hold links only; course Listas never see them.
+  const [section, setSection] = useState('sources')
+  const [collections, setCollections] = useState([])
+  const [openCollectionId, setOpenCollectionId] = useState(null)
+  const [picking, setPicking] = useState(false)
+  const [picked, setPicked] = useState(() => new Set())
+  useEffect(() => {
+    const loadCollections = () =>
+      window.api.listSourceCollections?.().then((list) => setCollections(list || []))
+    loadCollections()
+    return window.api.onSourceCollectionsChanged?.(() => loadCollections())
+  }, [])
+  const openCollection = collections.find((item) => item.id === openCollectionId) || null
   const [highlightId, setHighlightId] = useState(null)
   // The viewer replaces the grid while a link is open in it.
   const [viewing, setViewing] = useState(null) // { id, startSec, nonce }
@@ -718,7 +722,14 @@ function SourcesView({ onNavigate, openTarget }) {
         const result = await window.api.addSource({ url })
         setLinkText('')
         await load()
-        showSource(result.source)
+        // Pasted while a collection is open: it goes into that collection too.
+        if (section === 'collections' && openCollectionId) {
+          await window.api.upsertSourceCollection({ id: openCollectionId, add: [result.source.id] })
+          setSelectedId(result.source.id)
+          toast.success('Añadida a la colección')
+        } else {
+          showSource(result.source)
+        }
         if (result.existed) toast('Ya estaba guardado')
         else if (result.ok === false) {
           toast(
@@ -731,7 +742,7 @@ function SourcesView({ onNavigate, openTarget }) {
         setAdding(false)
       }
     },
-    [load, showSource]
+    [load, showSource, section, openCollectionId]
   )
 
   // Pasting a link anywhere in the view (outside a field) saves it.
@@ -774,7 +785,7 @@ function SourcesView({ onNavigate, openTarget }) {
   const selected = sources.find((source) => source.id === selectedId) || null
   const viewingSource = viewing && selected && viewing.id === selected.id ? selected : null
 
-  const openViewer = useCallback((source, sec = null) => {
+  const openViewer = useCallback((source, sec = null, collectionId = null) => {
     if (!source) return
     const startSec =
       typeof sec === 'number'
@@ -785,8 +796,22 @@ function SourcesView({ onNavigate, openTarget }) {
     setSelectedId(source.id)
     setPlayerTime(startSec || 0)
     // A jump to a chosen second starts playing; reopening where you left off does not.
-    setViewing({ id: source.id, startSec, autoplay: typeof sec === 'number', nonce: Date.now() })
+    setViewing({
+      id: source.id,
+      startSec,
+      autoplay: typeof sec === 'number' || Boolean(collectionId),
+      collectionId,
+      nonce: Date.now()
+    })
   }, [])
+
+  // Playing from a collection: the next unwatched video in it.
+  const playingCollection = viewing?.collectionId
+    ? collections.find((item) => item.id === viewing.collectionId) || null
+    : null
+  const upNext = playingCollection
+    ? nextToPlay(collectionEntries(playingCollection, sources), viewing.id)
+    : null
 
   const openAt = useCallback(
     (sec) => {
@@ -859,73 +884,114 @@ function SourcesView({ onNavigate, openTarget }) {
           </form>
         }
       >
-        <div className={segmented} role="group" aria-label="Estado">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={segmentedItem}
-              aria-pressed={status === tab.id}
-              onClick={() => setStatus(tab.id)}
-            >
-              <tab.icon aria-hidden="true" />
-              {tab.label}
-              <span className="text-xs text-ink-faint tabular-nums">{counts[tab.id] || 0}</span>
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {KIND_FILTERS.map((item) => (
-            <button
-              key={item.id || 'all'}
-              type="button"
-              className={chip}
-              aria-pressed={kind === item.id}
-              onClick={() => setKind(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        {usedTopics.length ? (
-          <select
-            className={cn(fieldControl, 'h-8 w-auto py-0 text-sm')}
-            value={topicId}
-            aria-label="Tema"
-            onChange={(event) => setTopicId(event.target.value)}
+        <div className={segmented} role="group" aria-label="Sección">
+          <button
+            type="button"
+            className={segmentedItem}
+            aria-pressed={section === 'sources'}
+            onClick={() => {
+              setSection('sources')
+              setViewing(null)
+            }}
           >
-            <option value="">Todos los temas</option>
-            {usedTopics.map((topic) => (
-              <option key={topic.id} value={topic.id}>
-                {topic.title}
-              </option>
-            ))}
-          </select>
-        ) : null}
-        <div className="relative ml-auto w-full max-w-[16rem]">
-          <Search className={searchIcon} aria-hidden="true" />
-          <input
-            className={searchInput}
-            value={query}
-            placeholder="Buscar"
-            aria-label="Buscar fuentes"
-            onChange={(event) => setQuery(event.target.value)}
-          />
+            Fuentes
+          </button>
+          <button
+            type="button"
+            className={segmentedItem}
+            aria-pressed={section === 'collections'}
+            onClick={() => {
+              setSection('collections')
+              setViewing(null)
+              setPicking(false)
+            }}
+          >
+            Colecciones
+            <span className="text-xs text-ink-faint tabular-nums">{collections.length}</span>
+          </button>
         </div>
-        <button
-          type="button"
-          className={cn(btnQuiet, btnCompact, 'shrink-0')}
-          disabled={checkingLinks || !sources.length}
-          title="Pregunta a cada página si sigue existiendo. No borra nada."
-          onClick={checkLinks}
-        >
-          {checkingLinks ? (
-            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
-          ) : (
-            <ShieldCheck aria-hidden="true" className="size-3.5" />
-          )}
-          Comprobar enlaces
-        </button>
+        {section === 'sources' ? (
+          <>
+            <div className={segmented} role="group" aria-label="Estado">
+              {STATUS_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={segmentedItem}
+                  aria-pressed={status === tab.id}
+                  onClick={() => setStatus(tab.id)}
+                >
+                  <tab.icon aria-hidden="true" />
+                  {tab.label}
+                  <span className="text-xs text-ink-faint tabular-nums">{counts[tab.id] || 0}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {KIND_FILTERS.map((item) => (
+                <button
+                  key={item.id || 'all'}
+                  type="button"
+                  className={chip}
+                  aria-pressed={kind === item.id}
+                  onClick={() => setKind(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            {usedTopics.length ? (
+              <select
+                className={cn(fieldControl, 'h-8 w-auto py-0 text-sm')}
+                value={topicId}
+                aria-label="Tema"
+                onChange={(event) => setTopicId(event.target.value)}
+              >
+                <option value="">Todos los temas</option>
+                {usedTopics.map((topic) => (
+                  <option key={topic.id} value={topic.id}>
+                    {topic.title}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <div className="relative ml-auto w-full max-w-[16rem]">
+              <Search className={searchIcon} aria-hidden="true" />
+              <input
+                className={searchInput}
+                value={query}
+                placeholder="Buscar"
+                aria-label="Buscar fuentes"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              className={cn(btnQuiet, btnCompact, 'shrink-0')}
+              disabled={checkingLinks || !sources.length}
+              title="Pregunta a cada página si sigue existiendo. No borra nada."
+              onClick={checkLinks}
+            >
+              {checkingLinks ? (
+                <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+              ) : (
+                <ShieldCheck aria-hidden="true" className="size-3.5" />
+              )}
+              Comprobar enlaces
+            </button>
+            <button
+              type="button"
+              className={cn(btnQuiet, btnCompact, 'shrink-0')}
+              aria-pressed={picking}
+              onClick={() => {
+                setPicking((value) => !value)
+                setPicked(new Set())
+              }}
+            >
+              {picking ? 'Cancelar selección' : 'Seleccionar'}
+            </button>
+          </>
+        ) : null}
         {instagram.signedIn ? (
           <button
             type="button"
@@ -951,6 +1017,16 @@ function SourcesView({ onNavigate, openTarget }) {
                 Fuentes
               </button>
               <span className="truncate text-sm text-ink-soft">{viewingSource.title}</span>
+              {upNext ? (
+                <button
+                  type="button"
+                  className={cn(btnGhost, btnCompact, 'ml-auto shrink-0')}
+                  title={`Siguiente en «${playingCollection.title}»`}
+                  onClick={() => openViewer(upNext.source, null, playingCollection.id)}
+                >
+                  Siguiente: <span className="max-w-[16rem] truncate">{upNext.source.title}</span>
+                </button>
+              ) : null}
             </div>
             <div className="min-h-0 flex-1">
               <SourceViewer
@@ -966,20 +1042,74 @@ function SourcesView({ onNavigate, openTarget }) {
           </main>
         ) : (
           <main className="min-h-0 min-w-0 flex-1 overflow-auto px-6 py-6">
-            {loading ? (
+            {section === 'collections' ? (
+              openCollection ? (
+                <CollectionPage
+                  collection={openCollection}
+                  sources={sources}
+                  topics={topics}
+                  selectedId={selectedId}
+                  onBack={() => setOpenCollectionId(null)}
+                  onSelect={setSelectedId}
+                  onPlay={(source, collectionId) => openViewer(source, null, collectionId)}
+                />
+              ) : (
+                <CollectionsHome
+                  collections={collections}
+                  sources={sources}
+                  onOpen={setOpenCollectionId}
+                />
+              )
+            ) : loading ? (
               <p className="mt-12 text-center text-ink-soft">Cargando…</p>
             ) : visible.length ? (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
-                {visible.map((source) => (
-                  <SourceCard
-                    key={source.id}
-                    source={source}
-                    selected={source.id === selectedId}
-                    highlighted={source.id === highlightId}
-                    onSelect={setSelectedId}
-                  />
-                ))}
-              </div>
+              <>
+                {picking ? (
+                  <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-ink/8 bg-surface px-3 py-2 shadow-card">
+                    <span className="text-sm text-ink-soft">
+                      {picked.size
+                        ? `${picked.size} seleccionadas`
+                        : 'Toca las fuentes que quieras agrupar'}
+                    </span>
+                    <SaveToCollectionMenu
+                      sourceIds={[...picked]}
+                      collections={collections}
+                      onDone={() => {
+                        setPicking(false)
+                        setPicked(new Set())
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className={cn(btnQuiet, btnCompact)}
+                      onClick={() => setPicked(new Set(visible.map((source) => source.id)))}
+                    >
+                      Elegir todas
+                    </button>
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
+                  {visible.map((source) => (
+                    <SourceCard
+                      key={source.id}
+                      source={source}
+                      selected={source.id === selectedId}
+                      highlighted={source.id === highlightId}
+                      picking={picking}
+                      picked={picked.has(source.id)}
+                      onSelect={(id) => {
+                        if (!picking) return setSelectedId(id)
+                        setPicked((current) => {
+                          const next = new Set(current)
+                          if (next.has(id)) next.delete(id)
+                          else next.add(id)
+                          return next
+                        })
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="mx-auto mt-16 flex max-w-[26rem] flex-col items-center gap-3 text-center">
                 <span className="grid size-12 place-items-center rounded-full bg-coral-soft text-coral">
@@ -1000,6 +1130,7 @@ function SourcesView({ onNavigate, openTarget }) {
             key={selected.id}
             source={selected}
             topics={topics}
+            collections={collections}
             viewing={Boolean(viewingSource)}
             player={player}
             onView={() => openViewer(selected)}

@@ -267,12 +267,15 @@ function choiceLabel(choice, kind) {
   if (choice === 'local' && kind === 'proyecto') return 'Quedó el proyecto de esta biblioteca'
   if (choice === 'remote' && kind === 'proyecto') return 'Quedó el proyecto de Notion'
   if (choice === 'local' && kind === 'fuente') return 'Quedó la fuente de esta biblioteca'
+  if (choice === 'local' && kind === 'colección') return 'Quedó la colección de esta biblioteca'
+  if (choice === 'remote' && kind === 'colección') return 'Quedó la colección de Notion'
   if (choice === 'remote' && kind === 'fuente') return 'Quedó la fuente de Notion'
   if (choice === 'remote') return 'Quedó el texto de Notion'
   if (choice === 'keep') {
     if (kind === 'lista') return 'Lista recuperada desde Notion'
     if (kind === 'proyecto') return 'Proyecto recuperado desde Notion'
     if (kind === 'fuente') return 'Fuente recuperada desde Notion'
+    if (kind === 'colección') return 'Colección recuperada desde Notion'
     return 'Nota recuperada desde Notion'
   }
   if (choice === 'discard') return 'Página borrada en Notion'
@@ -636,6 +639,76 @@ function NotionSyncAttention({ status, resolvingId, resolveWith, retryingSave })
           ))}
         </div>
       ) : null}
+      {status?.collectionConflicts?.length ? (
+        <div className={deletes}>
+          <h4>Colecciones por elegir</h4>
+          <p>Cambiaron aquí y en Notion. El nombre, el orden y las notas cortas viajan con la versión que elijas.</p>
+          {status.collectionConflicts.map((item) => (
+            <VersionChoice
+              key={item.collectionId}
+              title={item.title || 'Colección'}
+              localText={item.localBody}
+              remoteText={[item.remoteTitle, item.remoteBody].filter(Boolean).join('\n\n')}
+              busy={resolvingId === item.collectionId}
+              onChoose={(choice) =>
+                void resolveWith(
+                  item.collectionId,
+                  choice,
+                  () => window.api.resolveNotionCollectionConflict(item.collectionId, choice),
+                  'No se pudo resolver el conflicto',
+                  'colección'
+                )
+              }
+            />
+          ))}
+        </div>
+      ) : null}
+      {status?.collectionDeleteConflicts?.length ? (
+        <div className={deletes}>
+          <h4>Colecciones borradas a medias</h4>
+          <p>La colección se borró aquí y Notion cambió después de la última sincronización.</p>
+          {status.collectionDeleteConflicts.map((item) => (
+            <article className={block} key={item.collectionId}>
+              <strong>{item.title || 'Colección'}</strong>
+              <pre>{item.remoteBody || item.remoteTitle || 'Sin texto'}</pre>
+              <div className={actionsBtns}>
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={resolvingId === item.collectionId}
+                  onClick={() =>
+                    void resolveWith(
+                      item.collectionId,
+                      'discard',
+                      () => window.api.resolveNotionCollectionDelete(item.collectionId, 'discard'),
+                      'No se pudo resolver el borrado',
+                      'colección'
+                    )
+                  }
+                >
+                  Borrar en Notion
+                </button>
+                <button
+                  type="button"
+                  className={btnPrimary}
+                  disabled={resolvingId === item.collectionId}
+                  onClick={() =>
+                    void resolveWith(
+                      item.collectionId,
+                      'keep',
+                      () => window.api.resolveNotionCollectionDelete(item.collectionId, 'keep'),
+                      'No se pudo resolver el borrado',
+                      'colección'
+                    )
+                  }
+                >
+                  Recuperar la de Notion
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
       {status?.sourceConflicts?.length ? (
         <div className={deletes}>
           <h4>Fuentes por elegir</h4>
@@ -968,6 +1041,8 @@ export function NotionSyncButton() {
     (status?.projectConflicts?.length || 0) +
     (status?.projectDeleteConflicts?.length || 0) +
     (status?.sourceConflicts?.length || 0) +
+    (status?.collectionConflicts?.length || 0) +
+    (status?.collectionDeleteConflicts?.length || 0) +
     (status?.sourceDeleteConflicts?.length || 0) +
     (status?.progressConflicts?.length || 0)
   const retryingSave =

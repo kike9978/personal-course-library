@@ -30,6 +30,10 @@ import {
   restoreFinding,
   readSource,
   readSourceList,
+  readSourceCollection,
+  readSourceCollectionList,
+  restoreSourceCollection,
+  writeSourceCollectionNotion,
   restoreSource,
   writeSourceNotion,
   upsertTopic,
@@ -81,6 +85,9 @@ import {
   topicWire,
   sourceFromRow,
   sourceWire,
+  collectionFromBody,
+  collectionWire,
+  COLLECTIONS_COURSE_KEY,
   sourceWireHash,
   SOURCES_COURSE_KEY,
   wireHash
@@ -148,6 +155,7 @@ let hooks = {
   notifyProgress() {},
   notifyProjects() {},
   notifySources() {},
+  notifyCollections() {},
   notifyCourse() {},
   notifyStatus() {},
   isActive() {
@@ -167,6 +175,7 @@ function emptySyncState() {
     topicTombstones: [],
     projectTombstones: [],
     sourceTombstones: [],
+    collectionTombstones: [],
     drawingShare: '',
     drawingsAsJson: false,
     imagesQueued: false,
@@ -187,6 +196,9 @@ function readState() {
       topicTombstones: Array.isArray(data.topicTombstones) ? data.topicTombstones : [],
       projectTombstones: Array.isArray(data.projectTombstones) ? data.projectTombstones : [],
       sourceTombstones: Array.isArray(data.sourceTombstones) ? data.sourceTombstones : [],
+      collectionTombstones: Array.isArray(data.collectionTombstones)
+        ? data.collectionTombstones
+        : [],
       drawingShare: ['json', 'image', 'local'].includes(data.drawingShare) ? data.drawingShare : '',
       drawingsAsJson: data.drawingsAsJson === true,
       imagesQueued: data.imagesQueued === true,
@@ -213,6 +225,7 @@ function writeState(state) {
         topicTombstones: state.topicTombstones || [],
         projectTombstones: state.projectTombstones || [],
         sourceTombstones: state.sourceTombstones || [],
+        collectionTombstones: state.collectionTombstones || [],
         drawingShare: state.drawingShare || '',
         drawingsAsJson: state.drawingsAsJson === true,
         imagesQueued: state.imagesQueued === true,
@@ -482,6 +495,19 @@ function buildConflictLists(config) {
           .filter((source) => source.notion?.conflict)
           .map(sourceConflictView)
       : [],
+    collectionConflicts: config.enabled
+      ? readSourceCollectionList()
+          .filter((collection) => collection.notion?.conflict)
+          .map(collectionConflictView)
+      : [],
+    collectionDeleteConflicts: (readState().collectionTombstones || [])
+      .filter((item) => item.conflict)
+      .map((item) => ({
+        collectionId: item.collectionId,
+        title: item.snapshot?.title || 'Colección',
+        remoteTitle: item.conflict.remoteTitle || '',
+        remoteBody: collectionText(collectionFromBody(item.conflict.remoteBody))
+      })),
     sourceDeleteConflicts: (readState().sourceTombstones || [])
       .filter((item) => item.conflict)
       .map((item) => {
@@ -1459,6 +1485,9 @@ async function drain() {
         else if (job.op === 'source-upsert') await reconcileSource(client, job.sourceId)
         else if (job.op === 'source-delete') await reconcileSourceDelete(client, job.sourceId)
         else if (job.op === 'source-adopt') await adoptNewNotionSource(client, job)
+        else if (job.op === 'collection-upsert') await reconcileCollection(client, job.collectionId)
+        else if (job.op === 'collection-delete')
+          await reconcileCollectionDelete(client, job.collectionId)
         else if (job.op === 'intent-upsert') await reconcileIntent(client)
         else if (job.op === 'delete') await reconcileDelete(client, id)
         else await reconcileUpsert(client, id, job)
@@ -1473,7 +1502,13 @@ async function drain() {
         else if (job.op === 'project-upsert')
           rememberProjectError(job.projectId, job.coursePath, lastError)
         else if (job.op === 'source-upsert') rememberSourceError(job.sourceId, lastError)
-        else if (job.op === 'source-delete' || job.op === 'source-adopt') {
+        else if (job.op === 'collection-upsert')
+          rememberCollectionError(job.collectionId, lastError)
+        else if (
+          job.op === 'source-delete' ||
+          job.op === 'source-adopt' ||
+          job.op === 'collection-delete'
+        ) {
           // Retried from the queue; nothing to record on a link.
         } else if (
           job.op !== 'delete' &&
@@ -2222,6 +2257,29 @@ const SOURCE_STATUS_LABEL = { inbox: 'Bandeja', kept: 'Guardada', archived: 'Arc
  * Notion's edit time has minute precision, so a change made in the same minute as our last
  * write looks unchanged. For links, also compare the columns the poll already reads.
  */
+/**
+ * Notion's edit time has minute precision. When it falls in the same minute as our own last
+ * write, an edit made after ours looks unchanged, so the row is read once more. Only links and
+ * collections do this; once a pass runs after that minute, the times differ and it stops.
+ */
+function sameMinuteAsOurWrite(kind, row) {
+  const record =
+    kind === 'source'
+      ? readSource(row.externalId)
+      : kind === 'collection'
+        ? readSourceCollection(row.externalId)
+        : null
+  const syncedAt = Number(record?.notion?.syncedAt || record?.notion?.pulledAt) || 0
+  const edited = Date.parse(row.editedAt || '')
+  if (!syncedAt || !Number.isFinite(edited) || record?.notion?.conflict) return false
+  return syncedAt < edited + 60_000 && Date.now() < edited + 120_000
+}
+
+function mayHideAnEdit(kind, row) {
+  if (kind === 'source' && sourceColumnsDiffer(row)) return true
+  return sameMinuteAsOurWrite(kind, row)
+}
+
 function sourceColumnsDiffer(row) {
   const local = readSource(row.externalId)
   if (!local || local.notion?.conflict) return false
@@ -2494,6 +2552,204 @@ async function reconcileSourceDelete(client, sourceId) {
   writeState(state)
 }
 
+// ---------------------------------------------------------------------------
+// Fuentes: collections of links (Kind = collection), grouped under "Colecciones".
+
+function collectionJobKey(id) {
+  return `collection:${id}`
+}
+
+function collectionText(collection) {
+  if (!collection) return ''
+  const titles = new Map(readSourceList().map((source) => [source.id, source.title]))
+  return [
+    collection.layout === 'board' ? 'Tablero' : 'Lista',
+    collection.description || '',
+    ...(collection.items || []).map(
+      (item, index) =>
+        `${index + 1}. ${titles.get(item.sourceId) || 'Enlace no recibido aún'}${item.note ? ` — ${item.note}` : ''}`
+    )
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function collectionConflictView(collection) {
+  const conflict = collection.notion?.conflict || {}
+  return {
+    collectionId: collection.id,
+    title: collection.title || 'Colección',
+    localBody: collectionText(collection),
+    remoteTitle: conflict.remoteTitle || '',
+    remoteBody: collectionText(collectionFromBody(conflict.remoteBody)) || conflict.remoteBody || ''
+  }
+}
+
+function remoteCollectionHash(remote) {
+  const parsed = remote ? collectionFromBody(remote.body) : null
+  if (!parsed) return null
+  const wire = collectionWire({ title: remote.title, ...parsed })
+  return wireHash(wire.title, wire.body)
+}
+
+function rememberCollectionError(id, message) {
+  const collection = readSourceCollection(id)
+  if (!collection) return
+  withoutNoteWriteHook(() =>
+    writeSourceCollectionNotion(id, { ...(collection.notion || {}), error: message })
+  )
+}
+
+function applyRemoteCollection(id, remote) {
+  const parsed = collectionFromBody(remote.body)
+  if (!parsed) return false
+  const wire = collectionWire({ title: remote.title, ...parsed })
+  const before = readSourceCollection(id)
+  withoutNoteWriteHook(() =>
+    restoreSourceCollection({
+      ...(before || {}),
+      id,
+      title: remote.title,
+      description: parsed.description,
+      layout: parsed.layout,
+      cover: parsed.cover,
+      // Captions and order come from Notion; when each item was added stays local.
+      items: parsed.items.map((item) => ({
+        ...item,
+        addedAt: before?.items.find((old) => old.sourceId === item.sourceId)?.addedAt
+      })),
+      notion: cursorFrom(remote, wireHash(wire.title, wire.body), { pulledAt: Date.now() })
+    })
+  )
+  hooks.notifyCollections()
+  return true
+}
+
+async function pushCollection(client, collection, remote) {
+  const wire = collectionWire(collection)
+  const page = await client.saveRow({
+    kind: 'collection',
+    externalId: collection.id,
+    parentExternalId: COLLECTIONS_COURSE_KEY,
+    courseKey: COLLECTIONS_COURSE_KEY,
+    title: wire.title,
+    body: wire.body,
+    pageId: remote?.pageId || null,
+    databaseRow: Boolean(remote?.pageId),
+    emoji: PAGE_ICONS.collection
+  })
+  if (!page?.pageId) throw new Error('Notion no devolvió la página')
+  withoutNoteWriteHook(() =>
+    writeSourceCollectionNotion(collection.id, cursorFrom(page, wireHash(wire.title, wire.body)))
+  )
+}
+
+async function reconcileCollection(client, id) {
+  const collection = readSourceCollection(id)
+  if (!collection) {
+    if ((readState().collectionTombstones || []).some((item) => item.collectionId === id)) return
+    // Made on another computer: adopt it.
+    const remote = await loadKindPage(client, 'collection', id, null)
+    if (remote) applyRemoteCollection(id, remote)
+    return
+  }
+  if (collection.notion?.conflict) return
+  const wire = collectionWire(collection)
+  const localHash = wireHash(wire.title, wire.body)
+  const remote = await loadKindPage(client, 'collection', id, collection.notion?.pageId)
+  const remoteHash = remoteCollectionHash(remote)
+  const action = decideSync({
+    hasRemote: Boolean(remote && remoteHash),
+    localHash,
+    remoteHash,
+    ackedHash: collection.notion?.ackedHash || null
+  })
+  if (action === 'pull' && remote) {
+    applyRemoteCollection(id, remote)
+    return
+  }
+  if (action === 'conflict' && remote) {
+    withoutNoteWriteHook(() =>
+      writeSourceCollectionNotion(id, {
+        pageId: remote.pageId,
+        ackedHash: collection.notion?.ackedHash || null,
+        remoteEditedAt: remote.editedAt || null,
+        conflict: {
+          remoteTitle: remote.title || '',
+          remoteBody: remote.body || '',
+          remoteEditedAt: remote.editedAt || null
+        },
+        error: null
+      })
+    )
+    hooks.notifyCollections()
+    return
+  }
+  if (action === 'relink' && remote) {
+    withoutNoteWriteHook(() => writeSourceCollectionNotion(id, cursorFrom(remote, localHash)))
+    return
+  }
+  if (action !== 'create' && action !== 'push') return
+  await pushCollection(client, collection, remote)
+}
+
+function rememberCollectionDelete(collection) {
+  const state = readState()
+  state.collectionTombstones = (state.collectionTombstones || []).filter(
+    (item) => item.collectionId !== collection.id
+  )
+  state.collectionTombstones.push({
+    collectionId: collection.id,
+    pageId: collection.notion?.pageId || null,
+    ackedHash: collection.notion?.ackedHash || null,
+    snapshot: { ...collection, notion: null },
+    conflict: null
+  })
+  writeState(state)
+}
+
+function dropCollectionTombstone(collectionId) {
+  const state = readState()
+  state.collectionTombstones = (state.collectionTombstones || []).filter(
+    (item) => item.collectionId !== collectionId
+  )
+  writeState(state)
+}
+
+async function reconcileCollectionDelete(client, collectionId) {
+  const tomb = (readState().collectionTombstones || []).find(
+    (item) => item.collectionId === collectionId
+  )
+  if (!tomb || tomb.conflict) return
+  const remote = tomb.pageId
+    ? await client.readPage(tomb.pageId)
+    : await loadKindPage(client, 'collection', collectionId, null)
+  const action = decideDelete({
+    hasRemote: Boolean(remote),
+    remoteHash: remoteCollectionHash(remote),
+    ackedHash: tomb.ackedHash
+  })
+  if (action === 'drop') return dropCollectionTombstone(collectionId)
+  if (action === 'archive') {
+    await client.archivePage(remote.pageId)
+    return dropCollectionTombstone(collectionId)
+  }
+  const state = readState()
+  state.collectionTombstones = (state.collectionTombstones || []).map((item) =>
+    item.collectionId === collectionId
+      ? {
+          ...item,
+          conflict: {
+            remoteTitle: remote.title || '',
+            remoteBody: remote.body || '',
+            remoteEditedAt: remote.editedAt || null
+          }
+        }
+      : item
+  )
+  writeState(state)
+}
+
 function notionCourseFolder(...values) {
   for (const value of values) {
     const text = String(value || '').trim()
@@ -2752,6 +3008,7 @@ function rowCursorEdited(row) {
     return listStoredProjects().find((item) => item.id === id)?.notion?.remoteEditedAt || ''
   if (kind === 'intent') return readPlaylistIntentRecord()?.notion?.remoteEditedAt || ''
   if (kind === 'source') return readSource(id)?.notion?.remoteEditedAt || ''
+  if (kind === 'collection') return readSourceCollection(id)?.notion?.remoteEditedAt || ''
   return ''
 }
 
@@ -2782,7 +3039,7 @@ function enqueueChangedRow(row) {
   if (
     row.editedAt &&
     row.editedAt === rowCursorEdited(row) &&
-    !(kind === 'source' && sourceColumnsDiffer(row))
+    !mayHideAnEdit(kind, row)
   ) {
     return false
   }
@@ -2790,6 +3047,16 @@ function enqueueChangedRow(row) {
     const key = sourceJobKey(id)
     if (saveConflictParked(key) || readSource(id)?.notion?.conflict) return false
     jobs.set(key, { op: 'source-upsert', sourceId: id, attempts: jobs.get(key)?.attempts || 0 })
+    return true
+  }
+  if (kind === 'collection') {
+    const key = collectionJobKey(id)
+    if (saveConflictParked(key) || readSourceCollection(id)?.notion?.conflict) return false
+    jobs.set(key, {
+      op: 'collection-upsert',
+      collectionId: id,
+      attempts: jobs.get(key)?.attempts || 0
+    })
     return true
   }
   if (kind === 'note') {
@@ -2958,6 +3225,29 @@ function queueLocalRowDrift() {
       })
     }
   }
+  for (const collection of readSourceCollectionList()) {
+    if (collection.notion?.conflict) continue
+    const key = collectionJobKey(collection.id)
+    if (saveConflictParked(key)) continue
+    const wire = collectionWire(collection)
+    if (
+      collection.notion?.ackedHash !== wireHash(wire.title, wire.body) ||
+      !collection.notion?.pageId
+    ) {
+      jobs.set(key, {
+        op: 'collection-upsert',
+        collectionId: collection.id,
+        attempts: jobs.get(key)?.attempts || 0
+      })
+    }
+  }
+  for (const tomb of readState().collectionTombstones || []) {
+    if (tomb.conflict) continue
+    const key = collectionJobKey(tomb.collectionId)
+    if (!saveConflictParked(key)) {
+      jobs.set(key, { op: 'collection-delete', collectionId: tomb.collectionId })
+    }
+  }
   for (const tomb of readState().sourceTombstones || []) {
     if (tomb.conflict) continue
     const key = sourceJobKey(tomb.sourceId)
@@ -3001,6 +3291,7 @@ function jobIdForRow(row) {
   if (kind === 'project') return projectJobKey(id)
   if (kind === 'intent') return 'intent:playlist-intent'
   if (kind === 'source') return row?.externalId ? sourceJobKey(id) : sourceAdoptKey(row?.pageId)
+  if (kind === 'collection') return collectionJobKey(id)
   return ''
 }
 
@@ -3013,7 +3304,7 @@ function rememberParked(row, parked, seen) {
   if (
     row.editedAt &&
     row.editedAt === rowCursorEdited({ ...row, kind }) &&
-    !(kind === 'source' && sourceColumnsDiffer(row))
+    !mayHideAnEdit(kind, row)
   ) {
     return
   }
@@ -3248,7 +3539,8 @@ const PAGE_ICONS = {
   topic: '🏷️',
   project: '🎯',
   intent: '✨',
-  source: '🔗'
+  source: '🔗',
+  collection: '🗃️'
 }
 
 const PLAYLIST_MARKER = 'node:table:playlists'
@@ -3998,6 +4290,7 @@ export function startNotionSync(nextHooks = {}) {
     notifyProgress: nextHooks.notifyProgress || (() => {}),
     notifyProjects: nextHooks.notifyProjects || (() => {}),
     notifySources: nextHooks.notifySources || (() => {}),
+    notifyCollections: nextHooks.notifyCollections || (() => {}),
     notifyCourse: nextHooks.notifyCourse || (() => {}),
     notifyStatus: nextHooks.notifyStatus || (() => {}),
     isActive: nextHooks.isActive || (() => true)
@@ -4230,6 +4523,86 @@ export async function resolveNotionSourceDelete(sourceId, choice) {
       throw new Error('Elección desconocida')
     }
     dropSourceTombstone(sourceId)
+    publish()
+    return publicStatus()
+  })
+}
+
+export function enqueueNotionCollectionUpsert(id) {
+  if (!id || !getNotionConfig().enabled) return
+  const key = collectionJobKey(id)
+  conflictCooldown.delete(key)
+  const collection = readSourceCollection(id)
+  if (!collection || collection.notion?.conflict) return
+  const wire = collectionWire(collection)
+  if (collection.notion?.pageId && collection.notion.ackedHash === wireHash(wire.title, wire.body)) {
+    return
+  }
+  jobs.set(key, { op: 'collection-upsert', collectionId: id, attempts: jobs.get(key)?.attempts || 0 })
+  bumpLocalDrift()
+  schedule(1200)
+}
+
+export function enqueueNotionCollectionDelete(collection) {
+  if (!getNotionConfig().enabled || !collection?.id) return
+  const key = collectionJobKey(collection.id)
+  rememberCollectionDelete(collection)
+  if (!collection.notion?.pageId) {
+    jobs.delete(key)
+    dropCollectionTombstone(collection.id)
+    return
+  }
+  jobs.set(key, { op: 'collection-delete', collectionId: collection.id })
+  bumpLocalDrift()
+  schedule(1200)
+}
+
+export async function resolveNotionCollectionConflict(collectionId, choice) {
+  if (!getNotionConfig().enabled) throw new Error('La sincronización con Notion está apagada')
+  await flushQueued()
+  const collection = readSourceCollection(collectionId)
+  if (!collection?.notion?.conflict) throw new Error('Esa colección no está en conflicto')
+  const client = clientFromConfig()
+  return oneAtATime(async () => {
+    await client.loadSchema()
+    const remote = await loadKindPage(client, 'collection', collectionId, collection.notion?.pageId)
+    if (choice === 'local') await pushCollection(client, collection, remote)
+    else if (choice === 'remote') {
+      if (!remote || !applyRemoteCollection(collectionId, remote)) {
+        throw new Error('La página de Notion ya no es una colección')
+      }
+    } else throw new Error('Elección desconocida')
+    hooks.notifyCollections()
+    publish()
+    return publicStatus()
+  })
+}
+
+export async function resolveNotionCollectionDelete(collectionId, choice) {
+  if (!getNotionConfig().enabled) throw new Error('La sincronización con Notion está apagada')
+  await flushQueued()
+  const tomb = (readState().collectionTombstones || []).find(
+    (item) => item.collectionId === collectionId
+  )
+  if (!tomb?.conflict) throw new Error('Ese borrado no está en conflicto')
+  const client = clientFromConfig()
+  return oneAtATime(async () => {
+    await client.loadSchema()
+    const remote = tomb.pageId ? await client.readPage(tomb.pageId) : null
+    if (choice === 'discard') {
+      if (remote) await client.archivePage(tomb.pageId)
+    } else if (choice === 'keep') {
+      const page = remote || {
+        pageId: tomb.pageId,
+        title: tomb.conflict.remoteTitle,
+        body: tomb.conflict.remoteBody,
+        editedAt: tomb.conflict.remoteEditedAt
+      }
+      if (!applyRemoteCollection(collectionId, page)) {
+        throw new Error('La página de Notion ya no es una colección')
+      }
+    } else throw new Error('Elección desconocida')
+    dropCollectionTombstone(collectionId)
     publish()
     return publicStatus()
   })

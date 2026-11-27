@@ -104,7 +104,11 @@ import {
   setPlaylistWriteHook,
   setProjectWriteHook,
   setSourceWriteHook,
+  setCollectionWriteHook,
   deleteSource,
+  deleteSourceCollection,
+  listSourceCollections,
+  upsertSourceCollection,
   findSourceByUrl,
   listSourceNotes,
   listSources,
@@ -148,6 +152,10 @@ import {
   resolveNotionProjectConflict,
   resolveNotionProjectDelete,
   enqueueNotionSourceUpsert,
+  enqueueNotionCollectionUpsert,
+  enqueueNotionCollectionDelete,
+  resolveNotionCollectionConflict,
+  resolveNotionCollectionDelete,
   enqueueNotionSourceDelete,
   resolveNotionSourceConflict,
   resolveNotionSourceDelete,
@@ -591,6 +599,10 @@ function registerIpcHandlers() {
     if (event.op === 'delete') enqueueNotionProjectDelete(event.project)
     else enqueueNotionProjectUpsert(event.coursePath, event.id)
   })
+  setCollectionWriteHook((event) => {
+    if (event.op === 'delete') enqueueNotionCollectionDelete(event.collection)
+    else enqueueNotionCollectionUpsert(event.id)
+  })
   setSourceWriteHook((event) => {
     if (event.op === 'delete') enqueueNotionSourceDelete(event.source)
     else enqueueNotionSourceUpsert(event.id)
@@ -938,6 +950,7 @@ function registerIpcHandlers() {
   })
   ipcMain.handle('delete-source', async (_event, id) => {
     const result = deleteSource(id)
+    broadcastToWindows('source-collections-changed', {})
     if (result.removed?.thumbnailFile) await removeSourceThumbnail(result.removed.thumbnailFile)
     if (result.removed) await deleteSourceCopy(id)
     for (const capture of result.removed?.captures || []) {
@@ -957,6 +970,18 @@ function registerIpcHandlers() {
     return saved
   })
   ipcMain.handle('read-source-copy', (_event, id) => readSourceCopy(id))
+  // Collections of links (Phase 4). Never mixed with course playlists.
+  ipcMain.handle('list-source-collections', () => listSourceCollections())
+  ipcMain.handle('upsert-source-collection', (_event, payload = {}) => {
+    const saved = upsertSourceCollection(payload)
+    broadcastToWindows('source-collections-changed', { id: saved.id })
+    return saved
+  })
+  ipcMain.handle('delete-source-collection', (_event, id) => {
+    const removed = deleteSourceCollection(id)
+    broadcastToWindows('source-collections-changed', { id })
+    return Boolean(removed)
+  })
   ipcMain.handle('read-source-captions', (_event, id) => readSourceCaptions(id))
   ipcMain.handle('save-source-captions', async (_event, { id, captions } = {}) => {
     if (!readSource(id)) throw new Error('Fuente no encontrada')
@@ -1421,6 +1446,12 @@ function registerIpcHandlers() {
   ipcMain.handle('resolve-notion-project-delete', (_event, { projectId, choice } = {}) =>
     resolveNotionProjectDelete(projectId, choice)
   )
+  ipcMain.handle('resolve-notion-collection-conflict', (_event, { collectionId, choice } = {}) =>
+    resolveNotionCollectionConflict(collectionId, choice)
+  )
+  ipcMain.handle('resolve-notion-collection-delete', (_event, { collectionId, choice } = {}) =>
+    resolveNotionCollectionDelete(collectionId, choice)
+  )
   ipcMain.handle('resolve-notion-source-conflict', (_event, { sourceId, choice } = {}) =>
     resolveNotionSourceConflict(sourceId, choice)
   )
@@ -1458,6 +1489,7 @@ app.whenReady().then(() => {
     notifyProgress: () => broadcastToWindows('progress-changed', {}),
     notifyProjects: () => broadcastToWindows('projects-changed', {}),
     notifySources: () => broadcastToWindows('sources-changed', {}),
+    notifyCollections: () => broadcastToWindows('source-collections-changed', {}),
     notifyCourse: (coursePath, data) =>
       broadcastToWindows('course-updated', {
         coursePath,

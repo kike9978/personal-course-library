@@ -33,6 +33,11 @@ import {
 } from '../../shared/knowledgeGraph.js'
 import { clampExcitement, viewSession } from '../../shared/notionSync.js'
 import { normalizeSource } from '../../shared/sources.js'
+import {
+  addCollectionItems,
+  moveCollectionItem,
+  normalizeCollection
+} from '../../shared/collections.js'
 import { cardKey, cardType, checkCardFields } from '../../shared/flashcardCards.js'
 import {
   cierreCourseKey,
@@ -57,6 +62,7 @@ function emptyStore() {
     topics: [],
     findings: [],
     sources: [],
+    sourceCollections: [],
     cierres: [],
     decks: []
   }
@@ -438,6 +444,10 @@ function loadStoreFromDisk() {
     }
     if (!Array.isArray(data.sources)) {
       data.sources = []
+      dirty = true
+    }
+    if (!Array.isArray(data.sourceCollections)) {
+      data.sourceCollections = []
       dirty = true
     }
     for (const course of Object.values(data.courses || {})) ensureArrays(course)
@@ -2363,8 +2373,20 @@ export function deleteSource(id) {
       touched.push(finding.id)
     }
   }
+  // A deleted link leaves every collection it was in.
+  const changedCollections = []
+  for (const collection of collectionList(store)) {
+    const before = collection.items.length
+    collection.items = collection.items.filter((item) => item.sourceId !== id)
+    if (collection.cover === id) collection.cover = null
+    if (collection.items.length !== before) {
+      collection.updatedAt = Date.now()
+      changedCollections.push(collection.id)
+    }
+  }
   writeStore(store)
   for (const findingId of touched) emitNoteWrite({ op: 'upsert', id: findingId })
+  for (const collectionId of changedCollections) emitCollectionWrite({ op: 'upsert', id: collectionId })
   emitSourceWrite({ op: 'delete', source: structuredClone(removed) })
   return { removed: structuredClone(removed), noteCount: touched.length }
 }
@@ -2410,4 +2432,113 @@ export function setSourceCaptures(id, mutate) {
   source.updatedAt = Date.now()
   writeStore(store)
   return structuredClone(source)
+}
+
+// ---------------------------------------------------------------------------
+// Fuentes: collections of saved links. Apart from course playlists on purpose.
+
+let collectionWriteHook = null
+
+export function setCollectionWriteHook(fn) {
+  collectionWriteHook = typeof fn === 'function' ? fn : null
+}
+
+function emitCollectionWrite(event) {
+  if (noteWriteSuppress > 0 || !collectionWriteHook) return
+  collectionWriteHook(event)
+}
+
+function collectionList(store) {
+  if (!Array.isArray(store.sourceCollections)) store.sourceCollections = []
+  return store.sourceCollections
+}
+
+/** Every collection, newest first. Items whose link is gone are dropped from the view. */
+export function listSourceCollections() {
+  const store = readStore()
+  const known = new Set(sourceList(store).map((source) => source.id))
+  return collectionList(store)
+    .map((collection) => ({
+      ...structuredClone(collection),
+      items: collection.items.filter((item) => known.has(item.sourceId))
+    }))
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+}
+
+export function readSourceCollection(id) {
+  const collection = collectionList(readStore()).find((item) => item.id === id)
+  return collection ? structuredClone(collection) : null
+}
+
+/** Every stored collection, for sync scans. Callers must not mutate the records. */
+export function readSourceCollectionList() {
+  return collectionList(readStore())
+}
+
+/**
+ * Create or update a collection. `payload.id` updates; otherwise a new id is made.
+ * `{ add: [sourceIds] }`, `{ remove: [sourceIds] }` and `{ move: { sourceId, to } }`
+ * change the items without sending the whole list.
+ */
+export function upsertSourceCollection(payload = {}) {
+  const store = readStore()
+  const list = collectionList(store)
+  const existing = payload.id ? list.find((item) => item.id === payload.id) : null
+  if (payload.id && !existing) throw new Error('Colección no encontrada')
+  let items = payload.items !== undefined ? payload.items : existing?.items || []
+  if (Array.isArray(payload.add)) items = addCollectionItems(items, payload.add)
+  if (Array.isArray(payload.remove)) {
+    const drop = new Set(payload.remove.map(String))
+    items = items.filter((item) => !drop.has(item.sourceId))
+  }
+  if (payload.move?.sourceId) items = moveCollectionItem(items, payload.move.sourceId, payload.move.to)
+  if (payload.caption?.sourceId) {
+    items = items.map((item) =>
+      item.sourceId === payload.caption.sourceId ? { ...item, note: payload.caption.note } : item
+    )
+  }
+  // Items whose link has not arrived yet (synced from another computer) are kept; the view
+  // hides them. Deleting a link removes it from every collection explicitly.
+  const rest = { ...payload }
+  for (const key of ['add', 'remove', 'move', 'caption']) delete rest[key]
+  const next = normalizeCollection({ ...rest, items, id: existing?.id || makeId() }, existing)
+  if (existing) Object.assign(existing, next)
+  else list.push(next)
+  writeStore(store)
+  emitCollectionWrite({ op: 'upsert', id: next.id })
+  return structuredClone(next)
+}
+
+export function deleteSourceCollection(id) {
+  const store = readStore()
+  const list = collectionList(store)
+  const index = list.findIndex((item) => item.id === id)
+  if (index < 0) return null
+  const [removed] = list.splice(index, 1)
+  writeStore(store)
+  emitCollectionWrite({ op: 'delete', collection: structuredClone(removed) })
+  return structuredClone(removed)
+}
+
+/** Set a collection's Notion cursor without touching anything else or queueing another sync. */
+export function writeSourceCollectionNotion(id, notion) {
+  const store = readStore()
+  const collection = collectionList(store).find((item) => item.id === id)
+  if (!collection) return null
+  collection.notion = notion
+  writeStore(store)
+  return structuredClone(collection)
+}
+
+/** Put back a collection exactly as given (from Notion or another computer). */
+export function restoreSourceCollection(record) {
+  if (!record?.id) throw new Error('Colección no encontrada')
+  const store = readStore()
+  const list = collectionList(store)
+  const existing = list.find((item) => item.id === record.id)
+  const next = normalizeCollection(record, existing)
+  if (existing) Object.assign(existing, next)
+  else list.push(next)
+  writeStore(store)
+  return structuredClone(next)
 }
